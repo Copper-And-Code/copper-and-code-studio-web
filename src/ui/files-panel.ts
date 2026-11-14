@@ -300,7 +300,7 @@ export class FilesPanel extends LitElement {
       @keydown=${this.menuKeys}
     >
       ${menu.items.map((item) =>
-        'separator' in item
+        'separator' in item || 'section' in item
           ? html`<hr aria-hidden="true" />`
           : html`<button
               type="button"

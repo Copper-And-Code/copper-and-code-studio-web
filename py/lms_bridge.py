@@ -7,6 +7,7 @@ call(method, arguments_json) -> reply_json is the single entry point. A reply is
 {"ok": true, "result": ...} or {"ok": false, "error": {"type": ..., "message": ...}}.
 """
 
+import copy
 import json
 import re
 import shutil
@@ -254,6 +255,145 @@ def sim_program(entry, flash):
 # ---- Code: the Code tab, modules, mpy-cross's errors, tracebacks (phase 4) ----
 # mpy-cross runs in the page (WebAssembly, src/mpy/); its output comes back here, where upstream's
 # own parse_compiler_errors, map_error and traceback_errors read it.
+# ---- The designer (src/app/designer.ts): ui/designer/scene.py, ui/designer/preview.py ----
+SIM_PREVIEW = "/sim/preview"
+
+
+def _page_index(project, page_id):
+    return next(index for index, page in enumerate(project.pages) if page.id == page_id)
+
+
+def design_page(page_id):
+    """What DesignerScene.rebuild puts on the canvas of a page: its widgets, components left
+    out, parents before their children, each with the props WidgetItem paints from; and
+    design_key, which changes only when what the page shows changes."""
+    from lvgl_mpy_studio.build.preview import design_key
+    from lvgl_mpy_studio.core.components import is_component
+
+    project = _doc().project
+    index = _page_index(project, page_id)
+    page = project.pages[index]
+    placed, items = set(), []
+    pending = [widget for widget in page.widgets if not is_component(widget.type)]
+    while pending:  # the order of rebuild: a widget waits for its container
+        deferred = []
+        for widget in pending:
+            if widget.parentId and widget.parentId not in placed and any(item.id == widget.parentId for item in page.widgets):
+                deferred.append(widget)
+                continue
+            placed.add(widget.id)
+            items.append({
+                "id": widget.id,
+                "name": widget.name,
+                "type": widget.type,
+                "parentId": widget.parentId if widget.parentId in placed else None,
+                "props": widget.props,
+            })
+        if len(deferred) == len(pending):  # a container that never comes: as rebuild, no parent
+            for widget in deferred:
+                items.append({"id": widget.id, "name": widget.name, "type": widget.type, "parentId": None, "props": widget.props})
+            break
+        pending = deferred
+    return {
+        "id": page.id,
+        "name": page.name,
+        "index": index,
+        "display": {"width": project.display.width, "height": project.display.height},
+        "designSize": list(page.designSize) if page.designSize else None,
+        "widgets": items,
+        "key": design_key(project, index),
+    }
+
+
+def design_preview(page_id, pending=None):
+    """build/preview.py render_with_log up to the runtime: the page generated design-only, the
+    project's code left out, in a folder the simulator's frame mode runs. pending holds the
+    geometries of a drag not recorded yet, as MainWindow._preview_drag passes them."""
+    from lvgl_mpy_studio.build.preview import design_key, prepare_page
+
+    project = _doc().project
+    if pending:
+        project = copy.deepcopy(project)
+        for widget in project.widgets:
+            if widget.id in pending:
+                widget.props.update(pending[widget.id])
+    index = _page_index(project, page_id)
+    shutil.rmtree(SIM_PREVIEW, ignore_errors=True)
+    try:
+        prepare_page(project, index, SIM_PREVIEW, design_only=True)
+    except (OSError, ValueError) as exc:
+        return {"error": str(exc), "key": design_key(project, index)}
+    return {
+        "directory": SIM_PREVIEW,
+        "files": _files_under(SIM_PREVIEW),
+        "width": project.display.width,
+        "height": project.display.height,
+        "board": project.board.get("id") if isinstance(project.board, dict) else "simulator",
+        "key": design_key(project, index),
+    }
+
+
+COMMON_SIZES = ((240, 240), (480, 480), (1024, 600), (1024, 1024))  # ui/resolution.py
+
+
+def _board_name(profile):
+    """ui/resolution.py board_name, which sits in a module that imports Qt: the name without the
+    resolution, if it already holds it."""
+    size = f"({profile['logicalWidth']}×{profile['logicalHeight']})"
+    return profile["name"].replace(size, "").strip() or profile["name"]
+
+
+def resolution_menu():
+    """ResolutionSelector.rebuild: the sizes of the board profiles with their names, the common
+    sizes, the current size."""
+    from lvgl_mpy_studio.core.boards import ProfileStore
+
+    boards = {}
+    for profile in ProfileStore.tolerant().profiles():
+        boards.setdefault((profile["logicalWidth"], profile["logicalHeight"]), []).append(_board_name(profile))
+    display = _doc().project.display
+    return {
+        "boards": [{"width": size[0], "height": size[1], "names": boards[size]} for size in sorted(boards)],
+        "common": [{"width": width, "height": height} for width, height in COMMON_SIZES],
+        "current": {"width": display.width, "height": display.height},
+    }
+
+
+def _unlinks_board(project, width, height):
+    board = project.board
+    return bool(board) and (board["logicalWidth"], board["logicalHeight"]) != (width, height)
+
+
+def resolution_plan(width, height):
+    """ui/main_resolution.py change_resolution before the dialog: the same size changes nothing;
+    a board of another size is unlinked, and the dialog says so."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    project = _doc().project
+    if (width, height) == (project.display.width, project.display.height):
+        return {"same": True, "note": ""}
+    board = project.board
+    note = tr("The project uses the board {name} ({size}): it will be unlinked and the simulator selected.", name=_board_name(board), size=f"{board['logicalWidth']}×{board['logicalHeight']}") if _unlinks_board(project, width, height) else ""
+    return {"same": False, "note": note}
+
+
+def doc_change_resolution(width, height, mode):
+    """change_resolution after the dialog: one undo step, then _report_outside."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    document = _doc()
+    unlink = _unlinks_board(document.project, width, height)
+
+    def mutate(project):
+        project.resize(width, height, mode)
+        if unlink:
+            project.board = None
+            project.runTarget = None
+
+    document.execute(tr("Change Resolution"), mutate)
+    return {"outside": document.project.widgets_outside(width, height), "state": doc_state()}
+
+
 NEW_MODULE_SOURCE = "import lvgl as lv\nimport ui\n\n\n"  # ui/main_tree.py
 CHECK_DIR = "/sim/check"
 # ui/main_run.py TRACEBACK_BLOCK: a complete traceback, the frame lines, then the exception line.
@@ -420,6 +560,11 @@ METHODS = {
     "module_create": module_create,
     "module_rename": module_rename,
     "module_delete": module_delete,
+    "design_page": design_page,
+    "design_preview": design_preview,
+    "resolution_menu": resolution_menu,
+    "resolution_plan": resolution_plan,
+    "doc_change_resolution": doc_change_resolution,
 }
 
 

@@ -19,6 +19,7 @@ import './code-editor.ts';
 import type { CodePanel } from './code-panel.ts';
 import './code-panel.ts';
 import './files-panel.ts';
+import './designer-view.ts';
 
 const OUTPUT_LIMIT = 100_000;
 type BottomTab = 'output' | 'errors';
@@ -36,6 +37,7 @@ export class AppShell extends LitElement {
     running: { state: true },
     bottom: { state: true },
     workbench: { state: true },
+    design: { state: true },
   };
 
   python: PythonBridge | undefined;
@@ -43,8 +45,10 @@ export class AppShell extends LitElement {
   pythonState: PythonState | undefined;
   doc: DocState | undefined;
   statusMessage = '';
-  tab: CenterTab = 'designer';
+  tab: CenterTab = 'code';
   outputText = '';
+  /** Counts the changes of the designer, to draw its canvases again. */
+  design = 0;
   running = false;
   bottom: BottomTab = 'output';
   /** Counts the changes of the studio's tabs, files and errors, to render them again. */
@@ -125,6 +129,23 @@ export class AppShell extends LitElement {
     }
     .center [role='tablist'] {
       flex-wrap: wrap;
+    }
+    .page-panel lms-designer-view {
+      height: 100%;
+    }
+    /* where the designer's previews run: drawn, but not seen and not in the way */
+    .preview-host {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .preview-host iframe {
+      border: none;
     }
     .file-tab {
       display: inline-flex;
@@ -407,6 +428,14 @@ export class AppShell extends LitElement {
         studio.output = (text) => this.appendOutput(text);
         refresh();
         void this.updateComplete.then(() => {
+          if (!studio.designer) {
+            const host = this.renderRoot.querySelector<HTMLElement>('.preview-host');
+            if (host) {
+              const designer = studio.attachDesigner(host);
+              this.unsubscribe.push(designer.onChange(() => this.design++));
+              this.requestUpdate();
+            }
+          }
           if (!studio.run) {
             const run = studio.attachRun(this.runView(), this.simPanel.screen);
             this.simPanel.onType = (data) => run.type(data);
@@ -487,8 +516,30 @@ export class AppShell extends LitElement {
   }
 
   private centerTabs(): CenterTab[] {
+    const pages = this.doc?.pages.map((page) => `page:${page.id}` as CenterTab) ?? [];
     const files = this.studio?.files.tabs.map((tab) => `file:${tab.id}` as CenterTab) ?? [];
-    return ['designer', 'code', 'simulator', ...files];
+    return [...pages, 'code', 'simulator', ...files];
+  }
+
+  private renderPagePanels() {
+    const designer = this.studio?.designer;
+    if (!designer || !this.doc) return nothing;
+    return this.doc.pages.map((page) => {
+      const id = this.tabId(`page:${page.id}`);
+      return html`<div
+        role="tabpanel"
+        class="page-panel"
+        id="panel-${id}"
+        aria-labelledby="tab-${id}"
+        ?hidden=${this.tab !== `page:${page.id}`}
+      >
+        <lms-designer-view
+          page-id=${page.id}
+          .controller=${designer}
+          .revision=${this.design}
+        ></lms-designer-view>
+      </div>`;
+    });
   }
 
   private tabKeys(event: KeyboardEvent): void {
@@ -712,17 +763,11 @@ export class AppShell extends LitElement {
         </section>
         <section class="center" aria-label=${tr('Editor')}>
           <div role="tablist" @keydown=${this.tabKeys}>
-            ${this.renderTab('designer', tr('Designer'))} ${this.renderTab('code', tr('Code'))}
-            ${this.renderTab('simulator', tr('Simulator'))} ${this.renderFileTabs()}
+            ${this.doc?.pages.map((page) => this.renderTab(`page:${page.id}`, page.name)) ?? nothing}
+            ${this.renderTab('code', tr('Code'))} ${this.renderTab('simulator', tr('Simulator'))}
+            ${this.renderFileTabs()}
           </div>
-          <div
-            role="tabpanel"
-            id="panel-designer"
-            aria-labelledby="tab-designer"
-            ?hidden=${this.tab !== 'designer'}
-          >
-            <p class="placeholder">${tr('The page designer comes in a later phase.')}</p>
-          </div>
+          ${this.renderPagePanels()}
           <div
             role="tabpanel"
             id="panel-code"
@@ -792,6 +837,7 @@ ${this.outputText}</pre>
         <span data-testid="python-status" role="status">${this.pythonStatus()}</span>
       </footer>
       <lms-dialogs></lms-dialogs>
+      <div class="preview-host" aria-hidden="true"></div>
       <dialog id="about" aria-labelledby="about-title">
         <h1 id="about-title">LVGL MPY Studio Web</h1>
         <p>The LVGL MPY Studio IDE in the browser.</p>

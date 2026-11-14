@@ -32,7 +32,30 @@ export interface ChooseOptions {
   readOnlyPlaces?: boolean;
 }
 
+/** A field of a form dialog: a line of text, a number, one of several choices. */
+export type FormField =
+  | { kind: 'note'; text: string }
+  | { kind: 'number'; name: string; label: string; min: number; max: number; value: number }
+  | {
+      kind: 'radio';
+      name: string;
+      /** For screen readers: the group's name; the choices say the rest. */
+      label: string;
+      options: { value: string; label: string }[];
+      value: string;
+    };
+
+export type FormValues = Record<string, string | number>;
+
 type Request =
+  | {
+      kind: 'form';
+      title: string;
+      fields: FormField[];
+      values: FormValues;
+      okLabel: string;
+      resolve: (value: FormValues | null) => void;
+    }
   | {
       kind: 'message';
       title: string;
@@ -136,6 +159,30 @@ export class Dialogs extends LitElement {
       flex: 1;
       min-width: 0;
     }
+    fieldset {
+      border: none;
+      margin: 8px 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .choice {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .choice input {
+      padding: 0;
+    }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     .crumbs {
       display: flex;
       flex-wrap: wrap;
@@ -216,6 +263,15 @@ export class Dialogs extends LitElement {
     return new Promise((resolve) => this.push({ kind: 'text', title, label, value, resolve }));
   }
 
+  /** A dialog of fields with OK and Cancel, as the desktop's QDialogs with a form; null is Cancel. */
+  form(title: string, fields: FormField[], okLabel = tr('OK')): Promise<FormValues | null> {
+    const values: FormValues = {};
+    for (const field of fields) if (field.kind !== 'note') values[field.name] = field.value;
+    return new Promise((resolve) =>
+      this.push({ kind: 'form', title, fields, values, okLabel, resolve }),
+    );
+  }
+
   choose(options: ChooseOptions): Promise<Location | null> {
     return new Promise((resolve) => this.push({ kind: 'choose', options, resolve }));
   }
@@ -242,6 +298,7 @@ export class Dialogs extends LitElement {
     this.current = null;
     if (request.kind === 'message') request.resolve(value);
     else if (request.kind === 'text') request.resolve(value as string | null);
+    else if (request.kind === 'form') request.resolve(value as FormValues | null);
     else request.resolve(value as Location | null);
     void this.next();
   }
@@ -466,6 +523,74 @@ export class Dialogs extends LitElement {
     `;
   }
 
+  private renderForm(request: Extract<Request, { kind: 'form' }>) {
+    const values = request.values;
+    // a QSpinBox keeps its value within its range
+    const accept = () => {
+      for (const field of request.fields) {
+        if (field.kind !== 'number') continue;
+        const number = Math.round(Number(values[field.name]));
+        values[field.name] = Number.isFinite(number)
+          ? Math.min(field.max, Math.max(field.min, number))
+          : field.value;
+      }
+      this.finish({ ...values });
+    };
+    let focused = false;
+    const autofocus = () => !focused && (focused = true);
+    return html`
+      <h1 id="dialog-title">${request.title}</h1>
+      <form
+        class="form"
+        @submit=${(event: Event) => {
+          event.preventDefault();
+          accept();
+        }}
+      >
+        ${request.fields.map((field, index) => {
+          if (field.kind === 'note') return html`<p>${field.text}</p>`;
+          if (field.kind === 'number') {
+            return html`<div class="row">
+              <label for="field-${index}">${field.label}</label>
+              <input
+                id="field-${index}"
+                type="number"
+                min=${field.min}
+                max=${field.max}
+                step="1"
+                ?autofocus=${autofocus()}
+                .value=${String(values[field.name])}
+                @input=${(e: Event) => (values[field.name] = (e.target as HTMLInputElement).value)}
+              />
+            </div>`;
+          }
+          return html`<fieldset>
+            <legend class="visually-hidden">${field.label}</legend>
+            ${field.options.map(
+              (option, position) =>
+                html`<label class="choice">
+                  <input
+                    type="radio"
+                    name="field-${index}"
+                    .value=${option.value}
+                    ?autofocus=${values[field.name] === option.value && autofocus()}
+                    .checked=${values[field.name] === option.value}
+                    data-position=${position}
+                    @change=${() => (values[field.name] = option.value)}
+                  />
+                  ${option.label}
+                </label>`,
+            )}
+          </fieldset>`;
+        })}
+        <div class="buttons">
+          <button type="button" @click=${() => this.finish(null)}>${tr('Cancel')}</button>
+          <button type="submit" class="primary">${request.okLabel}</button>
+        </div>
+      </form>
+    `;
+  }
+
   override render() {
     const request = this.current;
     let body: unknown = nothing;
@@ -508,6 +633,8 @@ export class Dialogs extends LitElement {
           </button>
         </div>
       `;
+    } else if (request?.kind === 'form') {
+      body = this.renderForm(request);
     } else if (request?.kind === 'choose') {
       body = this.renderChooser(request.options);
     }

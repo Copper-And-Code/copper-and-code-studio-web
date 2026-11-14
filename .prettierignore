@@ -9,6 +9,8 @@ public/python/
 public/runtime/
 public/pyodide/
 tests/fixtures/goldens/
+tests/fixtures/previews/
+tests/fixtures/workflows/
 test-results-upstream-survey.json
 public/examples/
 public/runtime/

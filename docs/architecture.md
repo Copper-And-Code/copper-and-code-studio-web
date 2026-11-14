@@ -4,16 +4,17 @@ Written as the pieces are built.
 
 ## Pieces
 
-| Piece                                                         | Where                                                          | State   |
-| ------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
-| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`                                          | done    |
-| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`               | done    |
-| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                               | done    |
-| Workspace: OPFS, a PC folder, zip                             | `src/storage/`                                                 | done    |
-| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                 | done    |
-| Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts` | done    |
-| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`            | done    |
-| Board: Web Serial, raw REPL                                   | `src/board/`                                                   | phase 6 |
+| Piece                                                         | Where                                                                  | State                |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------- |
+| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`                                                  | done                 |
+| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`                       | done                 |
+| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                                       | done                 |
+| Workspace: OPFS, a PC folder, zip                             | `src/storage/`                                                         | done                 |
+| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                         | done                 |
+| Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts`         | done                 |
+| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    | done                 |
+| Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` | phase 5, canvas done |
+| Board: Web Serial, raw REPL                                   | `src/board/`                                                           | phase 6              |
 
 ## Python
 
@@ -57,6 +58,22 @@ Simulator ──postMessage: start {runtime, files}─►  frame.js: micropython
   Flash…. A program's flash lives in OPFS `simulator/<key>/flash`.
 - The output of a project goes to the Output panel, the output of a program to the terminal;
   tone markers are taken out and played with Web Audio (`src/sim/tones.ts`).
+
+## Designer
+
+```
+DesignerController ── design_page(id) ──────────►  Pyodide: the page's widgets, design_key
+PreviewRenderer ──── design_preview(id) ────────►  build/preview.py prepare_page, design-only
+Simulator (hidden) ──postMessage: start frame ──►  frame.js: tick 0, the first frame dumped
+lms-designer-view ◄── RGB565 frame ─────────────   canvas below, the widgets as SVG above
+```
+
+- `src/app/designer.ts` follows `ui/main_window.py` and `ui/main_resolution.py`: the preview of
+  the page shown, the grid, the zoom, Fit to Window, the resolution with its question.
+- `src/app/preview.ts` is `ui/designer/preview.py`'s `PreviewRenderer`; its iframe is not the
+  Simulator tab's.
+- `src/ui/designer-view.ts` draws the page as `ui/designer/scene.py`: the frame when it has the
+  project's size, otherwise each widget painted as `WidgetItem.paint`.
 
 ## Rules
 

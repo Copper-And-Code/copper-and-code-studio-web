@@ -2,8 +2,12 @@ import { LitElement, css, html, nothing } from 'lit';
 
 export type MenuItem =
   | { separator: true }
+  /** A heading inside a menu, as QMenu.addSection. */
+  | { section: string }
   | {
       label: string;
+      /** A checkable action: shown with its mark, read as checked or not. */
+      checked?: boolean;
       shortcut?: string;
       disabled?: boolean;
       /** For e2e tests and for the keyboard: a stable name. */
@@ -15,11 +19,16 @@ export type MenuItem =
 
 export interface Menu {
   label: string;
+  /** The tooltip of the menu's button. */
+  title?: string;
+  /** Called before the menu opens, as QMenu.aboutToShow: its items may change. */
+  onOpen?: () => Promise<void> | void;
   items: () => MenuItem[];
 }
 
-type Entry = Exclude<MenuItem, { separator: true }>;
-const isEntry = (item: MenuItem): item is Entry => !('separator' in item);
+type Entry = Exclude<MenuItem, { separator: true } | { section: string }>;
+const isEntry = (item: MenuItem): item is Entry => !('separator' in item) && !('section' in item);
+const ITEMS = ':scope > .item > [role^="menuitem"]';
 
 /** The menu bar: menus that open on click, with arrow keys, Enter and Escape. */
 export class MenuBar extends LitElement {
@@ -83,7 +92,7 @@ export class MenuBar extends LitElement {
       top: 0;
       left: 100%;
     }
-    [role='menuitem'] {
+    [role^='menuitem'] {
       display: flex;
       justify-content: space-between;
       gap: 24px;
@@ -103,6 +112,15 @@ export class MenuBar extends LitElement {
       border-top: 1px solid var(--border);
       margin: 4px 2px;
       width: calc(100% - 4px);
+    }
+    .mark {
+      display: inline-block;
+      width: 1.2em;
+    }
+    .section {
+      color: var(--muted);
+      font-size: 0.85em;
+      padding: 6px 10px 2px;
     }
     .empty {
       color: var(--muted);
@@ -135,17 +153,18 @@ export class MenuBar extends LitElement {
     this.submenu = null;
   }
 
-  private toggle(index: number): void {
+  private async toggle(index: number): Promise<void> {
     this.submenu = null;
+    if (this.open !== index) await this.menus[index]?.onOpen?.();
     this.open = this.open === index ? -1 : index;
     if (this.open >= 0) void this.updateComplete.then(() => this.focusItem(0));
   }
 
   private focusItem(position: number, menu?: Element | null): void {
     const root = menu ?? this.renderRoot.querySelector('.top [role="menu"]');
-    const items = [
-      ...(root?.querySelectorAll<HTMLButtonElement>(':scope > .item > [role="menuitem"]') ?? []),
-    ].filter((item) => !item.disabled);
+    const items = [...(root?.querySelectorAll<HTMLButtonElement>(ITEMS) ?? [])].filter(
+      (item) => !item.disabled,
+    );
     const count = items.length;
     if (count) items[((position % count) + count) % count]?.focus();
   }
@@ -164,9 +183,9 @@ export class MenuBar extends LitElement {
   private keydown(event: KeyboardEvent): void {
     if (this.open < 0) return;
     const menu = (event.target as HTMLElement).closest('[role="menu"]');
-    const items = [
-      ...(menu?.querySelectorAll<HTMLButtonElement>(':scope > .item > [role="menuitem"]') ?? []),
-    ].filter((item) => !item.disabled);
+    const items = [...(menu?.querySelectorAll<HTMLButtonElement>(ITEMS) ?? [])].filter(
+      (item) => !item.disabled,
+    );
     const position = items.indexOf(event.target as HTMLButtonElement);
     switch (event.key) {
       case 'ArrowDown':
@@ -195,7 +214,7 @@ export class MenuBar extends LitElement {
         const step = event.key === 'ArrowRight' ? 1 : -1;
         const next = (this.open + step + this.menus.length) % this.menus.length;
         this.open = -1;
-        this.toggle(next);
+        void this.toggle(next);
         break;
       }
       default:
@@ -211,7 +230,8 @@ export class MenuBar extends LitElement {
         ? html`<div class="item">
             <button
               type="button"
-              role="menuitem"
+              role=${item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+              aria-checked=${item.checked === undefined ? nothing : String(item.checked)}
               data-id=${item.id ?? nothing}
               data-sub=${item.items ? '1' : nothing}
               aria-haspopup=${item.items ? 'menu' : nothing}
@@ -219,7 +239,9 @@ export class MenuBar extends LitElement {
               ?disabled=${item.disabled}
               @click=${() => this.run(item, index)}
             >
-              <span>${item.label}</span>
+              <span
+                >${item.checked === undefined ? nothing : html`<span class="mark" aria-hidden="true">${item.checked ? '✓' : ''}</span>`}${item.label}</span
+              >
               ${
                 item.shortcut
                   ? html`<span class="shortcut" aria-hidden="true">${item.shortcut}</span>`
@@ -236,7 +258,9 @@ export class MenuBar extends LitElement {
                 : nothing
             }
           </div>`
-        : html`<hr aria-hidden="true" data-menu=${label} />`,
+        : 'section' in item
+          ? html`<div class="section" role="presentation">${item.section}</div>`
+          : html`<hr aria-hidden="true" data-menu=${label} />`,
     );
   }
 
@@ -247,8 +271,9 @@ export class MenuBar extends LitElement {
           <button
             type="button"
             aria-haspopup="menu"
+            title=${menu.title ?? nothing}
             aria-expanded=${this.open === index ? 'true' : 'false'}
-            @click=${() => this.toggle(index)}
+            @click=${() => void this.toggle(index)}
           >
             ${menu.label}
           </button>

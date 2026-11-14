@@ -55,6 +55,7 @@ export class CodeController {
   /** Set while an edit goes to Python, so that the reply does not rewrite the editor. */
   private editing = Promise.resolve();
   private checking = 0;
+  private compiling: Promise<void> = Promise.resolve();
   /** True while the project changes because of this tab: no need to read the code back. */
   adopting = false;
   /** The Code tab is shown: only then a change of the project starts a check. */
@@ -186,12 +187,24 @@ export class CodeController {
     return errors;
   }
 
-  /** compile_python with mpy-cross in WebAssembly, then upstream's map_error. */
-  async compileProject(): Promise<MappedError[]> {
-    const generated = await this.python.call<{ directory: string; files: string[] }>(
-      'code_generate_check',
+  /**
+   * compile_python with mpy-cross in WebAssembly, then upstream's map_error, on the project with
+   * every edit already in Python. One at a time: the check and Start generate into the same
+   * folder, and a file read while the other call writes it would be half a file.
+   */
+  compileProject(): Promise<MappedError[]> {
+    const result = this.compiling.then(async () => {
+      await this.editing; // what was typed last, not the text of a moment ago
+      const generated = await this.python.call<{ directory: string; files: string[] }>(
+        'code_generate_check',
+      );
+      return this.compileDirectory(generated.directory, generated.files);
+    });
+    this.compiling = result.then(
+      () => undefined,
+      () => undefined,
     );
-    return this.compileDirectory(generated.directory, generated.files);
+    return result;
   }
 
   /** compile_python on files of a folder of Pyodide's file system, with upstream's map_error. */

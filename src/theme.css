@@ -8,6 +8,8 @@
   --on-accent: #ffffff;
   --selection: #dbe7ff;
   --danger: #b42318;
+  /* ui/theme.py canvas_color: around the page in the designer */
+  --canvas: #d9dce1;
   font-family:
     system-ui,
     -apple-system,
@@ -28,6 +30,7 @@
     --on-accent: #0b1220;
     --selection: #23324d;
     --danger: #f97066;
+    --canvas: #202020;
   }
 }
 

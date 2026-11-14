@@ -16,11 +16,12 @@ import type { Dialogs } from '../ui/dialogs.ts';
 import type { Menu, MenuItem } from '../ui/menu-bar.ts';
 import { MpyCross } from '../mpy/mpy-cross.ts';
 import { CodeController, type MappedError } from './code.ts';
+import { DesignerController } from './designer.ts';
 import { FileTabs } from './file-tabs.ts';
 import { RunController, type RunView } from './run.ts';
 
-/** What the center shows: the designer, the Code tab, the simulator, or a file tab by id. */
-export type CenterTab = 'designer' | 'code' | 'simulator' | `file:${number}`;
+/** What the center shows: a page's canvas, the Code tab, the simulator, or a file tab by id. */
+export type CenterTab = `page:${string}` | 'code' | 'simulator' | `file:${number}`;
 const FILES_FOLDER = 'files/folder';
 
 const isProject = (name: string) => name.toLowerCase().endsWith('.json');
@@ -41,8 +42,10 @@ export class Studio {
   errors: MappedError[] = [];
   /** The folder of the Files panel (QSettings files/folder). */
   filesFolder: Location | null = null;
-  /** What the center shows; the shell follows it. */
-  tab: CenterTab = 'designer';
+  /** What the center shows; the shell follows it. Until a project is open, nothing yet. */
+  tab: CenterTab = 'code';
+  /** The page designer: set when the shell gives it where to draw previews. */
+  designer: DesignerController | null = null;
   /** Where the Output panel writes; set by the shell. */
   output: (text: string) => void = () => {};
   private lvNames: Promise<string[]> | null = null;
@@ -73,7 +76,10 @@ export class Studio {
     this.code.onChange(() => this.workbenchChanged());
     // the code as Python has it, after new, open, reload, undo and redo
     this.session.onChange(() => {
-      if (!this.code.adopting) void this.code.refresh();
+      // an edit of the Code tab changes no page: design_key leaves the code out
+      if (this.code.adopting) return;
+      void this.code.refresh();
+      this.pagesChanged();
     });
   }
 
@@ -89,7 +95,54 @@ export class Studio {
   show(tab: CenterTab): void {
     this.tab = tab;
     this.code.setActive(tab === 'code');
+    this.designer?.setActive(this.currentPage());
     this.workbenchChanged();
+  }
+
+  /** The page whose canvas is shown, or null. */
+  currentPage(): string | null {
+    return this.tab.startsWith('page:') ? this.tab.slice(5) : null;
+  }
+
+  /** _sync_designers: a tab per page; a page that went takes its tab with it. */
+  private pagesChanged(): void {
+    const pages = this.session.state?.pages ?? [];
+    const current = this.currentPage();
+    const first = pages[0];
+    if (
+      first &&
+      (this.starting || (current !== null && !pages.some((page) => page.id === current)))
+    ) {
+      this.starting = false;
+      this.show(`page:${first.id}`);
+    }
+    void this.designer?.refresh();
+  }
+
+  /** The first project shows its first page, as the desktop opens on it. */
+  private starting = true;
+
+  /** The designer, with the element its previews run in, hidden. */
+  attachDesigner(previewHost: HTMLElement): DesignerController {
+    this.designer = new DesignerController(
+      this.python,
+      this.session,
+      this.settings,
+      this.dialogs,
+      previewHost,
+      (text) => this.output(text),
+      (text) => this.appendError(text),
+      () => this.run?.running ?? false,
+    );
+    this.designer.setActive(this.currentPage());
+    void this.designer.refresh();
+    return this.designer;
+  }
+
+  /** ui/main_run.py append_error: a line in Output and a row of Errors. */
+  appendError(text: string): void {
+    this.output(`${text}\n`);
+    this.setErrors([...this.errors, { file: 'IDE', line: 0, message: text }]);
   }
 
   // ---- files: ui/main_editors.py, ui/files.py ----
@@ -772,8 +825,52 @@ export class Studio {
           },
         ],
       },
+      ...(this.designer ? [this.viewMenu(this.designer)] : []),
       ...(this.run ? [this.runMenu(this.run, ready)] : []),
     ];
+  }
+
+  /** ui/main_window.py, the View menu's designer actions. */
+  private viewMenu(designer: DesignerController): Menu {
+    const page = this.currentPage();
+    return {
+      label: tr('View'),
+      items: () => [
+        {
+          label: tr('Grid'),
+          id: 'grid',
+          checked: designer.grid,
+          action: () => designer.toggleGrid(),
+        },
+        {
+          label: tr('Real LVGL Preview'),
+          id: 'preview',
+          checked: designer.previewOn,
+          action: () => designer.togglePreview(),
+        },
+        {
+          label: tr('Zoom In'),
+          id: 'zoom-in',
+          shortcut: 'Ctrl++',
+          disabled: !page,
+          action: () => designer.zoom(1.25),
+        },
+        {
+          label: tr('Zoom Out'),
+          id: 'zoom-out',
+          shortcut: 'Ctrl+-',
+          disabled: !page,
+          action: () => designer.zoom(0.8),
+        },
+        {
+          label: tr('Fit to Window'),
+          id: 'fit',
+          shortcut: 'Ctrl+0',
+          disabled: !page,
+          action: () => designer.fit(),
+        },
+      ],
+    };
   }
 
   /** ui/main_window.py, the Run menu; the browser's own pages come in phase 7. */
@@ -832,6 +929,13 @@ export class Studio {
     if (inTerminal) return false;
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
+    // QKeySequence.ZoomIn, ZoomOut and Fit to Window, while a page is shown
+    if (this.designer && this.currentPage() && !inEditor && ['+', '=', '-', '0'].includes(key)) {
+      if (key === '0') this.designer.fit();
+      else this.designer.zoom(key === '-' ? 0.8 : 1.25);
+      event.preventDefault();
+      return true;
+    }
     if (key === 's') void (event.shiftKey ? this.session.saveAs() : this.saveCurrent());
     else if (key === 'o' && !event.shiftKey) void this.openDialog();
     // in an editor, undo and redo are the editor's, as in the desktop's text widgets

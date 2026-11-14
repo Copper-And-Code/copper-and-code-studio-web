@@ -1,0 +1,133 @@
+{
+  "upstreamVersion": "0.7.0",
+  "projects": {
+    "breakout": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "main",
+          "file": "breakout/main.png"
+        }
+      ]
+    },
+    "eim-01": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "Overview",
+          "file": "eim-01/Overview.png"
+        },
+        {
+          "page": "Trends",
+          "file": "eim-01/Trends.png"
+        },
+        {
+          "page": "Alarms",
+          "file": "eim-01/Alarms.png"
+        },
+        {
+          "page": "Diagnostics",
+          "file": "eim-01/Diagnostics.png"
+        },
+        {
+          "page": "Settings",
+          "file": "eim-01/Settings.png"
+        }
+      ]
+    },
+    "eim-01-480": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Overview",
+          "file": "eim-01-480/Overview.png"
+        },
+        {
+          "page": "Trends",
+          "file": "eim-01-480/Trends.png"
+        },
+        {
+          "page": "Alarms",
+          "file": "eim-01-480/Alarms.png"
+        },
+        {
+          "page": "Diagnostics",
+          "file": "eim-01-480/Diagnostics.png"
+        },
+        {
+          "page": "Settings",
+          "file": "eim-01-480/Settings.png"
+        }
+      ]
+    },
+    "fifteen": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Menu",
+          "file": "fifteen/Menu.png"
+        },
+        {
+          "page": "Game",
+          "file": "fifteen/Game.png"
+        },
+        {
+          "page": "Options",
+          "file": "fifteen/Options.png"
+        },
+        {
+          "page": "Solved",
+          "file": "fifteen/Solved.png"
+        }
+      ]
+    },
+    "simon": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "main",
+          "file": "simon/main.png"
+        }
+      ]
+    },
+    "snake": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "main",
+          "file": "snake/main.png"
+        }
+      ]
+    },
+    "tictactoe": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "main",
+          "file": "tictactoe/main.png"
+        }
+      ]
+    },
+    "weather": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "main",
+          "file": "weather/main.png"
+        },
+        {
+          "page": "settings",
+          "file": "weather/settings.png"
+        }
+      ]
+    }
+  }
+}

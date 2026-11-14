@@ -131,13 +131,13 @@ test('the Code tab: a new module, its syntax error, Start stops on it, the Error
   await dialog(page).getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByTestId('bottom-errors')).toHaveText('Errors (1)');
   await expect(page.getByTestId('errors')).toContainText('helpers.py');
-  await page.getByTestId('tab-designer').click();
+  await page.locator('[data-testid^="tab-page-"]').first().click();
   await page.getByTestId('errors').getByRole('button').first().click();
   await expect(page.getByTestId('tab-code')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText('helpers.py');
 
   // undo takes the module away again, step by step
-  await page.getByTestId('tab-designer').focus();
+  await page.locator('[data-testid^="tab-page-"]').first().focus();
   await menu(page, 'Edit', 'Undo');
   await menu(page, 'Edit', 'Undo');
   await expect(page.getByTestId('module')).toHaveCount(0);

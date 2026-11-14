@@ -142,3 +142,34 @@ repeated here. This file records the decisions taken while building, and why.
   focus back and before saving.
 - **In an editor, Ctrl+Z and Ctrl+Y are the editor's**, as in the desktop's text widgets.
 - **The Code tab checks the project only while it is shown**, to keep the worker free.
+
+## Phase 5 (2026-11-14)
+
+Sub-gate 1, the canvas.
+
+- **A tab per page**, as the desktop's `_sync_designers`, before Code and Simulator. The single
+  Designer tab of earlier phases is gone.
+- **The Real LVGL Preview is `build/preview.py`'s `render_with_log`**, with the simulator's frame
+  mode in place of the native process: `prepare_page` generates the page design-only in
+  Pyodide, a hidden sandboxed iframe runs it and returns the frame buffer, and a traceback or a
+  frame of the wrong size counts as no frame. `ui/designer/preview.py`'s `PreviewRenderer` is
+  reimplemented in `src/app/preview.ts`, because it is a Qt object with a thread: the same
+  60 ms delay, only the last request kept, a page drawn again only when its `design_key`
+  changes. All 20 pages of the 9 examples match the native runtime with 0 different pixels
+  (`scripts/previews.py`, `tests/e2e/designer.spec.ts`), on 3 engines.
+- **The previews run in their own iframe**, not in the Simulator tab's, so a preview never stops
+  a running program, as on the desktop, where each preview is a process of its own.
+- **The widgets on the canvas are drawn from the project, as `ui/designer/scene.py` does**: the
+  position and size of `x`, `y`, `width` and `height`, inside the container. PLAN.md asks for
+  the geometry from the renderer; the desktop does not read it from LVGL, so neither does the
+  web IDE. Without a preview of the right size, each widget is painted as `WidgetItem.paint`
+  paints it (`src/ui/designer-view.ts`, an SVG over the frame); with one, only a widget outside
+  the page gets its dotted outline.
+- **`ui/resolution.py`'s `board_name` is copied** into `py/lms_bridge.py`: it is three lines in a
+  module that imports Qt. The resolution's dialogs are the desktop's, as a form dialog.
+- **The zoom starts at 100 % and is kept per page**, as each QGraphicsView keeps its own; a new
+  resolution fits the page shown again, as the manual says.
+- **Start compiles the project with every edit already in Python**, and one compilation at a
+  time. Before, F5 pressed right after typing could compile the text of a moment earlier, half
+  a line, and the background check could rewrite the folder that Start was reading: the
+  traceback test of phase 4 failed about once in four runs for this.
