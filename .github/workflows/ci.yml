@@ -25,6 +25,10 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Goldens from upstream on the host
+        run: python3 --version && pnpm goldens
+      - name: Upstream in Pyodide (goldens, audit, upstream's tests)
+        run: pnpm test:py
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - run: pnpm e2e
       - if: failure()

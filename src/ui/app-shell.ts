@@ -1,11 +1,21 @@
 import { LitElement, css, html } from 'lit';
 import { upstream } from '../build-info.ts';
+import type { PythonBridge, PythonState } from '../py/bridge.ts';
 import { upstreamLabel } from '../upstream.ts';
 
 const MENUS = ['File', 'Edit', 'View', 'Simulator', 'Board'] as const;
 
 /** The IDE window: menu bar, the three working areas and the status bar. Empty for now. */
 export class AppShell extends LitElement {
+  static override properties = {
+    python: { attribute: false },
+    pythonState: { state: true },
+  };
+
+  python: PythonBridge | undefined;
+  pythonState: PythonState | undefined;
+  private unsubscribe: (() => void) | undefined;
+
   static override styles = css`
     :host {
       display: grid;
@@ -61,6 +71,10 @@ export class AppShell extends LitElement {
       margin: 0 0 8px;
     }
     footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 16px;
       padding: 3px 12px;
       font-size: 0.85rem;
       color: var(--muted);
@@ -96,6 +110,34 @@ export class AppShell extends LitElement {
     }
   `;
 
+  override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has('python')) {
+      this.unsubscribe?.();
+      this.unsubscribe = this.python?.onState((state) => (this.pythonState = state));
+    }
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
+  }
+
+  private pythonStatus(): string {
+    const state = this.pythonState;
+    switch (state?.stage) {
+      case undefined:
+      case 'loading-python':
+        return 'Python: starting…';
+      case 'loading-upstream':
+        return 'Python: loading LVGL MPY Studio…';
+      case 'ready':
+        return `Python ${state.info.python} ready in ${(state.info.startMs / 1000).toFixed(1)} s`;
+      case 'failed':
+        return `Python failed to start: ${state.error.message}`;
+    }
+  }
+
   private openAbout(): void {
     this.renderRoot.querySelector<HTMLDialogElement>('#about')?.showModal();
   }
@@ -116,11 +158,24 @@ export class AppShell extends LitElement {
         <section aria-label="Designer"><h2>Designer</h2></section>
         <section aria-label="Properties"><h2>Properties</h2></section>
       </main>
-      <footer>LVGL MPY Studio ${label}</footer>
+      <footer>
+        <span>LVGL MPY Studio ${label}</span>
+        <span data-testid="python-status" role="status">${this.pythonStatus()}</span>
+      </footer>
       <dialog id="about" aria-labelledby="about-title">
         <h1 id="about-title">LVGL MPY Studio Web</h1>
         <p>The LVGL MPY Studio IDE in the browser.</p>
         <p>Upstream: <strong data-testid="upstream-tag">${label}</strong></p>
+        <p>
+          Python:
+          <span data-testid="python-version"
+            >${
+              this.pythonState?.stage === 'ready'
+                ? `${this.pythonState.info.python} (Pyodide ${this.pythonState.info.pyodide})`
+                : 'not ready yet'
+            }</span
+          >
+        </p>
         <p>Licence: GPL-3.0-or-later</p>
         <form method="dialog">
           <button type="submit" @click=${this.closeAbout}>Close</button>

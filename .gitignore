@@ -8,3 +8,6 @@ coverage/
 /public/runtime/
 *.log
 .DS_Store
+/public/pyodide/
+/tests/fixtures/goldens/
+test-results-upstream-survey.json

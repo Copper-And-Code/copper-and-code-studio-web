@@ -23,3 +23,31 @@ repeated here. This file records the decisions taken while building, and why.
 - **The upstream release is read at build time** by `scripts/upstream-info.mjs`: the version from
   `lvgl_mpy_studio/__init__.py`, the tag from `git describe --exact-match`. CI fetches the
   submodule's tags for this.
+
+## Phase 1 (2026-11-14)
+
+- **Pyodide 314.0.7**, Python 3.14.2: the newest release at least two weeks old (314.0.8 came out
+  on 13 November). It is MPL-2.0. The site serves it from `public/pyodide/`, copied from the npm
+  package at build time, never from a CDN. The worker loads it with a dynamic `import()` of the
+  served `pyodide.mjs`, so Vite does not bundle it.
+- **The bundle keeps upstream's layout** (`lvgl_mpy_studio/`, `runtime/display_driver.py`,
+  `runtime/program/`), so upstream code that finds its files relative to itself works unchanged.
+  It is unpacked to `/lib/lms`. It holds all of `build/`, the C parts included, because
+  `build/web.py` imports `release.py` when it loads.
+- **The bridge takes the project file's text** and loads it with `Project.load`, as the desktop
+  does, so validation and revisions are upstream's. Files come back as text decoded from their
+  bytes, without newline translation.
+- **Goldens are not committed.** `pnpm goldens` writes them from the submodule into
+  `tests/fixtures/goldens/` (ignored by git); CI writes them on every run. Moving the submodule
+  therefore compares against the new tag at once.
+- **Goldens call upstream's functions, not the CLI process.** `lvgl-mpy-studio generate` writes
+  the sources and then compiles them with the native `mpy-cross`, which the submodule does not
+  have. `scripts/goldens.py` calls the functions the CLI calls (`generate_project`;
+  `portable_profile` and `export_board`, as `cli._board_export` does) and stops before compiling.
+- **Upstream's tests run on a copy in memory.** The runner copies `upstream/` into Pyodide's
+  file system, so a test can never write into the submodule. "Qt-free" means: upstream's
+  dependencies apart from PySide6 and qtawesome. The host run without Qt is the reference for
+  what is expected to fail anyway.
+- **Test packages come from the network at test time**: pytest from Pyodide's package index,
+  pyserial, mpremote and hypothesis from PyPI through micropip, at exact versions. They are not
+  part of the site.

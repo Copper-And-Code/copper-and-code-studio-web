@@ -24,6 +24,8 @@ cd lvgl-mpy-studio-web
 pnpm install
 pnpm dev          # http://localhost:5173/lvgl-mpy-studio-web/
 pnpm lint && pnpm typecheck && pnpm test
+pnpm goldens      # upstream on the host, Python 3.11 or later
+pnpm test:py      # upstream in Pyodide: goldens, audit, upstream's own tests
 pnpm exec playwright install --with-deps chromium firefox webkit
 pnpm e2e          # Chromium, Firefox and WebKit
 ```

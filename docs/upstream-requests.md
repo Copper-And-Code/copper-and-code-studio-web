@@ -9,6 +9,7 @@ tagged.
 | 1   | Web runtime as a release asset                    | proposed |
 | 2   | `mpy-cross` in WebAssembly as a release asset     | proposed |
 | 3   | A CI check that the Qt-free packages stay Qt-free | proposed |
+| 4   | Test files that load without Qt                   | proposed |
 
 ---
 
@@ -48,18 +49,35 @@ and line.
 
 ## 3. A CI check that the Qt-free packages stay Qt-free
 
-**What.** A test that imports every module of `lvgl_mpy_studio/core`, `gen`, `build`, `sim` and
-`blocks` in a fresh interpreter, with `PySide6`, `serial` and `mpremote` blocked, and fails if
-any import needs them. It also lists which modules import `subprocess`, `socket`, `select` or
-`threading` at import time, against an allowlist, so a new one is noticed.
+**What.** Extend `tests/test_modules.py::test_core_modules_do_not_import_qt`. Today it imports
+three modules (`core.modules`, `core.model`, `core.validation`) in a fresh interpreter and checks
+that PySide6 is not loaded. It would import every module of `lvgl_mpy_studio/core`, `gen`,
+`build`, `sim` and `blocks`, and also fail on `serial` and `mpremote`.
 
-**Why.** The web IDE runs these packages in Pyodide, where Qt does not exist and processes and
-sockets cannot be used. Today it works because `gen/fonts.py` imports `fontconv` (Qt) only when
-a project has its own fonts. A test keeps that true.
+**Why.** The web IDE runs these packages in Pyodide, where none of those exist. Today it works:
+`tests/py/audit.test.ts` here imports all of them in Pyodide. Upstream does not see a regression
+until this repository moves to the next tag; a test upstream would catch it when it is written.
 
-**Where.** `tests/test_qt_free.py`. Today's allowlist, from a grep of `a45a85f`:
-`gen/board_gen.py`, `build/compiler.py`, `build/preview.py`, `build/budget.py` and
-`build/c_compiler.py` (`subprocess`), `build/release.py` (`subprocess`), `build/web.py`
-(`threading`), `sim/session.py` (`socket`, `subprocess`, `threading`, `select`).
+**Where.** `tests/test_modules.py`, the test above, with `pkgutil.walk_packages` over the five
+packages.
 
-**Test.** The test itself. Adding `import PySide6` to a module of `core/` makes it fail.
+**Test.** The test itself. Adding `import PySide6` at the top of a module of `gen/` makes it
+fail.
+
+## 4. Test files that load without Qt
+
+**What.** 25 test files import PySide6, or the `ui/` package, when they are loaded, also those
+that hold tests of the core. Without Qt the whole file fails to load, its Qt-free tests
+included. A rough count gives about 70 of their 322 tests that use no Qt object: for example in
+`test_validation.py`, `test_project_id.py`, `test_budget.py`, `test_device_files.py`,
+`test_images.py`. The request: import Qt inside the tests that need it, or with
+`pytest.importorskip("PySide6")` in a file of Qt tests only, or move the Qt-free tests to their
+own files.
+
+**Why.** Those tests check the code the web IDE runs. Today they are excluded from the Pyodide
+run as whole files (`tests/py/exclusions.json`), so a regression there is not seen here.
+
+**Where.** The 25 files listed under `files` in this repository's `tests/py/exclusions.json`.
+
+**Test.** `pytest --continue-on-collection-errors` in an environment without PySide6 loads every
+test file with no collection error; the Qt tests are skipped.

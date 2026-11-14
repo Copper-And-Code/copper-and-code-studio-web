@@ -10,17 +10,22 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "assets": "node scripts/copy-pyodide.mjs && node scripts/bundle-upstream.mjs",
+    "dev": "pnpm assets && vite",
+    "build": "tsc --noEmit && pnpm assets && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "goldens": "python3 -I scripts/goldens.py",
+    "test:py": "node scripts/bundle-upstream.mjs && vitest run -c vitest.py.config.ts && node tests/py/upstream-tests.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
-    "lit": "3.3.3"
+    "fflate": "0.8.3",
+    "lit": "3.3.3",
+    "pyodide": "314.0.7"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -7,3 +7,6 @@ test-results/
 pnpm-lock.yaml
 public/py/
 public/runtime/
+public/pyodide/
+tests/fixtures/goldens/
+test-results-upstream-survey.json
