@@ -156,7 +156,19 @@ test('a new resolution: the question, the widgets adapted, one undo step, the fr
 interface Workflow {
   name: string;
   example: string;
-  steps: { resolution: [number, number]; mode: 'adapt' | 'stretch' | 'keep' }[];
+  steps: {
+    resolution?: [number, number];
+    mode?: 'adapt' | 'stretch' | 'keep';
+    addPage?: boolean;
+    initialPage?: string;
+    deletePage?: string;
+  }[];
+}
+
+/** A page action from the project tree's context menu on that page. */
+async function pageAction(page: Page, name: string, action: string) {
+  await page.getByRole('treeitem', { name, exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: action, exact: true }).click();
 }
 
 const WORKFLOWS = new URL('../fixtures/workflows/', import.meta.url);
@@ -194,14 +206,31 @@ for (const workflow of workflows) {
     await expect(page.getByTestId('project-file')).toContainText('project.json');
     await page.locator('[data-testid^="tab-page-"]').first().click();
     for (const step of workflow.steps) {
-      const [width, height] = step.resolution;
+      if (step.addPage) {
+        const count = await page.getByTestId('page').count();
+        await menu(page, 'Project', 'Add Page');
+        await expect(page.getByTestId('page')).toHaveCount(count + 1);
+        continue;
+      }
+      if (step.initialPage) {
+        await pageAction(page, step.initialPage, 'Set Initial Page');
+        await expect(page.getByTestId('page').first()).toHaveText(step.initialPage);
+        continue;
+      }
+      if (step.deletePage) {
+        await pageAction(page, step.deletePage, 'Delete Page');
+        await expect(page.getByRole('tab', { name: step.deletePage, exact: true })).toHaveCount(0);
+        continue;
+      }
+      const [width, height] = step.resolution ?? [0, 0];
+      await page.locator('[data-testid^="tab-page-"]').first().click();
       await chooseResolution(page, width, height);
       const d = dialog(page);
       await expect(d.getByRole('heading', { name: 'Change Resolution' })).toBeVisible();
       if (workflow.name.includes('unlinks-board')) {
         await expect(d).toContainText('it will be unlinked and the simulator selected');
       }
-      await d.getByRole('radio', { name: MODES[step.mode] }).check();
+      await d.getByRole('radio', { name: MODES[step.mode ?? 'adapt'] }).check();
       await d.getByRole('button', { name: 'Apply' }).click();
       await expect(shownPanel(page).getByTestId('resolution')).toContainText(`${width}×${height}`);
     }
@@ -216,9 +245,132 @@ for (const workflow of workflows) {
       const data = location ? await studio?.stores.get(location.store)?.read(location.path) : null;
       return data ? new TextDecoder().decode(data) : '';
     });
-    const saved = JSON.parse(text) as Record<string, unknown>;
+    const saved = JSON.parse(text) as { projectId: string; pages: { id: string }[] };
     saved.projectId = '<normalised>';
+    // the ids of the pages a step created: uuids, as in scripts/workflows.py
+    const example = JSON.parse(
+      readFileSync(
+        new URL(`../../upstream/examples/${workflow.example}/project.json`, import.meta.url),
+        'utf-8',
+      ),
+    ) as { pages: { id: string }[] };
+    const original = new Set(example.pages.map((item) => item.id));
+    let normalised = JSON.stringify(saved, null, 2) + '\n';
+    saved.pages
+      .filter((item) => !original.has(item.id))
+      .forEach((item, index) => {
+        normalised = normalised.replaceAll(item.id, `<new page ${index + 1}>`);
+      });
     const expected = readFileSync(new URL(`${workflow.name}.json`, WORKFLOWS), 'utf-8');
-    expect(JSON.stringify(saved, null, 2) + '\n').toBe(expected);
+    expect(normalised).toBe(expected);
   });
 }
+
+/** A point of the page, in its own pixels, on the screen: the canvas has 40 pixels around it. */
+async function toScreen(page: Page, x: number, y: number): Promise<[number, number]> {
+  const box = await shownPanel(page).locator('.stage').boundingBox();
+  const zoom = await page.evaluate(() => {
+    const studio = window.lmsStudio.studio;
+    const id = studio?.currentPage();
+    return id ? (studio?.designer?.view(id).zoom ?? 1) : 1;
+  });
+  if (!box) throw new Error('no canvas');
+  return [box.x + (40 + x) * zoom, box.y + (40 + y) * zoom];
+}
+
+async function clickAt(page: Page, x: number, y: number, ctrl = false) {
+  const [left, top] = await toScreen(page, x, y);
+  if (ctrl) await page.keyboard.down('ControlOrMeta');
+  await page.mouse.click(left, top);
+  if (ctrl) await page.keyboard.up('ControlOrMeta');
+}
+
+async function dragOn(page: Page, from: [number, number], to: [number, number]) {
+  const start = await toScreen(page, ...from);
+  const end = await toScreen(page, ...to);
+  await page.mouse.move(...start);
+  await page.mouse.down();
+  await page.mouse.move(...end, { steps: 5 });
+  await page.mouse.up();
+}
+
+const selectedOnCanvas = (page: Page) =>
+  shownPanel(page)
+    .locator('g[data-widget][aria-selected="true"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-widget')));
+
+test('the canvas selects: a click, Ctrl and a click, the band, Select All, the empty page', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('tab', { name: 'Menu', exact: true }).click();
+  await shownFrame(page);
+  await menu(page, 'View', 'Fit to Window'); // the whole page in view
+  await clickAt(page, 240, 318); // btn_play, 120,286 240×64
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play']);
+  await expect(page.getByTestId('properties-selection')).toHaveText('btn_play — button');
+  await expect(shownPanel(page).locator('rect.handle')).toHaveCount(8);
+  await clickAt(page, 240, 400, true); // btn_options
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play', 'btn_options']);
+  // outside the page: nothing
+  await clickAt(page, -6, -6);
+  await expect.poll(() => selectedOnCanvas(page)).toEqual([]);
+  await expect(page.getByText('No selection')).toBeVisible();
+  // a band from outside the page across btn_play touches it and the background
+  await dragOn(page, [-6, 270], [300, 300]);
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['menu_bg', 'btn_play']);
+  // Select All: the widgets of the page, not its components
+  await shownPanel(page).locator('.scroller').focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect.poll(async () => (await selectedOnCanvas(page)).length).toBe(9);
+  await expect(shownPanel(page).locator('rect.handle')).toHaveCount(72);
+  // a double click opens the widget's handler in the Code tab
+  await page.mouse.dblclick(...(await toScreen(page, 240, 318)));
+  await expect(page.getByTestId('tab-code')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText(
+    'btn_play_clicked',
+  );
+});
+
+test('the project tree: pages with their widgets, the canvas follows it, components and modules', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await expect(page.getByTestId('page')).toHaveText(['Menu', 'Game', 'Options', 'Solved']);
+  await expect(page.getByTestId('tree-widget').first()).toHaveText('beeper — buzzer');
+  await page.getByTestId('tree-widget').filter({ hasText: 'board — panel' }).click();
+  await expect(page.getByRole('tab', { name: 'Game', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['board']);
+  // a page shows its canvas; the keyboard moves through the tree
+  await page.getByRole('treeitem', { name: 'Options', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Options', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByTestId('tree-widget').filter({ hasText: 'opt_bg — panel' })).toBeFocused();
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['opt_bg']);
+  // a component goes to Properties; the Components strip lists them
+  await page.getByTestId('tree-widget').filter({ hasText: 'tick — timer' }).click();
+  await expect(page.getByTestId('properties-selection')).toHaveText('tick — timer');
+  await page.getByTestId('bottom-components').click();
+  await expect(page.getByTestId('component')).toHaveText(['beeper', 'tick']);
+  await expect(page.getByTestId('component').last()).toHaveAttribute('aria-selected', 'true');
+  await page.getByTestId('component').first().click();
+  await expect(page.getByTestId('properties-selection')).toHaveText('beeper — buzzer');
+  // a double click on a widget of the tree opens its handler
+  await page.getByTestId('tree-widget').filter({ hasText: 'btn_quit — button' }).dblclick();
+  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText(
+    'btn_quit_clicked',
+  );
+  // the last page cannot be deleted: the error goes to Output and Errors
+  await menu(page, 'File', 'New');
+  await page.getByTestId('page').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete Page', exact: true }).click();
+  await expect(page.getByTestId('errors')).toContainText('The last page cannot be deleted');
+});

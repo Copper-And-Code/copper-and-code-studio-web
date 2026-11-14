@@ -14,6 +14,8 @@ import { type FileStore, type Location, baseName, joinPath, walkFiles } from '..
 import { exportZip, importZip, readZip } from '../storage/zip.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 import type { Menu, MenuItem } from '../ui/menu-bar.ts';
+import type { TreeKey } from '../ui/project-tree.ts';
+import type { DocState } from '../project/session.ts';
 import { MpyCross } from '../mpy/mpy-cross.ts';
 import { CodeController, type MappedError } from './code.ts';
 import { DesignerController } from './designer.ts';
@@ -117,6 +119,152 @@ export class Studio {
       this.show(`page:${first.id}`);
     }
     void this.designer?.refresh();
+  }
+
+  // ---- the project tree: ui/main_tree.py ----
+
+  /** The tree's current item. */
+  treeSelected: TreeKey | null = null;
+
+  /** _tree_selection: a page shows its canvas; a widget is selected on it, a component in Properties. */
+  treeSelect(key: TreeKey): void {
+    this.treeSelected = key;
+    const designer = this.designer;
+    if (key.startsWith('page:')) {
+      this.show(key as `page:${string}`);
+    } else if (key.startsWith('widget:') && designer) {
+      const name = key.slice(7);
+      const widget = designer.tree.pages
+        .flatMap((page) => page.widgets)
+        .find((w) => w.name === name);
+      const pageId = designer.pageOf(name);
+      if (!widget || !pageId) return;
+      if (widget.component) {
+        designer.selectComponents([name]);
+        return;
+      }
+      designer.select(pageId, [name]);
+      this.show(`page:${pageId}`);
+    }
+    this.workbenchChanged();
+  }
+
+  /** _tree_activated: a widget's handler, a module's code. */
+  treeActivate(key: TreeKey): void {
+    if (key.startsWith('widget:')) void this.openHandler(key.slice(7));
+    else if (key.startsWith('pymodule:')) {
+      const module = this.session.state?.modules.find((item) => item.id === key.slice(9));
+      if (module && this.code.openModule(module.name)) this.show('code');
+    }
+  }
+
+  /** _project_menu: the module actions on the Python Modules branch, the page actions elsewhere. */
+  treeMenu(key: TreeKey | null): MenuItem[] {
+    if (key === 'modules' || key?.startsWith('pymodule:')) {
+      const module = key.startsWith('pymodule:')
+        ? this.session.state?.modules.find((item) => item.id === key.slice(9))
+        : undefined;
+      const items: MenuItem[] = [
+        {
+          label: tr('New Python Module…'),
+          id: 'new-module',
+          action: () => void this.code.newModule().then((done) => done && this.show('code')),
+        },
+      ];
+      if (module) {
+        items.push(
+          { separator: true },
+          { label: tr('Open Module'), id: 'open-module', action: () => this.treeActivate(key) },
+          {
+            label: tr('Rename Module…'),
+            id: 'rename-module',
+            action: () => {
+              if (this.code.openModule(module.name)) void this.code.renameModule();
+            },
+          },
+          {
+            label: tr('Delete Module'),
+            id: 'delete-module',
+            action: () => {
+              if (this.code.openModule(module.name)) void this.code.deleteModule();
+            },
+          },
+        );
+      }
+      return items;
+    }
+    return this.pageItems();
+  }
+
+  /** The page actions of the Project menu and of the tree. */
+  private pageItems(): MenuItem[] {
+    const ready = this.session.state !== undefined;
+    const locked = this.run?.running ?? false;
+    return [
+      {
+        label: tr('Add Page'),
+        id: 'add-page',
+        disabled: !ready,
+        action: () => void this.addPage(),
+      },
+      {
+        label: tr('Rename Page'),
+        id: 'rename-page',
+        disabled: !ready || locked,
+        action: () => {
+          const page = this.selectedPage();
+          if (page) void this.renamePageDialog(page);
+        },
+      },
+      {
+        label: tr('Delete Page'),
+        id: 'delete-page',
+        disabled: !ready,
+        action: () => void this.deletePage(),
+      },
+      {
+        label: tr('Set Initial Page'),
+        id: 'initial-page',
+        disabled: !ready,
+        action: () => void this.setInitialPage(),
+      },
+    ];
+  }
+
+  /** _selected_page: the page selected in the tree, or the one shown, or the first. */
+  selectedPage(): string | null {
+    const key = this.treeSelected;
+    const pages = this.session.state?.pages ?? [];
+    if (key?.startsWith('page:') && pages.some((page) => `page:${page.id}` === key))
+      return key.slice(5);
+    return this.currentPage() ?? pages[0]?.id ?? null;
+  }
+
+  async addPage(): Promise<void> {
+    this.session.adopt(await this.python.call<DocState>('doc_add_page'));
+  }
+
+  async deletePage(): Promise<void> {
+    const page = this.selectedPage();
+    if (!page) return;
+    const result = await this.python.call<{ error: string | null; state: DocState }>(
+      'doc_delete_page',
+      page,
+    );
+    if (result.error) this.appendError(result.error);
+    else this.session.adopt(result.state);
+  }
+
+  async setInitialPage(): Promise<void> {
+    const page = this.selectedPage();
+    if (page) this.session.adopt(await this.python.call<DocState>('doc_initial_page', page));
+  }
+
+  /** open_handler: the Code tab with the widget's handler, when it has one. */
+  async openHandler(name: string): Promise<void> {
+    const handler = await this.python.call<string | null>('widget_handler', name);
+    if (handler) this.code.openHandler(handler);
+    this.show('code');
   }
 
   /** The first project shows its first page, as the desktop opens on it. */
@@ -823,8 +971,17 @@ export class Studio {
             disabled: !session.state?.canRedo,
             action: () => void session.redo(),
           },
+          { separator: true },
+          {
+            label: tr('Select All'),
+            id: 'select-all',
+            shortcut: 'Ctrl+A',
+            disabled: !this.currentPage(),
+            action: () => this.designer?.selectAll(),
+          },
         ],
       },
+      { label: tr('Project'), items: () => this.pageItems() },
       ...(this.designer ? [this.viewMenu(this.designer)] : []),
       ...(this.run ? [this.runMenu(this.run, ready)] : []),
     ];
@@ -930,6 +1087,11 @@ export class Studio {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
     // QKeySequence.ZoomIn, ZoomOut and Fit to Window, while a page is shown
+    if (this.designer && this.currentPage() && !inEditor && key === 'a' && !event.shiftKey) {
+      this.designer.selectAll();
+      event.preventDefault();
+      return true;
+    }
     if (this.designer && this.currentPage() && !inEditor && ['+', '=', '-', '0'].includes(key)) {
       if (key === '0') this.designer.fit();
       else this.designer.zoom(key === '-' ? 0.8 : 1.25);

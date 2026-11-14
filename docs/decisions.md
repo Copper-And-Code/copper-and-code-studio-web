@@ -173,3 +173,15 @@ Sub-gate 1, the canvas.
   time. Before, F5 pressed right after typing could compile the text of a moment earlier, half
   a line, and the background check could rewrite the folder that Start was reading: the
   traceback test of phase 4 failed about once in four runs for this.
+
+Sub-gate 2, the tree and the selection.
+
+- **The tree does not follow the canvas's selection**, as on the desktop: only the canvas and the
+  Properties panel do. Selecting in the tree selects on the canvas.
+- **Each canvas keeps its own selection**, by widget name, as each DesignerScene does; a change
+  of the project keeps the names that still exist.
+- **The page actions of the Project menu come now** (Add, Rename, Delete, Set Initial Page),
+  because the tree's context menu holds them. Rename moved there from a click on the page's
+  name; a click now shows the page, as on the desktop.
+- **The chevrons of the tree are drawn by CSS with empty alternative text**, so that each
+  item's text and accessible name are its label alone.

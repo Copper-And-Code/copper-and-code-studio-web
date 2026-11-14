@@ -20,9 +20,11 @@ import type { CodePanel } from './code-panel.ts';
 import './code-panel.ts';
 import './files-panel.ts';
 import './designer-view.ts';
+import './project-tree.ts';
+import type { TreeKey } from './project-tree.ts';
 
 const OUTPUT_LIMIT = 100_000;
-type BottomTab = 'output' | 'errors';
+type BottomTab = 'output' | 'errors' | 'components';
 
 /** The IDE window: menu bar, the three working areas, the status bar, the dialogs. */
 export class AppShell extends LitElement {
@@ -146,6 +148,31 @@ export class AppShell extends LitElement {
     }
     .preview-host iframe {
       border: none;
+    }
+    .components {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0;
+      padding: 4px;
+    }
+    .components [role='option'] {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 10px;
+      cursor: pointer;
+    }
+    .components [role='option'][aria-selected='true'] {
+      background: var(--selection);
+    }
+    .components [role='option']:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .selection {
+      margin: 0;
+      padding-left: 18px;
     }
     .file-tab {
       display: inline-flex;
@@ -537,6 +564,7 @@ export class AppShell extends LitElement {
           page-id=${page.id}
           .controller=${designer}
           .revision=${this.design}
+          .onActivate=${(name: string) => void this.studio?.openHandler(name)}
         ></lms-designer-view>
       </div>`;
     });
@@ -677,6 +705,67 @@ export class AppShell extends LitElement {
     </table>`;
   }
 
+  /** What PropertiesPanel shows until its editors come (phase 5, sub-step 3): the selection. */
+  private renderSelection() {
+    const designer = this.studio?.designer;
+    const names = designer?.properties ?? [];
+    if (!names.length) return html`<p class="placeholder">${tr('No selection')}</p>`;
+    const types = new Map(
+      designer?.tree.pages.flatMap((page) => page.widgets.map((w) => [w.name, w.type] as const)),
+    );
+    return html`<ul class="selection" data-testid="properties-selection">
+      ${names.map((name) => html`<li>${name} — ${types.get(name) ?? ''}</li>`)}
+    </ul>`;
+  }
+
+  /** ComponentTray: the non-visual components; a click selects, a double click opens the handler. */
+  private renderComponents() {
+    const designer = this.studio?.designer;
+    const components = designer?.tree.components ?? [];
+    if (!components.length) return html`<p class="placeholder">${tr('No components')}</p>`;
+    const selected = new Set(designer?.properties ?? []);
+    return html`<ul
+      class="components"
+      role="listbox"
+      aria-multiselectable="true"
+      aria-label=${tr('Components')}
+    >
+      ${components.map(
+        (component) =>
+          html`<li
+            role="option"
+            tabindex="0"
+            data-testid="component"
+            aria-selected=${String(selected.has(component.name))}
+            title=${component.type}
+            @click=${(event: MouseEvent) => {
+              const names =
+                event.ctrlKey || event.metaKey
+                  ? [
+                      ...(designer?.properties.filter((name) =>
+                        components.some((c) => c.name === name),
+                      ) ?? []),
+                      component.name,
+                    ]
+                  : [component.name];
+              designer?.selectComponents(names);
+            }}
+            @keydown=${(event: KeyboardEvent) => {
+              if (event.key === 'Enter' && component.events)
+                void this.studio?.openHandler(component.name);
+              else if (event.key === ' ') {
+                event.preventDefault();
+                designer?.selectComponents([component.name]);
+              }
+            }}
+            @dblclick=${() => component.events && void this.studio?.openHandler(component.name)}
+          >
+            ${component.name}
+          </li>`,
+      )}
+    </ul>`;
+  }
+
   private renderProject() {
     const doc = this.doc;
     if (!doc) return html`<p class="placeholder">${tr('Loading…')}</p>`;
@@ -697,42 +786,14 @@ export class AppShell extends LitElement {
         <dt>${tr('Resolution')}</dt>
         <dd>${doc.display.width}×${doc.display.height}</dd>
       </dl>
-      <h2>${tr('Pages')}</h2>
-      <ul aria-label=${tr('Pages')}>
-        ${doc.pages.map(
-          (page) =>
-            html`<li>
-              <button
-                type="button"
-                title=${tr('Rename Page')}
-                data-testid="page"
-                ?disabled=${this.running && !this.simPanelProgram()}
-                @click=${() => this.studio?.renamePageDialog(page.id)}
-              >
-                ${page.name}
-              </button>
-            </li>`,
-        )}
-      </ul>
-      <h2>${tr('Python Modules')}</h2>
-      <ul aria-label=${tr('Python Modules')}>
-        ${doc.modules.map(
-          (module) =>
-            html`<li>
-              <button
-                type="button"
-                title=${tr('Open Module')}
-                data-testid="module"
-                @click=${() => {
-                  this.studio?.code.openModule(module.name);
-                  this.studio?.show('code');
-                }}
-              >
-                ${module.name}.py
-              </button>
-            </li>`,
-        )}
-      </ul>
+      <lms-project-tree
+        .tree=${this.studio?.designer?.tree ?? { pages: [], components: [] }}
+        .modules=${doc.modules}
+        .selected=${this.studio?.treeSelected ?? null}
+        .onSelect=${(key: TreeKey) => this.studio?.treeSelect(key)}
+        .onActivate=${(key: TreeKey) => this.studio?.treeActivate(key)}
+        .menuFor=${(key: TreeKey | null) => this.studio?.treeMenu(key) ?? []}
+      ></lms-project-tree>
     `;
   }
 
@@ -790,11 +851,14 @@ export class AppShell extends LitElement {
           </div>
           ${this.renderFilePanels()}
         </section>
-        <section aria-label="Properties"><h2>Properties</h2></section>
+        <section aria-label=${tr('Properties')}>
+          <h2>${tr('Properties')}</h2>
+          ${this.renderSelection()}
+        </section>
       </main>
       <section class="output" aria-label=${tr('Output and Errors')}>
         <div role="tablist" class="bottom-tabs">
-          ${(['output', 'errors'] as const).map(
+          ${(['output', 'errors', 'components'] as const).map(
             (tab) =>
               html`<button
                 type="button"
@@ -809,7 +873,9 @@ export class AppShell extends LitElement {
                 ${
                   tab === 'output'
                     ? tr('Output')
-                    : `${tr('Errors')}${this.studio?.errors.length ? ` (${this.studio.errors.length})` : ''}`
+                    : tab === 'components'
+                      ? tr('Components')
+                      : `${tr('Errors')}${this.studio?.errors.length ? ` (${this.studio.errors.length})` : ''}`
                 }
               </button>`,
           )}
@@ -830,6 +896,14 @@ ${this.outputText}</pre>
           ?hidden=${this.bottom !== 'errors'}
         >
           ${this.renderErrors()}
+        </div>
+        <div
+          role="tabpanel"
+          id="bottom-panel-components"
+          aria-labelledby="bottom-components"
+          ?hidden=${this.bottom !== 'components'}
+        >
+          ${this.renderComponents()}
         </div>
       </section>
       <footer>

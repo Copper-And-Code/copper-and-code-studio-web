@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { DesignPage, ResolutionMenu } from '../../src/app/designer.ts';
+import type { DesignPage, DesignTree, ResolutionMenu } from '../../src/app/designer.ts';
 import type { PythonBridge } from '../../src/py/bridge.ts';
 import type { DocState } from '../../src/project/session.ts';
 import { inProcessBridge } from './in-process.ts';
@@ -108,5 +108,48 @@ describe('designer', () => {
     const undone = await python.call<DocState>('doc_undo');
     expect(undone.display).toEqual({ width: 1024, height: 600 });
     expect(undone.board).not.toBeNull();
+  });
+
+  it('builds the project tree and the components strip as ui/main_tree.py', async () => {
+    await open('fifteen');
+    const tree = await python.call<DesignTree>('design_tree');
+    expect(tree.pages.map((page) => page.name)).toEqual(['Menu', 'Game', 'Options', 'Solved']);
+    expect(tree.pages[0]?.widgets.slice(0, 3)).toEqual([
+      { name: 'beeper', type: 'buzzer', component: true },
+      { name: 'tick', type: 'timer', component: true },
+      { name: 'menu_bg', type: 'panel', component: false },
+    ]);
+    expect(tree.components).toEqual([
+      { name: 'beeper', type: 'buzzer', events: false },
+      { name: 'tick', type: 'timer', events: true },
+    ]);
+    expect(await python.call('widget_handler', 'btn_play')).toBe('btn_play_clicked');
+    expect(await python.call('widget_handler', 'tick')).toBe('tick_tick');
+    expect(await python.call('widget_handler', 'menu_bg')).toBeNull();
+  });
+
+  it('adds, moves first and deletes pages, each an undo step; the last page stays', async () => {
+    await open('weather');
+    let doc = await python.call<DocState>('doc_add_page');
+    expect(doc.pages.map((page) => page.name)).toEqual(['main', 'settings', 'page3']);
+    expect(doc.undoText).toBe('Add Page');
+    const added = doc.pages[2]?.id ?? '';
+    doc = await python.call<DocState>('doc_initial_page', added);
+    expect(doc.pages[0]?.name).toBe('page3');
+    expect(doc.undoText).toBe('Initial Page');
+    for (const page of doc.pages.slice(1)) {
+      const result = await python.call<{ error: string | null; state: DocState }>(
+        'doc_delete_page',
+        page.id,
+      );
+      expect(result.error).toBeNull();
+      expect(result.state.undoText).toBe('Delete Page');
+    }
+    const last = await python.call<{ error: string | null; state: DocState }>(
+      'doc_delete_page',
+      added,
+    );
+    expect(last.error).toBe('The last page cannot be deleted');
+    expect(last.state.pages).toHaveLength(1);
   });
 });

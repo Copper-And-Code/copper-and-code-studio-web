@@ -34,6 +34,16 @@ interface Size {
   height: number;
 }
 
+/** The project tree's part of the project (ui/main_tree.py) and the Components strip. */
+export interface DesignTree {
+  pages: {
+    id: string;
+    name: string;
+    widgets: { name: string; type: string; component: boolean }[];
+  }[];
+  components: { name: string; type: string; events: boolean }[];
+}
+
 export interface ResolutionMenu {
   boards: { width: number; height: number; names: string[] }[];
   common: Size[];
@@ -64,6 +74,11 @@ export class DesignerController {
   grid = false;
   /** The page whose canvas is shown, or null when another tab is. */
   active: string | null = null;
+  tree: DesignTree = { pages: [], components: [] };
+  /** What each canvas has selected, by widget name, as each DesignerScene keeps its own. */
+  private readonly selections = new Map<string, string[]>();
+  /** The widgets the Properties panel shows: PropertiesPanel.set_selection. */
+  properties: string[] = [];
   private readonly renderer: PreviewRenderer;
   private readonly listeners = new Set<() => void>();
   private loading = Promise.resolve();
@@ -132,6 +147,18 @@ export class DesignerController {
       for (const page of state.pages) {
         this.pages.set(page.id, await this.python.call<DesignPage>('design_page', page.id));
       }
+      this.tree = await this.python.call<DesignTree>('design_tree');
+      // DesignerScene.rebuild keeps the selection by name; PropertiesPanel drops names gone
+      const names = new Set(this.tree.pages.flatMap((page) => page.widgets.map((w) => w.name)));
+      for (const [id, selected] of this.selections) {
+        const page = this.pages.get(id);
+        const here = new Set(page?.widgets.map((widget) => widget.name) ?? []);
+        this.selections.set(
+          id,
+          selected.filter((name) => here.has(name)),
+        );
+      }
+      this.properties = this.properties.filter((name) => names.has(name));
       this.fitIfResized();
       this.changed();
       this.requestPreview();
@@ -160,6 +187,44 @@ export class DesignerController {
     const display = this.session.state?.display;
     if (!this.previewOn || !preview?.pixels || !display) return null;
     return preview.width === display.width && preview.height === display.height ? preview : null;
+  }
+
+  // ---- selection: ui/designer/scene.py, ui/main_tree.py _tree_selection ----
+
+  selected(pageId: string): string[] {
+    return this.selections.get(pageId) ?? [];
+  }
+
+  /** The canvas's selection changed: selectionNamesChanged → PropertiesPanel.set_selection. */
+  select(pageId: string, names: string[]): void {
+    const unique = [...new Set(names)];
+    const before = this.selected(pageId);
+    if (before.length === unique.length && before.every((name, i) => name === unique[i])) return;
+    this.selections.set(pageId, unique);
+    this.properties = unique;
+    this.changed();
+  }
+
+  /** ComponentTray._selection_changed: components only reach the Properties panel. */
+  selectComponents(names: string[]): void {
+    if (!names.length) return;
+    this.properties = names;
+    this.changed();
+  }
+
+  /** Edit → Select All, on the canvas shown: DesignerScene.select_all. */
+  selectAll(pageId = this.active): void {
+    const page = pageId ? this.pages.get(pageId) : undefined;
+    if (page)
+      this.select(
+        page.id,
+        page.widgets.map((widget) => widget.name),
+      );
+  }
+
+  /** The page a widget is on, from the tree. */
+  pageOf(name: string): string | null {
+    return this.tree.pages.find((page) => page.widgets.some((w) => w.name === name))?.id ?? null;
   }
 
   /** View → Real LVGL Preview: _toggle_preview. */

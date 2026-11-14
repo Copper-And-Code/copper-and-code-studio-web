@@ -64,17 +64,56 @@ const number = (value: unknown, fallback: number): number => {
   return Number.isFinite(result) ? result : fallback;
 };
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Where each widget is on the page: x and y inside its container, as WidgetItem.rect sizes it. */
+export function sceneRects(page: DesignPage): Map<string, Rect> {
+  const byId = new Map(page.widgets.map((widget) => [widget.id, widget]));
+  const rects = new Map<string, Rect>();
+  for (const widget of page.widgets) {
+    let x = 0;
+    let y = 0;
+    const seen = new Set<string>();
+    for (let item: DesignWidget | undefined = widget; item && !seen.has(item.id);) {
+      seen.add(item.id);
+      x += Math.round(number(item.props.x, 0));
+      y += Math.round(number(item.props.y, 0));
+      item = item.parentId ? byId.get(item.parentId) : undefined;
+    }
+    rects.set(widget.name, {
+      x,
+      y,
+      width: Math.max(MINIMUM_SIZE, number(widget.props.width, 100)),
+      height: Math.max(MINIMUM_SIZE, number(widget.props.height, 40)),
+    });
+  }
+  return rects;
+}
+
+const SELECTION = '#1976D2'; // WidgetItem._paint_selection, ResizeHandle.paint
+const CLICK_SLOP = 3;
+
 export class DesignerView extends LitElement {
   static override properties = {
     controller: { attribute: false },
     pageId: { attribute: 'page-id' },
     revision: { type: Number },
     resolutions: { state: true },
+    band: { state: true },
   };
 
   controller: DesignerController | null = null;
   pageId = '';
   revision = 0;
+  /** A double click on a widget: widgetActivated, which opens its handler. */
+  onActivate: (name: string) => void = () => {};
+  /** The rubber band being dragged on an empty part of the page, in page coordinates. */
+  private band: { x0: number; y0: number; x1: number; y1: number; base: string[] } | null = null;
   private resolutions: MenuItem[] = [];
   private drawn: unknown = null;
 
@@ -198,6 +237,90 @@ export class DesignerView extends LitElement {
     this.drawn = preview;
   }
 
+  /** A point of the event on the page, in its own pixels. */
+  private scenePoint(event: PointerEvent | MouseEvent): { x: number; y: number } {
+    const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
+    const box = stage?.getBoundingClientRect();
+    const zoom = this.zoom;
+    return {
+      x: (event.clientX - (box?.left ?? 0)) / zoom - MARGIN,
+      y: (event.clientY - (box?.top ?? 0)) / zoom - MARGIN,
+    };
+  }
+
+  private widgetAt(event: Event): string | null {
+    const target = event
+      .composedPath()
+      .find((node): node is Element => node instanceof Element && node.hasAttribute('data-widget'));
+    return target?.getAttribute('data-widget') ?? null;
+  }
+
+  /**
+   * WidgetItem.mousePressEvent and QGraphicsView's RubberBandDrag: a click selects the widget,
+   * Ctrl adds it; a press on the empty page starts a band that selects what it touches.
+   */
+  private pointerDown(event: PointerEvent): void {
+    const controller = this.controller;
+    if (!controller || event.button !== 0) return;
+    const name = this.widgetAt(event);
+    const ctrl = event.ctrlKey || event.metaKey;
+    const selected = controller.selected(this.pageId);
+    if (name) {
+      if (!ctrl && !selected.includes(name)) controller.select(this.pageId, [name]);
+      else if (ctrl && !selected.includes(name))
+        controller.select(this.pageId, [...selected, name]);
+      return;
+    }
+    const point = this.scenePoint(event);
+    const base = ctrl ? selected : [];
+    if (!ctrl) controller.select(this.pageId, []);
+    this.band = { x0: point.x, y0: point.y, x1: point.x, y1: point.y, base };
+    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+  }
+
+  private pointerMove(event: PointerEvent): void {
+    const band = this.band;
+    const controller = this.controller;
+    const page = this.page;
+    if (!band || !controller || !page) return;
+    const point = this.scenePoint(event);
+    this.band = { ...band, x1: point.x, y1: point.y };
+    const zoom = this.zoom;
+    if (
+      Math.abs(point.x - band.x0) * zoom < CLICK_SLOP &&
+      Math.abs(point.y - band.y0) * zoom < CLICK_SLOP
+    )
+      return;
+    const left = Math.min(band.x0, point.x);
+    const top = Math.min(band.y0, point.y);
+    const right = Math.max(band.x0, point.x);
+    const bottom = Math.max(band.y0, point.y);
+    const touched: string[] = [];
+    // Qt.IntersectsItemShape: a widget the band touches is selected
+    for (const [name, rect] of sceneRects(page)) {
+      if (
+        rect.x <= right &&
+        rect.x + rect.width >= left &&
+        rect.y <= bottom &&
+        rect.y + rect.height >= top
+      )
+        touched.push(name);
+    }
+    controller.select(this.pageId, [
+      ...band.base,
+      ...touched.filter((name) => !band.base.includes(name)),
+    ]);
+  }
+
+  private pointerUp(): void {
+    this.band = null;
+  }
+
+  private doubleClick(event: MouseEvent): void {
+    const name = this.widgetAt(event);
+    if (name) this.onActivate(name);
+  }
+
   /** DesignerView.wheelEvent: Ctrl and the wheel zoom, around the point under the mouse. */
   private wheel(event: WheelEvent): void {
     if (!event.ctrlKey || !this.controller) return;
@@ -314,6 +437,11 @@ export class DesignerView extends LitElement {
               : nothing
           }
           <svg
+            @pointerdown=${this.pointerDown}
+            @pointermove=${this.pointerMove}
+            @pointerup=${this.pointerUp}
+            @pointercancel=${this.pointerUp}
+            @dblclick=${this.doubleClick}
             data-testid="canvas"
             viewBox="${-MARGIN} ${-MARGIN} ${sceneWidth} ${sceneHeight}"
             width=${sceneWidth * zoom}
@@ -322,6 +450,7 @@ export class DesignerView extends LitElement {
             aria-label=${tr('Page {name}', { name: page.name })}
           >
             ${this.background(page, preview !== null)} ${this.items(page, preview !== null)}
+            ${this.selectionLayer(page)}
           </svg>
         </div>
       </div>
@@ -365,13 +494,46 @@ export class DesignerView extends LitElement {
       const x = Math.round(number(widget.props.x, 0));
       const y = Math.round(number(widget.props.y, 0));
       const inner = (children.get(widget.id) ?? []).map((child) => draw(child, left + x, top + y));
-      return svg`<g transform="translate(${x} ${y})" data-widget=${widget.name}>
+      const selected = this.controller?.selected(page.id).includes(widget.name) ?? false;
+      return svg`<g transform="translate(${x} ${y})" data-widget=${widget.name} aria-selected=${String(selected)}>
         <title>${widget.name} (${widget.type})</title>
         ${this.paintWidget(widget, page, previewActive, left + x, top + y)}
         ${inner}
       </g>`;
     };
     return (children.get(null) ?? []).map((widget) => draw(widget, 0, 0));
+  }
+
+  /** The handles of the selected widgets, over everything, and the rubber band. */
+  private selectionLayer(page: DesignPage): TemplateResult {
+    const selected = new Set(this.controller?.selected(page.id) ?? []);
+    const handles: TemplateResult[] = [];
+    for (const [name, rect] of sceneRects(page)) {
+      if (!selected.has(name)) continue;
+      const { x, y, width, height } = rect;
+      const points = [
+        [x, y],
+        [x + width / 2, y],
+        [x + width, y],
+        [x + width, y + height / 2],
+        [x + width, y + height],
+        [x + width / 2, y + height],
+        [x, y + height],
+        [x, y + height / 2],
+      ];
+      for (const [px, py] of points) {
+        handles.push(
+          svg`<rect class="handle" x=${(px ?? 0) - 4} y=${(py ?? 0) - 4} width="8" height="8" fill="#FFFFFF" stroke=${SELECTION} stroke-width="1" />`,
+        );
+      }
+    }
+    const band = this.band;
+    const rubber = band
+      ? svg`<rect x=${Math.min(band.x0, band.x1)} y=${Math.min(band.y0, band.y1)}
+          width=${Math.abs(band.x1 - band.x0)} height=${Math.abs(band.y1 - band.y0)}
+          fill="rgb(25 118 210 / 0.15)" stroke=${SELECTION} stroke-width="1" vector-effect="non-scaling-stroke" />`
+      : nothing;
+    return svg`<g pointer-events="none" data-testid="selection">${handles}${rubber}</g>`;
   }
 
   /** WidgetItem.paint. */
@@ -392,9 +554,11 @@ export class DesignerView extends LitElement {
         screenY >= 0 &&
         screenX + width <= page.display.width &&
         screenY + height <= page.display.height;
-      return inside
-        ? svg`<rect width=${width} height=${height} fill="transparent" />`
-        : svg`<rect width=${width} height=${height} fill="transparent" stroke="#E08A00" stroke-width="1" stroke-dasharray="1 2" vector-effect="non-scaling-stroke" />`;
+      return svg`${
+        inside
+          ? svg`<rect width=${width} height=${height} fill="transparent" />`
+          : svg`<rect width=${width} height=${height} fill="transparent" stroke="#E08A00" stroke-width="1" stroke-dasharray="1 2" vector-effect="non-scaling-stroke" />`
+      }${this.paintSelection(widget, width, height)}`;
     }
     const [themeBackground, themeForeground] = THEMES[widget.type] ?? ['#F5F5F5', '#222222'];
     const background = qtColor(props.bgColor, themeBackground);
@@ -405,7 +569,14 @@ export class DesignerView extends LitElement {
       <rect x="0.5" y="0.5" width=${Math.max(0, width - 1)} height=${Math.max(0, height - 1)} rx=${radius} ry=${radius}
         fill=${background} stroke=${qtColor(props.borderColor, '#9E9E9E')} stroke-width=${border} />
       ${this.paintControl(widget, width, height, foreground)}
+      ${this.paintSelection(widget, width, height)}
     `;
+  }
+
+  /** WidgetItem._paint_selection: a dashed outline. */
+  private paintSelection(widget: DesignWidget, width: number, height: number): TemplateResult {
+    if (!this.controller?.selected(this.pageId).includes(widget.name)) return svg``;
+    return svg`<rect class="selected" width=${width} height=${height} fill="none" stroke=${SELECTION} stroke-width="1" stroke-dasharray="4 2" vector-effect="non-scaling-stroke" />`;
   }
 
   /** WidgetItem._paint_control: a sketch of what the widget is. */

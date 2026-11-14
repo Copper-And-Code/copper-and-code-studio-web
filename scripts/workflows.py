@@ -1,10 +1,14 @@
 """Designer workflow references: each workflow of tests/fixtures/workflows/workflows.json, done
 with upstream's core on the host, as the desktop's ui/ code does it after its dialogs.
 
-A step "resolution" is ui/main_resolution.py change_resolution: project.resize with the mode
-chosen in the dialog, and the board unlinked when its size is another one. The project is
-written as core/model.py Project.save writes it, with projectId normalised: Save As gives the
-copy a new one.
+A step is what the desktop's ui/ code does after its dialogs:
+- "resolution": ui/main_resolution.py change_resolution, project.resize with the mode chosen,
+  the board unlinked when its size is another one;
+- "addPage", "initialPage", "deletePage": ui/main_tree.py add_page, set_initial_page,
+  delete_page.
+
+The project is written as core/model.py Project.save writes it, with projectId normalised (Save
+As gives the copy a new one), and the id of each page a step created: a uuid.
 
 The web IDE must save the same file (tests/e2e/designer.spec.ts).
 
@@ -34,10 +38,25 @@ def change_resolution(project, width, height, mode):
         project.runTarget = None
 
 
-def normalised(project):
+def add_page(project):
+    project.pages.append(project.new_page(f"page{len(project.pages) + 1}"))
+
+
+def initial_page(project, name):
+    selected = next(page for page in project.pages if page.name == name)
+    project.pages.remove(selected)
+    project.pages.insert(0, selected)
+    project.currentPageId = selected.id
+
+
+def normalised(project, original_ids):
     data = project.to_dict()
     data["projectId"] = NORMALISED
-    return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    created = [page["id"] for page in data["pages"] if page["id"] not in original_ids]
+    for number, page_id in enumerate(created, 1):
+        text = text.replace(page_id, f"<new page {number}>")
+    return text
 
 
 def main(argv):
@@ -45,13 +64,20 @@ def main(argv):
     spec = json.loads((ROOT / "tests" / "fixtures" / "workflows" / "workflows.json").read_text(encoding="utf-8"))
     for workflow in spec["workflows"]:
         project = Project.load(UPSTREAM / "examples" / workflow["example"] / "project.json")
+        original_ids = {page.id for page in project.pages}
         for step in workflow["steps"]:
             if "resolution" in step:
                 width, height = step["resolution"]
                 change_resolution(project, width, height, step["mode"])
+            elif "addPage" in step:
+                add_page(project)
+            elif "initialPage" in step:
+                initial_page(project, step["initialPage"])
+            elif "deletePage" in step:
+                project.remove_page(next(page for page in project.pages if page.name == step["deletePage"]))
             else:
                 raise SystemExit(f"{workflow['name']}: unknown step {step}")
-        (out / f"{workflow['name']}.json").write_text(normalised(project), encoding="utf-8", newline="\n")
+        (out / f"{workflow['name']}.json").write_text(normalised(project, original_ids), encoding="utf-8", newline="\n")
         print(workflow["name"])
     return 0
 

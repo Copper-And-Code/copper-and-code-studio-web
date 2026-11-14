@@ -1,5 +1,5 @@
 {
-  "comment": "Designer workflows of upstream/docs/manual.md. scripts/workflows.py replays each one with upstream's core on the host and writes <name>.json; tests/e2e/designer.spec.ts replays it in the web IDE and compares the saved project. Ids that a step generates are normalised.",
+  "comment": "Designer workflows of upstream/docs/manual.md. scripts/workflows.py replays each one with upstream's core on the host and writes <name>.json; tests/e2e/designer.spec.ts replays it in the web IDE and compares the saved project. projectId, and the ids of pages a step creates, are normalised.",
   "workflows": [
     {
       "name": "resolution-adapt",
@@ -7,7 +7,10 @@
       "example": "fifteen",
       "steps": [
         {
-          "resolution": [240, 240],
+          "resolution": [
+            240,
+            240
+          ],
           "mode": "adapt"
         }
       ]
@@ -18,7 +21,10 @@
       "example": "breakout",
       "steps": [
         {
-          "resolution": [480, 480],
+          "resolution": [
+            480,
+            480
+          ],
           "mode": "stretch"
         }
       ]
@@ -29,7 +35,10 @@
       "example": "weather",
       "steps": [
         {
-          "resolution": [800, 480],
+          "resolution": [
+            800,
+            480
+          ],
           "mode": "keep"
         }
       ]
@@ -40,12 +49,34 @@
       "example": "weather",
       "steps": [
         {
-          "resolution": [800, 480],
+          "resolution": [
+            800,
+            480
+          ],
           "mode": "keep"
         },
         {
-          "resolution": [480, 800],
+          "resolution": [
+            480,
+            800
+          ],
           "mode": "adapt"
+        }
+      ]
+    },
+    {
+      "name": "pages-add-initial-delete",
+      "manual": "Project menu: Add Page, Set Initial Page on it, Delete Page",
+      "example": "weather",
+      "steps": [
+        {
+          "addPage": true
+        },
+        {
+          "initialPage": "page3"
+        },
+        {
+          "deletePage": "settings"
         }
       ]
     }

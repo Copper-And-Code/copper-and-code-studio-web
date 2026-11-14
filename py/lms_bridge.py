@@ -305,6 +305,73 @@ def design_page(page_id):
     }
 
 
+def design_tree():
+    """ui/main_tree.py rebuild_project_tree and ComponentTray.rebuild: each page with its widgets
+    in page order, and the non-visual components of the project."""
+    from lvgl_mpy_studio.core.components import is_component
+    from lvgl_mpy_studio.core.events import events_for
+
+    project = _doc().project
+    return {
+        "pages": [
+            {"id": page.id, "name": page.name, "widgets": [{"name": widget.name, "type": widget.type, "component": is_component(widget.type)} for widget in page.widgets]}
+            for page in project.pages
+        ],
+        "components": [{"name": widget.name, "type": widget.type, "events": bool(events_for(widget.type))} for widget in project.widgets if is_component(widget.type)],
+    }
+
+
+def widget_handler(name):
+    """The handler that ui/code/editor.py open_handler shows for a widget: the one of its default
+    event, or else its first one; None when it has none yet."""
+    from lvgl_mpy_studio.core.events import default_event, handler_name
+
+    project = _doc().project
+    widget = project.find_widget(name)
+    if widget is None:
+        return None
+    handlers = project.code.handlers
+    preferred = handler_name(name, default_event(widget.type))
+    if preferred in handlers:
+        return preferred
+    return next((key for key, handler in handlers.items() if handler.widget == name), None)
+
+
+def doc_add_page():
+    """ui/main_tree.py add_page."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    document = _doc()
+    name = f"page{len(document.project.pages) + 1}"
+    document.execute(tr("Add Page"), lambda project: project.pages.append(project.new_page(name)))
+    return doc_state()
+
+
+def doc_delete_page(page_id):
+    """ui/main_tree.py delete_page: the last page stays."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    document = _doc()
+    if len(document.project.pages) == 1:
+        return {"error": tr("The last page cannot be deleted"), "state": doc_state()}
+    document.execute(tr("Delete Page"), lambda project: project.remove_page(next(item for item in project.pages if item.id == page_id)))
+    return {"error": None, "state": doc_state()}
+
+
+def doc_initial_page(page_id):
+    """ui/main_tree.py set_initial_page: the page goes first and the app starts from it."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    def mutate(project):
+        selected = next(item for item in project.pages if item.id == page_id)
+        project.pages.remove(selected)
+        project.pages.insert(0, selected)
+        project.currentPageId = selected.id
+
+    _doc().execute(tr("Initial Page"), mutate)
+    return doc_state()
+
+
 def design_preview(page_id, pending=None):
     """build/preview.py render_with_log up to the runtime: the page generated design-only, the
     project's code left out, in a folder the simulator's frame mode runs. pending holds the
@@ -561,6 +628,11 @@ METHODS = {
     "module_rename": module_rename,
     "module_delete": module_delete,
     "design_page": design_page,
+    "design_tree": design_tree,
+    "widget_handler": widget_handler,
+    "doc_add_page": doc_add_page,
+    "doc_delete_page": doc_delete_page,
+    "doc_initial_page": doc_initial_page,
     "design_preview": design_preview,
     "resolution_menu": resolution_menu,
     "resolution_plan": resolution_plan,

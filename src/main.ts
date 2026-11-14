@@ -42,8 +42,11 @@ if (shell) {
       const panel = shell.renderRoot.querySelector('lms-sim-panel');
       const terminal = panel?.renderRoot.querySelector('.terminal');
       const path = event.composedPath();
+      // an editor, or a field of a dialog: their keys are theirs, as in the desktop's text widgets
       const inEditor = path.some(
-        (node) => node instanceof HTMLElement && node.localName === 'lms-code-editor',
+        (node) =>
+          node instanceof HTMLElement &&
+          ['lms-code-editor', 'input', 'textarea', 'select'].includes(node.localName),
       );
       if (studio.shortcut(event, terminal ? path.includes(terminal) : false, inEditor)) {
         event.stopPropagation();

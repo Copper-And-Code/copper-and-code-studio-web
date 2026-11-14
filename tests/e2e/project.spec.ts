@@ -46,7 +46,8 @@ test('an example changed, saved in the workspace, is still changed after a reloa
   await expect(page).toHaveTitle('demo.json — LVGL MPY Studio');
 
   // the value: the name of the first page, renamed as on the desktop
-  await page.getByTestId('page').first().click();
+  await page.getByTestId('page').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename Page' }).click();
   await dialog(page).locator('#text').fill('Welcome Home');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
   await expect(page.getByTestId('page').first()).toHaveText('Welcome Home');
@@ -113,7 +114,8 @@ test('unsaved changes are asked about before a new project', async ({ page }) =>
   await start(page);
   await menu(page, 'File', 'Open Example', 'demo');
   await expect(page.getByTestId('project-file')).toHaveText('Examples: demo.json');
-  await page.getByTestId('page').first().click();
+  await page.getByTestId('page').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename Page' }).click();
   await dialog(page).locator('#text').fill('Changed');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
 
@@ -133,7 +135,8 @@ test('undo and redo follow the document', async ({ page }) => {
   await menu(page, 'File', 'Open Example', 'demo');
   await expect(page.getByTestId('project-file')).toHaveText('Examples: demo.json');
   const name = (await page.getByTestId('page').first().textContent())?.trim() ?? '';
-  await page.getByTestId('page').first().click();
+  await page.getByTestId('page').first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Rename Page' }).click();
   await dialog(page).locator('#text').fill('Renamed');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
   await page.keyboard.press('ControlOrMeta+z');
