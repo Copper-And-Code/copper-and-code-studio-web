@@ -128,3 +128,17 @@ repeated here. This file records the decisions taken while building, and why.
   focus is on the screen (the frame forwards them).
 - **xterm.js** (MIT) draws the terminal, with `convertEol`: a board's `print` ends lines with LF,
   and the desktop's terminal adds the CR as well.
+
+## Phase 4 (2026-11-14)
+
+- **mpy-cross in WebAssembly is built here**, at the owner's choice, by `scripts/build-mpy-cross-web.sh`
+  (the recipe proposed for upstream request 2) from MicroPython v1.29.0 and the owner's emsdk,
+  outside both checkouts. It gives the native `.mpy` bytes for 106 files and the same errors
+  (`tests/py/mpy-cross.test.ts`). Its garbage collector cannot see WebAssembly locals, so each
+  compilation runs in a fresh instance with a 64 MB heap, where no collection ever runs.
+- **A file of the examples is copied with its whole folder into the workspace** on its first save,
+  at the owner's choice, so that a program keeps its modules.
+- **The browser has no file watcher**: open file tabs compare their store when the page gets the
+  focus back and before saving.
+- **In an editor, Ctrl+Z and Ctrl+Y are the editor's**, as in the desktop's text widgets.
+- **The Code tab checks the project only while it is shown**, to keep the worker free.

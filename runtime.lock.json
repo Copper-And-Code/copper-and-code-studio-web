@@ -1,11 +1,25 @@
 {
   "tag": "v0.7.0",
-  "asset": "lms-web-runtime-v0.7.0.zip",
-  "url": "https://github.com/Copper-And-Code/lvgl-mpy-studio/releases/download/v0.7.0/lms-web-runtime-v0.7.0.zip",
-  "size": 2258499,
-  "sha256": "a8c824d4bcd65a987888debc7914a1c1eff26473c1bcdafba8d3b2469b72a00d",
-  "files": {
-    "micropython.mjs": "22b63a77a80efb73811e1c42d14f304687a686fd438b19df0a500b7e1702de5b",
-    "micropython.wasm": "e6aa43b9fef3fcbbd1bf50c86dd1dabb142588ee195bfd9fc390d2f41b6441ca"
+  "assets": {
+    "runtime": {
+      "asset": "lms-web-runtime-v0.7.0.zip",
+      "url": "https://github.com/Copper-And-Code/lvgl-mpy-studio/releases/download/v0.7.0/lms-web-runtime-v0.7.0.zip",
+      "size": 2258499,
+      "sha256": "a8c824d4bcd65a987888debc7914a1c1eff26473c1bcdafba8d3b2469b72a00d",
+      "files": {
+        "micropython.mjs": "22b63a77a80efb73811e1c42d14f304687a686fd438b19df0a500b7e1702de5b",
+        "micropython.wasm": "e6aa43b9fef3fcbbd1bf50c86dd1dabb142588ee195bfd9fc390d2f41b6441ca"
+      }
+    },
+    "mpyCross": {
+      "asset": "lms-mpy-cross-v0.7.0.zip",
+      "url": "https://github.com/Copper-And-Code/lvgl-mpy-studio/releases/download/v0.7.0/lms-mpy-cross-v0.7.0.zip",
+      "size": 157915,
+      "sha256": "dc72a1e1ec7c1f60e9b06657f66792620106a31bdbb3268910c3c459ff39073e",
+      "files": {
+        "mpy-cross.mjs": "cfeb882753f875bb7e27d392c7f657fea6720a08510df7b526ac62e42f7d10d2",
+        "mpy-cross.wasm": "5ae53abd0af284ee95e7898f54888a6995b6698e144c1552e8d4c27b2139e004"
+      }
+    }
   }
 }

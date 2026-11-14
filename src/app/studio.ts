@@ -14,7 +14,14 @@ import { type FileStore, type Location, baseName, joinPath, walkFiles } from '..
 import { exportZip, importZip, readZip } from '../storage/zip.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 import type { Menu, MenuItem } from '../ui/menu-bar.ts';
+import { MpyCross } from '../mpy/mpy-cross.ts';
+import { CodeController, type MappedError } from './code.ts';
+import { FileTabs } from './file-tabs.ts';
 import { RunController, type RunView } from './run.ts';
+
+/** What the center shows: the designer, the Code tab, the simulator, or a file tab by id. */
+export type CenterTab = 'designer' | 'code' | 'simulator' | `file:${number}`;
+const FILES_FOLDER = 'files/folder';
 
 const isProject = (name: string) => name.toLowerCase().endsWith('.json');
 
@@ -26,6 +33,19 @@ export class Studio {
   /** Set when the browser's private storage could not be opened: files live until a reload. */
   workspaceProblem: string | null = null;
   private readonly statusListeners = new Set<(message: string) => void>();
+  private readonly workbenchListeners = new Set<() => void>();
+  readonly mpyCross = new MpyCross();
+  readonly files: FileTabs;
+  readonly code: CodeController;
+  /** The rows of the Errors panel. */
+  errors: MappedError[] = [];
+  /** The folder of the Files panel (QSettings files/folder). */
+  filesFolder: Location | null = null;
+  /** What the center shows; the shell follows it. */
+  tab: CenterTab = 'designer';
+  /** Where the Output panel writes; set by the shell. */
+  output: (text: string) => void = () => {};
+  private lvNames: Promise<string[]> | null = null;
 
   constructor(
     readonly python: PythonBridge,
@@ -33,6 +53,283 @@ export class Studio {
     private readonly settings: Settings,
   ) {
     this.session = new ProjectSession(python, this.stores, this.prompts(), settings);
+    this.files = new FileTabs(
+      this.stores,
+      dialogs,
+      python,
+      this.mpyCross,
+      (message) => this.status(message),
+      (folder) => this.setFilesFolder(folder),
+    );
+    this.code = new CodeController(
+      python,
+      this.session,
+      dialogs,
+      this.mpyCross,
+      (text) => this.output(text),
+      (message) => this.status(message),
+    );
+    this.files.onChange(() => this.workbenchChanged());
+    this.code.onChange(() => this.workbenchChanged());
+    // the code as Python has it, after new, open, reload, undo and redo
+    this.session.onChange(() => {
+      if (!this.code.adopting) void this.code.refresh();
+    });
+  }
+
+  onWorkbench(listener: () => void): () => void {
+    this.workbenchListeners.add(listener);
+    return () => this.workbenchListeners.delete(listener);
+  }
+
+  private workbenchChanged(): void {
+    for (const listener of this.workbenchListeners) listener();
+  }
+
+  show(tab: CenterTab): void {
+    this.tab = tab;
+    this.code.setActive(tab === 'code');
+    this.workbenchChanged();
+  }
+
+  // ---- files: ui/main_editors.py, ui/files.py ----
+
+  setFilesFolder(folder: Location | null): void {
+    this.filesFolder = folder;
+    this.settings.set(FILES_FOLDER, folder);
+    this.workbenchChanged();
+  }
+
+  async openFile(location: Location): Promise<void> {
+    const tab = await this.files.open(location);
+    if (tab) this.show(`file:${tab.id}`);
+  }
+
+  async closeFile(id: number): Promise<boolean> {
+    const tab = this.files.get(id);
+    if (!tab || !(await this.files.close(tab))) return false;
+    if (this.tab === `file:${id}`)
+      this.show(
+        this.files.tabs.at(-1) ? (`file:${this.files.tabs.at(-1)?.id}` as CenterTab) : 'code',
+      );
+    else this.workbenchChanged();
+    return true;
+  }
+
+  /** The file of the current tab, if it is one. */
+  currentFile() {
+    return this.tab.startsWith('file:') ? this.files.get(Number(this.tab.slice(5))) : undefined;
+  }
+
+  currentPythonFile(): Location | null {
+    const tab = this.currentFile();
+    return tab && tab.location.path.endsWith('.py') ? tab.location : null;
+  }
+
+  /** Ctrl+S: the file of the current tab, or the project. */
+  async saveCurrent(): Promise<boolean> {
+    const tab = this.currentFile();
+    return tab ? this.files.save(tab) : this.session.save();
+  }
+
+  /** The names after lv., for completion. */
+  lvCompletions(qualified: string): Promise<string[]> {
+    if (!qualified.startsWith('lv.') || qualified.split('.').length !== 2)
+      return Promise.resolve([]);
+    this.lvNames ??= this.python.call<string[]>('lv_completions');
+    return this.lvNames;
+  }
+
+  async chooseFilesFolder(): Promise<void> {
+    const folder = await this.dialogs.choose({
+      mode: 'folder',
+      title: tr('Open Folder…'),
+      stores: [...this.stores.values()],
+      suggested: this.filesFolder ?? { store: 'workspace', path: '' },
+      readOnlyPlaces: true,
+      addFolder: canOpenFolders ? () => this.addPcFolder() : undefined,
+    });
+    if (folder) this.setFilesFolder(folder);
+  }
+
+  private async askName(title: string, text = ''): Promise<string | null> {
+    const answer = await this.dialogs.askText(title, tr('Name:'), text);
+    const name = (answer ?? '').trim();
+    if (answer === null || !name) return null;
+    if (/[/\\]/.test(name) || name === '.' || name === '..') {
+      await this.dialogs.notice(title, tr('A name without / or \\, please.'));
+      return null;
+    }
+    return name;
+  }
+
+  async newFile(folder: Location): Promise<void> {
+    const name = await this.askName(tr('New File…'), 'main.py');
+    if (name === null) return;
+    const store = this.stores.get(folder.store);
+    const path = joinPath(folder.path, name);
+    if (!store) return;
+    if ((await store.read(path)) !== null) {
+      await this.dialogs.notice(tr('New File…'), tr('{name} already exists.', { name }));
+      return;
+    }
+    await store.write(path, new Uint8Array());
+    this.workbenchChanged();
+    await this.openFile({ store: folder.store, path });
+  }
+
+  async newFolder(folder: Location): Promise<void> {
+    const name = await this.askName(tr('New Folder…'));
+    const store = this.stores.get(folder.store);
+    if (name === null || !store) return;
+    try {
+      await store.makeFolder(joinPath(folder.path, name));
+    } catch (error) {
+      await this.dialogs.notice(
+        tr('New Folder…'),
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    this.workbenchChanged();
+  }
+
+  async renameEntry(location: Location, kind: 'file' | 'folder'): Promise<void> {
+    const old = baseName(location.path);
+    const name = await this.askName(tr('Rename…'), old);
+    const store = this.stores.get(location.store);
+    if (name === null || name === old || !store) return;
+    const parent = location.path.slice(0, location.path.length - old.length).replace(/\/$/, '');
+    const target = joinPath(parent, name);
+    const exists =
+      (await store.read(target)) !== null ||
+      (await walkFiles(store, parent)).some((p) => p.startsWith(`${target}/`));
+    if (exists) {
+      await this.dialogs.notice(tr('Rename…'), tr('{name} already exists.', { name }));
+      return;
+    }
+    // A store has no rename: the files are copied, then the old ones removed.
+    const files = kind === 'file' ? [location.path] : await walkFiles(store, location.path);
+    for (const path of files) {
+      const data = await store.read(path);
+      if (data) await store.write(target + path.slice(location.path.length), data);
+    }
+    if (kind === 'folder' && !files.length) await store.makeFolder(target);
+    await store.remove(location.path);
+    for (const tab of this.files.tabs) {
+      if (tab.location.store !== location.store) continue;
+      if (
+        tab.location.path === location.path ||
+        tab.location.path.startsWith(`${location.path}/`)
+      ) {
+        tab.location = {
+          store: location.store,
+          path: target + tab.location.path.slice(location.path.length),
+        };
+      }
+    }
+    this.workbenchChanged();
+  }
+
+  async deleteEntry(location: Location, kind: 'file' | 'folder'): Promise<void> {
+    const store = this.stores.get(location.store);
+    if (!store) return;
+    const yes = await this.dialogs.message(
+      tr('Delete…'),
+      kind === 'folder'
+        ? tr('Delete the folder {name} with everything in it?', { name: location.path })
+        : tr('Delete {name}?', { name: location.path }),
+      [
+        { label: tr('Yes'), value: true },
+        { label: tr('No'), value: false, primary: true },
+      ],
+      false,
+    );
+    if (!yes) return;
+    await store.remove(location.path);
+    this.workbenchChanged();
+  }
+
+  /** The context menu of the Files panel, as FilesPanel._menu. */
+  filesMenu(entry: { location: Location; kind: 'file' | 'folder' } | null): MenuItem[] {
+    const folder = this.filesFolder;
+    if (!folder) return [];
+    const store = this.stores.get(folder.store);
+    const readOnly = store?.readOnly ?? true;
+    const items: MenuItem[] = [];
+    if (entry?.kind === 'file') {
+      items.push({
+        label: tr('Open'),
+        id: 'files-open',
+        action: () => void this.openFile(entry.location),
+      });
+      if (entry.location.path.endsWith('.py')) {
+        items.push({
+          label: tr('Run Program'),
+          id: 'files-run',
+          disabled: !this.run || this.run.running,
+          action: () => void this.run?.runProgram(entry.location),
+        });
+      }
+      items.push({ separator: true });
+    }
+    const target = !entry
+      ? folder
+      : entry.kind === 'folder'
+        ? entry.location
+        : { store: folder.store, path: entry.location.path.split('/').slice(0, -1).join('/') };
+    items.push(
+      {
+        label: tr('New File…'),
+        id: 'files-new-file',
+        disabled: readOnly,
+        action: () => void this.newFile(target),
+      },
+      {
+        label: tr('New Folder…'),
+        id: 'files-new-folder',
+        disabled: readOnly,
+        action: () => void this.newFolder(target),
+      },
+    );
+    if (entry) {
+      items.push(
+        {
+          label: tr('Rename…'),
+          id: 'files-rename',
+          disabled: readOnly,
+          action: () => void this.renameEntry(entry.location, entry.kind),
+        },
+        {
+          label: tr('Delete…'),
+          id: 'files-delete',
+          disabled: readOnly,
+          action: () => void this.deleteEntry(entry.location, entry.kind),
+        },
+      );
+    }
+    return items;
+  }
+
+  // ---- errors ----
+
+  setErrors(rows: MappedError[]): void {
+    this.errors = rows;
+    this.workbenchChanged();
+  }
+
+  /** RunMixin._error_activated: the line in the module or the handler. */
+  openError(error: MappedError): number | null {
+    const line = error.sourceLine ?? error.line ?? 1;
+    if (error.module) {
+      if (!this.code.openModule(error.module)) return null;
+    } else if (error.handler) {
+      if (error.handler === 'module') this.code.select({ kind: 'module' });
+      else if (!this.code.openHandler(error.handler)) return null;
+    } else {
+      return null;
+    }
+    this.show('code');
+    return line;
   }
 
   async start(): Promise<void> {
@@ -44,6 +341,8 @@ export class Studio {
     }
     this.addStore(new ExamplesStore());
     for (const folder of await savedFolders()) this.addStore(folder);
+    const saved = this.settings.get<Location | null>(FILES_FOLDER, null);
+    if (saved && this.stores.has(saved.store)) this.filesFolder = saved;
     await this.session.start();
     if (this.workspaceProblem) {
       void this.dialogs.notice(
@@ -66,6 +365,14 @@ export class Studio {
         settings: this.settings,
         dialogs: this.dialogs,
         view,
+        hooks: {
+          compile: (directory, files) => this.code.compileDirectory(directory, files),
+          traceErrors: (text) => this.python.call<MappedError[]>('code_trace_errors', text),
+          setErrors: (rows) => this.setErrors(rows),
+          addErrors: (rows) => this.setErrors([...this.errors, ...rows]),
+          saveFilesIn: (folder) => this.files.saveFilesIn(folder),
+          currentPythonFile: () => this.currentPythonFile(),
+        },
       },
       screen,
     );
@@ -415,7 +722,7 @@ export class Studio {
             id: 'save',
             shortcut: 'Ctrl+S',
             disabled: !ready,
-            action: () => void session.save(),
+            action: () => void this.saveCurrent(),
           },
           {
             label: tr('Save As…'),
@@ -515,7 +822,7 @@ export class Studio {
    * Shortcuts the browser lets a page take. In the terminal of a program the keys are the
    * program's, Ctrl-C and Ctrl-Z included: only F5 and Shift+F5 stay the IDE's.
    */
-  shortcut(event: KeyboardEvent, inTerminal = false): boolean {
+  shortcut(event: KeyboardEvent, inTerminal = false, inEditor = false): boolean {
     if (event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.metaKey && this.run) {
       if (event.shiftKey) void this.run.stop();
       else if (!this.run.running && this.session.state) void this.run.runProject();
@@ -525,10 +832,12 @@ export class Studio {
     if (inTerminal) return false;
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
-    if (key === 's') void (event.shiftKey ? this.session.saveAs() : this.session.save());
+    if (key === 's') void (event.shiftKey ? this.session.saveAs() : this.saveCurrent());
     else if (key === 'o' && !event.shiftKey) void this.openDialog();
-    else if (key === 'z' && !event.shiftKey) void this.session.undo();
-    else if (key === 'y' || (key === 'z' && event.shiftKey)) void this.session.redo();
+    // in an editor, undo and redo are the editor's, as in the desktop's text widgets
+    else if (key === 'z' && !event.shiftKey && !inEditor) void this.session.undo();
+    else if ((key === 'y' || (key === 'z' && event.shiftKey)) && !inEditor)
+      void this.session.redo();
     else return false;
     event.preventDefault();
     return true;

@@ -16,6 +16,7 @@ import {
   walkFiles,
 } from '../storage/store.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
+import type { MappedError } from './code.ts';
 import {
   type FlashChange,
   type SimFile,
@@ -42,7 +43,25 @@ export interface RunView {
   status(message: string): void;
 }
 
+/** What a run needs from the rest of the IDE: the editors, mpy-cross, the Errors panel. */
+export interface RunHooks {
+  /** compile_python on the generated files: mapped errors, empty when all compiled. */
+  compile(directory: string, files: string[]): Promise<MappedError[]>;
+  /** The rows of the Errors panel for a complete traceback (ui/main_run.py _sim_output). */
+  traceErrors(text: string): Promise<MappedError[]>;
+  setErrors(rows: MappedError[]): void;
+  addErrors(rows: MappedError[]): void;
+  /** save_files_in: the files of the folder open in the editor are saved first. */
+  saveFilesIn(folder: Location): Promise<boolean>;
+  /** The .py file of the current tab: Run Program offers it first. */
+  currentPythonFile(): Location | null;
+}
+
+// ui/main_run.py TRACEBACK_BLOCK: a complete traceback, its frame lines, then the exception line.
+const TRACEBACK_BLOCK = /Traceback \(most recent call last\):\n(?:[ \t].*\n)+(\S.*)\n/g;
+
 export interface RunOptions {
+  hooks: RunHooks;
   python: PythonBridge;
   session: ProjectSession;
   stores: Map<string, FileStore>;
@@ -78,6 +97,8 @@ export class RunController {
   private frameWaiter: ((pixels: Uint8Array | null) => void) | null = null;
   /** Everything the program printed in this run, for tests and for whoever reads it back. */
   transcript = '';
+  /** Output of a project not yet read for tracebacks: half a traceback waits for the rest. */
+  private trace = '';
 
   constructor(
     private readonly options: RunOptions,
@@ -88,7 +109,10 @@ export class RunController {
       output: (text) => {
         this.transcript += text;
         if (this.simulator.mode === 'program') view.terminal(text);
-        else view.output(text.replace(/\r\n/g, '\n'));
+        else {
+          view.output(text.replace(/\r\n/g, '\n'));
+          if (this.simulator.mode === 'project') this.readTracebacks(text);
+        }
       },
       state: (state) => {
         view.state(state, this.simulator.mode === 'program');
@@ -122,10 +146,25 @@ export class RunController {
     if (this.running) return false;
     // ui/main_run.py saves first; a project already saved and unchanged runs as it is.
     if ((session.modified || !session.location) && !(await session.save())) return false;
+    this.options.hooks.setErrors([]);
     const start = await this.prepareProject('project');
     if (!start) return false;
+    // ui/main_run.py: compile_python before the simulator; an error stops here
+    const errors = await this.options.hooks.compile(
+      '/sim/project',
+      start.files
+        .map(([name]) => name)
+        .filter((name) => name.endsWith('.py') && !name.includes('/')),
+    );
+    if (errors.length) {
+      this.options.hooks.setErrors(errors);
+      for (const error of errors) view.output(`${error.message}\n`);
+      return false;
+    }
+    view.output(tr('{target} compilation completed', { target: 'MicroPython' }) + '\n');
     this.program = null;
     this.transcript = '';
+    this.trace = '';
     this.options.view.clearTerminal();
     await this.simulator.start(start);
     view.status('');
@@ -209,7 +248,7 @@ export class RunController {
         mode: 'open',
         title: tr('Run Program'),
         stores: [...stores.values()],
-        suggested: this.lastProgram(),
+        suggested: this.options.hooks.currentPythonFile() ?? this.lastProgram(),
         accept: (name) => name.toLowerCase().endsWith('.py'),
       });
       if (!chosen) return false;
@@ -217,6 +256,11 @@ export class RunController {
     }
     const store = stores.get(entry.store);
     if (!store) return false;
+    if (
+      !(await this.options.hooks.saveFilesIn({ store: entry.store, path: parentPath(entry.path) }))
+    ) {
+      return false;
+    }
     try {
       // The folder of the program into Python, where upstream's copy_program reads it.
       const folder = parentPath(entry.path);
@@ -319,6 +363,21 @@ export class RunController {
     this.memoryFlashes.delete(key);
     view.status(tr('Program flash erased.'));
     return true;
+  }
+
+  /** ui/main_run.py _sim_output: complete tracebacks become rows of the Errors panel. */
+  private readTracebacks(text: string): void {
+    this.trace += text.replace(/\r\n/g, '\n');
+    const blocks = [...this.trace.matchAll(TRACEBACK_BLOCK)];
+    const last = blocks.at(-1);
+    const rest = last ? this.trace.slice((last.index ?? 0) + last[0].length) : this.trace;
+    const start = rest.lastIndexOf('Traceback (most recent call last)');
+    this.trace = start >= 0 ? rest.slice(start).slice(-20000) : rest.slice(-40);
+    if (!blocks.length) return;
+    const complete = blocks.map((block) => block[0]).join('');
+    void this.options.hooks.traceErrors(complete).then((rows) => {
+      if (rows.length) this.options.hooks.addErrors(rows);
+    });
   }
 
   /** Keys typed in the terminal: the program's serial port. */

@@ -1,9 +1,11 @@
 import { LitElement, css, html, nothing } from 'lit';
-import type { Studio } from '../app/studio.ts';
+import type { CenterTab, Studio } from '../app/studio.ts';
+import type { MappedError } from '../app/code.ts';
 import { upstream } from '../build-info.ts';
 import { tr } from '../i18n/tr.ts';
 import type { PythonBridge, PythonState } from '../py/bridge.ts';
 import type { DocState } from '../project/session.ts';
+import type { Location } from '../storage/store.ts';
 import { upstreamLabel } from '../upstream.ts';
 import type { Dialogs } from './dialogs.ts';
 import './dialogs.ts';
@@ -12,9 +14,14 @@ import './menu-bar.ts';
 import type { SimPanel } from './sim-panel.ts';
 import './sim-panel.ts';
 import type { SimState } from '../sim/simulator.ts';
+import type { CodeEditor } from './code-editor.ts';
+import './code-editor.ts';
+import type { CodePanel } from './code-panel.ts';
+import './code-panel.ts';
+import './files-panel.ts';
 
-type CenterTab = 'designer' | 'simulator';
 const OUTPUT_LIMIT = 100_000;
+type BottomTab = 'output' | 'errors';
 
 /** The IDE window: menu bar, the three working areas, the status bar, the dialogs. */
 export class AppShell extends LitElement {
@@ -27,6 +34,8 @@ export class AppShell extends LitElement {
     tab: { state: true },
     outputText: { state: true },
     running: { state: true },
+    bottom: { state: true },
+    workbench: { state: true },
   };
 
   python: PythonBridge | undefined;
@@ -37,6 +46,10 @@ export class AppShell extends LitElement {
   tab: CenterTab = 'designer';
   outputText = '';
   running = false;
+  bottom: BottomTab = 'output';
+  /** Counts the changes of the studio's tabs, files and errors, to render them again. */
+  workbench = 0;
+  private errorCount = 0;
   private unsubscribe: (() => void)[] = [];
   private statusTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -101,6 +114,92 @@ export class AppShell extends LitElement {
     [role='tabpanel'][hidden] {
       display: none;
     }
+    .left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    lms-files-panel {
+      flex: 1 1 auto;
+      min-height: 120px;
+    }
+    .center [role='tablist'] {
+      flex-wrap: wrap;
+    }
+    .file-tab {
+      display: inline-flex;
+      align-items: center;
+    }
+    .file-tab .close {
+      font: inherit;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-radius: 4px;
+      padding: 0 4px;
+      cursor: pointer;
+    }
+    .file-tab .close:hover,
+    .file-tab .close:focus-visible {
+      color: var(--text);
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .file-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      height: 100%;
+      min-height: 0;
+    }
+    .file-panel lms-code-editor {
+      flex: 1 1 auto;
+      min-height: 120px;
+    }
+    .notice {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--bg);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .syntax {
+      color: var(--danger);
+      white-space: pre-wrap;
+      margin: 0;
+      font-size: 0.9rem;
+    }
+    .errors-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .errors-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: normal;
+    }
+    .errors-table td,
+    .errors-table th {
+      padding: 2px 8px 2px 0;
+    }
+    .errors-table button {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-align: left;
+    }
+    .errors-table button:focus-visible {
+      outline: 2px solid var(--accent);
+    }
+    .bottom-tabs {
+      display: flex;
+      gap: 2px;
+    }
     .output {
       border-top: 1px solid var(--border);
       background: var(--panel);
@@ -109,8 +208,11 @@ export class AppShell extends LitElement {
       min-height: 0;
       padding: 4px 12px;
     }
-    .output h2 {
-      margin-bottom: 4px;
+    .output [role='tab'] {
+      padding: 2px 10px;
+    }
+    .output [role='tabpanel'] {
+      overflow: auto;
     }
     .output pre {
       flex: 1 1 auto;
@@ -224,13 +326,7 @@ export class AppShell extends LitElement {
   runView() {
     const panel = this.simPanel;
     return {
-      output: (text: string) => {
-        this.outputText = (this.outputText + text).slice(-OUTPUT_LIMIT);
-        void this.updateComplete.then(() => {
-          const pre = this.renderRoot.querySelector('.output pre');
-          if (pre) pre.scrollTop = pre.scrollHeight;
-        });
-      },
+      output: (text: string) => this.appendOutput(text),
       terminal: (text: string) => panel.write(text),
       clearTerminal: () => panel.clear(),
       focusTerminal: () => panel.focusTerminal(),
@@ -241,11 +337,19 @@ export class AppShell extends LitElement {
     };
   }
 
+  private appendOutput(text: string): void {
+    this.outputText = (this.outputText + text).slice(-OUTPUT_LIMIT);
+    void this.updateComplete.then(() => {
+      const pre = this.renderRoot.querySelector('.output pre');
+      if (pre) pre.scrollTop = pre.scrollHeight;
+    });
+  }
+
   private simState(state: SimState, program: boolean): void {
     const panel = this.simPanel;
     this.running = state === 'starting' || state === 'running';
     if (this.running) {
-      this.tab = 'simulator';
+      this.studio?.show('simulator');
       panel.program = program;
     }
     const doc = this.doc;
@@ -291,6 +395,16 @@ export class AppShell extends LitElement {
         };
         this.unsubscribe.push(studio.session.onChange(refresh));
         this.unsubscribe.push(studio.onStatus((message) => this.showStatus(message)));
+        this.unsubscribe.push(
+          studio.onWorkbench(() => {
+            this.tab = studio.tab;
+            // ui/main_run.py raises the Errors panel when rows arrive
+            if (studio.errors.length > this.errorCount) this.bottom = 'errors';
+            this.errorCount = studio.errors.length;
+            this.workbench++;
+          }),
+        );
+        studio.output = (text) => this.appendOutput(text);
         refresh();
         void this.updateComplete.then(() => {
           if (!studio.run) {
@@ -352,28 +466,164 @@ export class AppShell extends LitElement {
     return this.renderRoot.querySelector('lms-sim-panel')?.program ?? false;
   }
 
+  private tabId(tab: CenterTab): string {
+    return tab.replace(':', '-');
+  }
+
   private renderTab(tab: CenterTab, label: string) {
     const selected = this.tab === tab;
     return html`<button
       type="button"
       role="tab"
-      id="tab-${tab}"
-      aria-controls="panel-${tab}"
+      id="tab-${this.tabId(tab)}"
+      data-testid="tab-${this.tabId(tab)}"
+      aria-controls="panel-${this.tabId(tab)}"
       aria-selected=${selected ? 'true' : 'false'}
       tabindex=${selected ? 0 : -1}
-      @click=${() => (this.tab = tab)}
+      @click=${() => this.studio?.show(tab)}
     >
       ${label}
     </button>`;
   }
 
+  private centerTabs(): CenterTab[] {
+    const files = this.studio?.files.tabs.map((tab) => `file:${tab.id}` as CenterTab) ?? [];
+    return ['designer', 'code', 'simulator', ...files];
+  }
+
   private tabKeys(event: KeyboardEvent): void {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    this.tab = this.tab === 'designer' ? 'simulator' : 'designer';
+    if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
+    const tabs = this.centerTabs();
+    const index = tabs.indexOf(this.tab);
+    const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+    if (!next) return;
+    this.studio?.show(next);
     void this.updateComplete.then(() =>
-      this.renderRoot.querySelector<HTMLElement>(`#tab-${this.tab}`)?.focus(),
+      this.renderRoot.querySelector<HTMLElement>(`#tab-${this.tabId(next)}`)?.focus(),
     );
     event.preventDefault();
+  }
+
+  private renderFileTabs() {
+    const studio = this.studio;
+    if (!studio) return nothing;
+    return studio.files.tabs.map(
+      (tab) =>
+        html`<span class="file-tab">
+          ${this.renderTab(`file:${tab.id}`, studio.files.title(tab))}
+          <button
+            type="button"
+            class="close"
+            aria-label=${tr('Close {name}', { name: studio.files.title(tab) })}
+            title=${tr('Close')}
+            @click=${() => void studio.closeFile(tab.id)}
+          >
+            ×
+          </button>
+        </span>`,
+    );
+  }
+
+  private renderFilePanels() {
+    const studio = this.studio;
+    if (!studio) return nothing;
+    return studio.files.tabs.map((tab) => {
+      const id = this.tabId(`file:${tab.id}`);
+      return html`<div
+        role="tabpanel"
+        class="file-panel"
+        id="panel-${id}"
+        aria-labelledby="tab-${id}"
+        ?hidden=${this.tab !== `file:${tab.id}`}
+      >
+        ${
+          tab.notice
+            ? html`<div class="notice" role="status">
+                <span>${tab.notice}</span>
+                ${
+                  tab.offerReload
+                    ? html`<button type="button" @click=${() => void studio.files.reload(tab)}>
+                        ${tr('Reload')}
+                      </button>`
+                    : nothing
+                }
+              </div>`
+            : nothing
+        }
+        <lms-code-editor
+          data-file=${tab.id}
+          label=${tab.location.path}
+          .provider=${(qualified: string) =>
+            tab.location.path.endsWith('.py') ? studio.lvCompletions(qualified) : []}
+        ></lms-code-editor>
+        ${
+          tab.errors.length
+            ? html`<p class="syntax" data-testid="file-errors" role="alert">
+                ${tab.errors
+                  .map((error) => `${tr('Line')} ${error.line}: ${error.message}`)
+                  .join('\n')}
+              </p>`
+            : nothing
+        }
+      </div>`;
+    });
+  }
+
+  override updated(): void {
+    const studio = this.studio;
+    if (!studio) return;
+    // the editors of file tabs: their text, their errors, their changes
+    for (const editor of this.renderRoot.querySelectorAll<CodeEditor>(
+      'lms-code-editor[data-file]',
+    )) {
+      const tab = studio.files.get(Number(editor.dataset.file));
+      if (!tab) continue;
+      if (editor.dataset.version !== String(tab.version)) {
+        editor.dataset.version = String(tab.version);
+        editor.setText(tab.text);
+      }
+      editor.onChange = (text) => studio.files.edit(tab, text);
+      editor.showErrors(tab.errors.map((error) => error.line));
+    }
+    const code = this.renderRoot.querySelector<CodePanel>('lms-code-panel');
+    if (code && studio.run) code.onStop = () => void studio.run?.stop();
+  }
+
+  private openErrorRow(error: MappedError): void {
+    const line = this.studio?.openError(error);
+    if (line == null) return;
+    void this.updateComplete.then(() =>
+      this.renderRoot.querySelector<CodePanel>('lms-code-panel')?.goToLine(line),
+    );
+  }
+
+  private renderErrors() {
+    const errors = this.studio?.errors ?? [];
+    if (!errors.length) return html`<p class="placeholder">${tr('No errors')}</p>`;
+    return html`<table class="errors-table" data-testid="errors">
+      <thead>
+        <tr>
+          <th>${tr('File')}</th>
+          <th>${tr('Line')}</th>
+          <th>${tr('Message')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${errors.map((error) => {
+          const name = error.file ? error.file.split('/').pop() : tr('Compiler');
+          return html`<tr title=${error.tooltip ?? ''}>
+            <td>${name}</td>
+            <td>${error.sourceLine ?? error.line}</td>
+            <td>
+              <button type="button" @click=${() => this.openErrorRow(error)}>
+                ${error.message}
+              </button>
+            </td>
+          </tr>`;
+        })}
+      </tbody>
+    </table>`;
   }
 
   private renderProject() {
@@ -413,6 +663,25 @@ export class AppShell extends LitElement {
             </li>`,
         )}
       </ul>
+      <h2>${tr('Python Modules')}</h2>
+      <ul aria-label=${tr('Python Modules')}>
+        ${doc.modules.map(
+          (module) =>
+            html`<li>
+              <button
+                type="button"
+                title=${tr('Open Module')}
+                data-testid="module"
+                @click=${() => {
+                  this.studio?.code.openModule(module.name);
+                  this.studio?.show('code');
+                }}
+              >
+                ${module.name}.py
+              </button>
+            </li>`,
+        )}
+      </ul>
     `;
   }
 
@@ -423,14 +692,28 @@ export class AppShell extends LitElement {
         <lms-menu-bar aria-label="Main menu" role="menubar" .menus=${this.menus()}></lms-menu-bar>
       </header>
       <main>
-        <section aria-label="Project tree">
-          <h2>${tr('Project')}</h2>
-          ${this.renderProject()}
+        <section class="left" aria-label="Project tree">
+          <div>
+            <h2>${tr('Project')}</h2>
+            ${this.renderProject()}
+          </div>
+          <div>
+            <h2>${tr('Files')}</h2>
+            <lms-files-panel
+              .store=${this.studio?.filesFolder ? (this.studio.stores.get(this.studio.filesFolder.store) ?? null) : null}
+              .folder=${this.studio?.filesFolder ?? null}
+              .revision=${this.workbench}
+              .onOpen=${(location: Location) => void this.studio?.openFile(location)}
+              .menuFor=${(entry: { location: Location; kind: 'file' | 'folder' } | null) =>
+                this.studio?.filesMenu(entry) ?? []}
+              .onChooseFolder=${() => void this.studio?.chooseFilesFolder()}
+            ></lms-files-panel>
+          </div>
         </section>
         <section class="center" aria-label=${tr('Editor')}>
           <div role="tablist" @keydown=${this.tabKeys}>
-            ${this.renderTab('designer', tr('Designer'))}
-            ${this.renderTab('simulator', tr('Simulator'))}
+            ${this.renderTab('designer', tr('Designer'))} ${this.renderTab('code', tr('Code'))}
+            ${this.renderTab('simulator', tr('Simulator'))} ${this.renderFileTabs()}
           </div>
           <div
             role="tabpanel"
@@ -442,18 +725,67 @@ export class AppShell extends LitElement {
           </div>
           <div
             role="tabpanel"
+            id="panel-code"
+            aria-labelledby="tab-code"
+            ?hidden=${this.tab !== 'code'}
+          >
+            <lms-code-panel
+              .controller=${this.studio?.code ?? null}
+              .provider=${(qualified: string) => this.studio?.lvCompletions(qualified) ?? []}
+              ?running=${this.running && !this.simPanelProgram()}
+            ></lms-code-panel>
+          </div>
+          <div
+            role="tabpanel"
             id="panel-simulator"
             aria-labelledby="tab-simulator"
             ?hidden=${this.tab !== 'simulator'}
           >
             <lms-sim-panel></lms-sim-panel>
           </div>
+          ${this.renderFilePanels()}
         </section>
         <section aria-label="Properties"><h2>Properties</h2></section>
       </main>
-      <section class="output" aria-label="Output">
-        <h2>Output</h2>
-        <pre data-testid="output" tabindex="0">${this.outputText}</pre>
+      <section class="output" aria-label=${tr('Output and Errors')}>
+        <div role="tablist" class="bottom-tabs">
+          ${(['output', 'errors'] as const).map(
+            (tab) =>
+              html`<button
+                type="button"
+                role="tab"
+                id="bottom-${tab}"
+                data-testid="bottom-${tab}"
+                aria-controls="bottom-panel-${tab}"
+                aria-selected=${String(this.bottom === tab)}
+                tabindex=${this.bottom === tab ? 0 : -1}
+                @click=${() => (this.bottom = tab)}
+              >
+                ${
+                  tab === 'output'
+                    ? tr('Output')
+                    : `${tr('Errors')}${this.studio?.errors.length ? ` (${this.studio.errors.length})` : ''}`
+                }
+              </button>`,
+          )}
+        </div>
+        <pre
+          role="tabpanel"
+          id="bottom-panel-output"
+          aria-labelledby="bottom-output"
+          data-testid="output"
+          tabindex="0"
+          ?hidden=${this.bottom !== 'output'}
+        >
+${this.outputText}</pre>
+        <div
+          role="tabpanel"
+          id="bottom-panel-errors"
+          aria-labelledby="bottom-errors"
+          ?hidden=${this.bottom !== 'errors'}
+        >
+          ${this.renderErrors()}
+        </div>
       </section>
       <footer>
         <span>${this.statusMessage || `LVGL MPY Studio ${label}`}</span>

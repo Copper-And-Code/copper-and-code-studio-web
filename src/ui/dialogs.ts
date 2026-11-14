@@ -28,6 +28,8 @@ export interface ChooseOptions {
   /** Chromium: adds a folder of the PC as a place; resolves to its store, or null. */
   addFolder?: () => Promise<FileStore | null>;
   acceptLabel?: string;
+  /** Folder mode: read-only places too, for a folder only to look at (the Files panel). */
+  readOnlyPlaces?: boolean;
 }
 
 type Request =
@@ -251,7 +253,9 @@ export class Dialogs extends LitElement {
   // ---- file chooser ----
 
   private places(options: ChooseOptions): FileStore[] {
-    return options.mode === 'open' ? options.stores : options.stores.filter((s) => !s.readOnly);
+    return options.mode === 'open' || options.readOnlyPlaces
+      ? options.stores
+      : options.stores.filter((s) => !s.readOnly);
   }
 
   private async startChooser(options: ChooseOptions): Promise<void> {
@@ -259,7 +263,13 @@ export class Dialogs extends LitElement {
     const suggested = options.suggested;
     const place = places.find((s) => s.id === suggested?.store) ?? places[0] ?? null;
     this.place = place;
-    this.name = options.mode === 'save' && suggested ? baseName(suggested.path) : '';
+    // a suggested file is chosen already, as QFileDialog selects the path it is given
+    const suggestedName = suggested ? baseName(suggested.path) : '';
+    this.name =
+      options.mode === 'save' ||
+      (options.mode === 'open' && suggestedName && (options.accept?.(suggestedName) ?? true))
+        ? suggestedName
+        : '';
     this.problem = '';
     this.newFolderName = null;
     await this.enter(place && suggested?.store === place.id ? parentPath(suggested.path) : '');

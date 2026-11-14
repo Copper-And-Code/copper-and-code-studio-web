@@ -1,11 +1,26 @@
-// Where upstream's WebAssembly runtime comes from: an asset of upstream's release for the pinned
-// tag (upstream request 1), checked against runtime.lock.json.
+// Upstream's WebAssembly builds that the site serves: assets of upstream's release for the pinned
+// tag (upstream requests 1 and 2), checked against runtime.lock.json.
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-export const RUNTIME_FILES = ['micropython.mjs', 'micropython.wasm'];
 export const CACHE = join(ROOT, '.cache', 'runtime');
 export const REPOSITORY = 'https://github.com/Copper-And-Code/lvgl-mpy-studio';
-export const assetName = (tag) => `lms-web-runtime-${tag}.zip`;
-export const assetUrl = (tag) => `${REPOSITORY}/releases/download/${tag}/${assetName(tag)}`;
+
+/** kind → the files of the asset, its licence texts, and where the site serves it. */
+export const ASSETS = {
+  runtime: {
+    asset: (tag) => `lms-web-runtime-${tag}.zip`,
+    files: ['micropython.mjs', 'micropython.wasm'],
+    licenses: null, // all of gen/output/licenses
+    out: join(ROOT, 'public', 'runtime'),
+  },
+  mpyCross: {
+    asset: (tag) => `lms-mpy-cross-${tag}.zip`,
+    files: ['mpy-cross.mjs', 'mpy-cross.wasm'],
+    licenses: ['MicroPython.txt'],
+    out: join(ROOT, 'public', 'mpy-cross'),
+  },
+};
+
+export const assetUrl = (tag, name) => `${REPOSITORY}/releases/download/${tag}/${name}`;

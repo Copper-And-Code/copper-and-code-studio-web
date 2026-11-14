@@ -41,14 +41,20 @@ if (shell) {
     (event) => {
       const panel = shell.renderRoot.querySelector('lms-sim-panel');
       const terminal = panel?.renderRoot.querySelector('.terminal');
-      if (studio.shortcut(event, terminal ? event.composedPath().includes(terminal) : false)) {
+      const path = event.composedPath();
+      const inEditor = path.some(
+        (node) => node instanceof HTMLElement && node.localName === 'lms-code-editor',
+      );
+      if (studio.shortcut(event, terminal ? path.includes(terminal) : false, inEditor)) {
         event.stopPropagation();
       }
     },
     true,
   );
+  // no file watcher in the browser: the tabs look at their stores when the page is back
+  window.addEventListener('focus', () => void studio.files.refreshFromStores());
   // the browser's own question when a page with unsaved changes is closed
   window.addEventListener('beforeunload', (event) => {
-    if (studio.session.modified) event.preventDefault();
+    if (studio.session.modified || studio.files.anyModified) event.preventDefault();
   });
 }

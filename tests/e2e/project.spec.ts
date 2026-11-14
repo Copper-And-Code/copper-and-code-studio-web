@@ -112,6 +112,7 @@ test('a folder exported as a zip and imported again has the same bytes', async (
 test('unsaved changes are asked about before a new project', async ({ page }) => {
   await start(page);
   await menu(page, 'File', 'Open Example', 'demo');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: demo.json');
   await page.getByTestId('page').first().click();
   await dialog(page).locator('#text').fill('Changed');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
@@ -130,6 +131,7 @@ test('unsaved changes are asked about before a new project', async ({ page }) =>
 test('undo and redo follow the document', async ({ page }) => {
   await start(page);
   await menu(page, 'File', 'Open Example', 'demo');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: demo.json');
   const name = (await page.getByTestId('page').first().textContent())?.trim() ?? '';
   await page.getByTestId('page').first().click();
   await dialog(page).locator('#text').fill('Renamed');

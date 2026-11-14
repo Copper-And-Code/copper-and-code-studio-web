@@ -1,37 +1,37 @@
-// Packs upstream's WebAssembly runtime (the output of upstream's runtime/build_web.sh) into the
-// zip that upstream request 1 asks to attach to the release of the pinned tag, and writes
-// runtime.lock.json with its sha256. Run by hand, once per tag:
+// Packs one of upstream's WebAssembly builds into the zip attached to upstream's release of the
+// pinned tag, and records its sha256 in runtime.lock.json. Run by hand, once per tag:
 //
-//   node scripts/pack-runtime.mjs <folder with micropython.mjs and micropython.wasm>
+//   node scripts/pack-runtime.mjs runtime  <output of upstream's runtime/build_web.sh>
+//   node scripts/pack-runtime.mjs mpyCross <output of scripts/build-mpy-cross-web.sh>
 //
-// Output: .cache/runtime/lms-web-runtime-<tag>.zip, the asset to upload, and runtime.lock.json.
+// The zip goes to .cache/runtime/, ready to upload; it is byte for byte the same on every run.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
-import { RUNTIME_FILES, assetName, assetUrl, CACHE } from './runtime-info.mjs';
+import { ASSETS, CACHE, assetUrl } from './runtime-info.mjs';
 import { upstreamInfo } from './upstream-info.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const LICENSES = join(ROOT, 'upstream', 'lvgl_mpy_studio', 'gen', 'output', 'licenses');
-// A fixed date keeps the zip byte-identical from one run to the next.
+const LOCK = join(ROOT, 'runtime.lock.json');
 const MTIME = new Date('2026-01-01T00:00:00Z');
 
-const source = process.argv[2];
-if (!source) {
-  console.error('usage: node scripts/pack-runtime.mjs <folder of runtime/build_web.sh output>');
+const [kind, source] = process.argv.slice(2);
+const spec = ASSETS[kind];
+if (!spec || !source) {
+  console.error(`usage: node scripts/pack-runtime.mjs <${Object.keys(ASSETS).join('|')}> <folder>`);
   process.exit(2);
 }
 const info = upstreamInfo();
 if (!info.tag) {
-  console.error('upstream/ is not at a tag: the runtime asset belongs to a release');
+  console.error('upstream/ is not at a tag: the assets belong to a release');
   process.exit(1);
 }
 const files = {};
-for (const name of RUNTIME_FILES)
-  files[name] = [readFileSync(join(source, name)), { mtime: MTIME }];
-for (const name of readdirSync(LICENSES).sort()) {
+for (const name of spec.files) files[name] = [readFileSync(join(source, name)), { mtime: MTIME }];
+for (const name of spec.licenses ?? readdirSync(LICENSES).sort()) {
   files[`licenses/${name}`] = [readFileSync(join(LICENSES, name)), { mtime: MTIME }];
 }
 const zip = zipSync(
@@ -44,18 +44,19 @@ const zip = zipSync(
     level: 9,
   },
 );
-const name = assetName(info.tag);
+const name = spec.asset(info.tag);
 mkdirSync(CACHE, { recursive: true });
 writeFileSync(join(CACHE, name), zip);
-const lock = {
-  tag: info.tag,
+const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+const previous = existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, 'utf8')) : {};
+// the assets of another tag do not belong to this one
+const lock = { tag: info.tag, assets: previous.tag === info.tag ? (previous.assets ?? {}) : {} };
+lock.assets[kind] = {
   asset: name,
-  url: assetUrl(info.tag),
+  url: assetUrl(info.tag, name),
   size: zip.length,
-  sha256: createHash('sha256').update(zip).digest('hex'),
-  files: Object.fromEntries(
-    RUNTIME_FILES.map((n) => [n, createHash('sha256').update(files[n][0]).digest('hex')]),
-  ),
+  sha256: sha256(zip),
+  files: Object.fromEntries(spec.files.map((n) => [n, sha256(files[n][0])])),
 };
-writeFileSync(join(ROOT, 'runtime.lock.json'), JSON.stringify(lock, null, 2) + '\n');
-console.log(`${join(CACHE, name)}: ${zip.length} bytes, sha256 ${lock.sha256}`);
+writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n');
+console.log(`${join(CACHE, name)}: ${zip.length} bytes, sha256 ${lock.assets[kind].sha256}`);

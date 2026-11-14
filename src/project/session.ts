@@ -18,6 +18,7 @@ export interface DocState {
   board: string | null;
   display: { width: number; height: number };
   pages: { id: string; name: string }[];
+  modules: { id: string; name: string }[];
   canUndo: boolean;
   canRedo: boolean;
   undoText: string;
@@ -164,6 +165,11 @@ export class ProjectSession {
     this.update(result.state, this.location);
     if (result.error) this.prompts.error(tr('Rename Page'), result.error);
     return result.warnings;
+  }
+
+  /** A new state from a change made elsewhere (the Code tab, the modules): same file. */
+  adopt(state: DocState): void {
+    this.update(state, this.location);
   }
 
   async undo(): Promise<void> {

@@ -8,6 +8,7 @@ call(method, arguments_json) -> reply_json is the single entry point. A reply is
 """
 
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -99,6 +100,7 @@ def doc_state():
         "board": project.board.get("id") if isinstance(project.board, dict) else None,
         "display": {"width": project.display.width, "height": project.display.height},
         "pages": [{"id": page.id, "name": page.name} for page in project.pages],
+        "modules": [{"id": module.id, "name": module.name} for module in project.modules],
         "canUndo": stack.can_undo(),
         "canRedo": stack.can_redo(),
         "undoText": stack.undo_text(),
@@ -249,6 +251,144 @@ def sim_program(entry, flash):
     }
 
 
+# ---- Code: the Code tab, modules, mpy-cross's errors, tracebacks (phase 4) ----
+# mpy-cross runs in the page (WebAssembly, src/mpy/); its output comes back here, where upstream's
+# own parse_compiler_errors, map_error and traceback_errors read it.
+NEW_MODULE_SOURCE = "import lvgl as lv\nimport ui\n\n\n"  # ui/main_tree.py
+CHECK_DIR = "/sim/check"
+# ui/main_run.py TRACEBACK_BLOCK: a complete traceback, the frame lines, then the exception line.
+TRACEBACK_BLOCK = re.compile(r"Traceback \(most recent call last\):\n(?:[ \t].*\n)+(\S.*)\n")
+
+
+def syntax_errors(output, directory="/"):
+    """ui/files.py syntax_errors, from mpy-cross's output: [{"line", "message"}]."""
+    from lvgl_mpy_studio.build.compiler import parse_compiler_errors
+
+    return [{"line": error["line"], "message": error.get("detail") or error["message"]} for error in parse_compiler_errors(output, directory)]
+
+
+def lv_completions():
+    """ui/files.py lvgl_completions: the names after `lv.`, from gen/completion.json."""
+    from lvgl_mpy_studio.platform import root_dir
+
+    api = json.loads((root_dir() / "lvgl_mpy_studio" / "gen" / "completion.json").read_text(encoding="utf-8"))
+    return sorted({*api["constants"], *api["functions"], *api["objects"]})
+
+
+def code_generate_check():
+    """ui/code/editor.py check_syntax, first half: the open project generated, to be compiled."""
+    from lvgl_mpy_studio.gen.project_gen import generate_project
+
+    shutil.rmtree(CHECK_DIR, ignore_errors=True)
+    generate_project(_doc().project, CHECK_DIR)
+    return {"directory": CHECK_DIR, "files": sorted(path.name for path in Path(CHECK_DIR).glob("*.py"))}
+
+
+def code_compile_errors(directory, outputs):
+    """compile_python's errors, mapped as check_syntax and _show_compile_errors map them: outputs is
+    {file name: mpy-cross output} of the files that did not compile."""
+    from lvgl_mpy_studio.build.compiler import map_error, parse_compiler_errors
+
+    modules = {module.name for module in _doc().project.modules}
+    errors = []
+    for name in sorted(outputs):
+        errors.extend(parse_compiler_errors(outputs[name], directory))
+    sourcemap = Path(directory) / "sourcemap.json"
+    return [map_error(error, sourcemap, modules) if sourcemap.exists() else error for error in errors]
+
+
+def code_trace_errors(text, directory=SIM_PROJECT):
+    """ui/main_run.py _sim_output: the complete tracebacks in text, as rows of the Errors panel."""
+    from lvgl_mpy_studio.build.compiler import traceback_errors
+    from lvgl_mpy_studio.core.i18n import tr
+
+    try:
+        sourcemap = json.loads((Path(directory) / "sourcemap.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        sourcemap = None
+    modules = {module.name for module in _doc().project.modules}
+    rows = []
+    for block in TRACEBACK_BLOCK.finditer(text.replace("\r\n", "\n")):
+        exception = block.group(1).strip()
+        errors = sorted(traceback_errors(block.group(0), sourcemap, modules), key=lambda error: not error.get("origin"))
+        for mapped in errors:
+            mapped["message"] = exception if mapped["origin"] else tr("called from here") + " — " + exception
+            mapped["tooltip"] = block.group(0).strip()
+            rows.append(mapped)
+    return rows
+
+
+def code_state():
+    """What the Code tab lists: the general code, the handlers, the modules, with their text."""
+    project = _doc().project
+    return {
+        "module": project.code.module,
+        "handlers": [{"name": name, "widget": handler.widget, "event": handler.event, "body": handler.body} for name, handler in project.code.handlers.items()],
+        "modules": [{"id": module.id, "name": module.name, "source": module.source} for module in project.modules],
+    }
+
+
+def code_set(kind, key, text, session=0):
+    """ui/code/editor.py _text_changed: one undo step per editing session (merge id 10000 + session)."""
+    from lvgl_mpy_studio.core.modules import set_module_source
+
+    document = _doc()
+    project = document.project
+    if kind == "module":
+        mutator = lambda project: setattr(project.code, "module", text)  # noqa: E731
+    elif kind == "pymodule":
+        name = next(module.name for module in project.modules if module.id == key)
+        mutator = lambda project: set_module_source(project, name, text)  # noqa: E731
+    else:
+        mutator = lambda project: setattr(project.code.handlers[key], "body", text)  # noqa: E731
+    document.execute("Edit Code", mutator, 10000 + int(session), True)
+    return doc_state()
+
+
+def module_validate(name, exclude_id=None):
+    from lvgl_mpy_studio.core.modules import validate_module_name
+
+    project = _doc().project
+    renamed = next((module for module in project.modules if module.id == exclude_id), None)
+    return validate_module_name(name, project, exclude=renamed)
+
+
+def module_references(name):
+    from lvgl_mpy_studio.core.modules import module_references as references
+
+    return references(_doc().project, name)
+
+
+def module_create(name):
+    """ui/main_tree.py new_module, after the dialog."""
+    from lvgl_mpy_studio.core.i18n import tr
+    from lvgl_mpy_studio.core.modules import create_module
+
+    _doc().execute(tr("New Module"), lambda project: create_module(project, name, NEW_MODULE_SOURCE))
+    module = next(module for module in _doc().project.modules if module.name == name)
+    return {"id": module.id, "state": doc_state()}
+
+
+def module_rename(old, new):
+    """ui/main_tree.py rename_module, after the dialog and the question about imports."""
+    from lvgl_mpy_studio.core.i18n import tr
+    from lvgl_mpy_studio.core.modules import rename_module
+
+    warnings = []
+    _doc().execute(tr("Rename Module"), lambda project: warnings.extend(rename_module(project, old, new)))
+    return {"warnings": warnings, "state": doc_state()}
+
+
+def module_delete(name):
+    """ui/main_tree.py delete_module, after the question."""
+    from lvgl_mpy_studio.core.i18n import tr
+    from lvgl_mpy_studio.core.modules import delete_module
+
+    warnings = []
+    _doc().execute(tr("Delete Module"), lambda project: warnings.extend(delete_module(project, name)))
+    return {"warnings": warnings, "state": doc_state()}
+
+
 METHODS = {
     "info": info,
     "generate": generate,
@@ -268,6 +408,18 @@ METHODS = {
     "sim_project": sim_project,
     "sim_reset_folder": sim_reset_folder,
     "sim_program": sim_program,
+    "syntax_errors": syntax_errors,
+    "lv_completions": lv_completions,
+    "code_generate_check": code_generate_check,
+    "code_compile_errors": code_compile_errors,
+    "code_trace_errors": code_trace_errors,
+    "code_state": code_state,
+    "code_set": code_set,
+    "module_validate": module_validate,
+    "module_references": module_references,
+    "module_create": module_create,
+    "module_rename": module_rename,
+    "module_delete": module_delete,
 }
 
 

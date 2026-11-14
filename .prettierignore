@@ -14,3 +14,4 @@ public/examples/
 public/runtime/
 .cache/
 runtime.lock.json
+public/mpy-cross/
