@@ -5,6 +5,8 @@ const PORT = 4173;
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
+  // Three browsers at once on one PC compete for the CPU and distort the start-up time measured.
+  workers: process.env.CI ? undefined : 3,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',

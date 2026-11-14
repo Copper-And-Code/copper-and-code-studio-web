@@ -4,6 +4,8 @@ export interface PythonError {
   type: string;
   message: string;
   traceback?: string;
+  /** ExternalChangeError only: the file was removed, not changed. */
+  deleted?: boolean;
 }
 
 export type BridgeReply = { ok: true; result: unknown } | { ok: false; error: PythonError };
@@ -23,6 +25,13 @@ export interface CallRequest {
   method: string;
   args: unknown[];
 }
+
+/** Page → worker: a file of Pyodide's file system, which upstream reads and writes. */
+export type FsRequest =
+  | { kind: 'fs'; id: number; op: 'write'; path: string; data: Uint8Array }
+  | { kind: 'fs'; id: number; op: 'read' | 'remove' | 'folder'; path: string };
+
+export type WorkerRequest = CallRequest | FsRequest;
 
 /** Worker → page. */
 export type WorkerMessage =

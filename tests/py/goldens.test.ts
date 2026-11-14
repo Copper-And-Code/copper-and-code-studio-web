@@ -8,7 +8,7 @@ import type { BoardExport, GeneratedProject } from '../../src/py/protocol.ts';
 import { ROOT, startPyodide } from './pyodide-node.mjs';
 
 const GOLDENS = join(ROOT, 'tests/fixtures/goldens');
-const BUNDLE = join(ROOT, 'public/py');
+const BUNDLE = join(ROOT, 'public/python');
 
 interface GoldenIndex {
   upstreamVersion: string;

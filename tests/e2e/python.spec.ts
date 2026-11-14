@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
 
 const ROOT = join(import.meta.dirname, '../..');
 const GOLDENS = join(ROOT, 'tests/fixtures/goldens');
@@ -10,7 +10,8 @@ test('Python starts in its worker and the About box names it', async ({ page }) 
   await expect(page.getByTestId('python-status')).toHaveText(/^Python 3\.\d+\.\d+ ready in /, {
     timeout: 60_000,
   });
-  await page.getByRole('button', { name: 'About' }).click();
+  await page.getByRole('button', { name: 'Help' }).click();
+  await page.getByRole('menuitem', { name: 'About LVGL MPY Studio' }).click();
   await expect(page.getByTestId('python-version')).toHaveText(/^3\.\d+\.\d+ \(Pyodide [\d.]+\)$/);
 });
 

@@ -1,0 +1,93 @@
+// A store on a FileSystemDirectoryHandle: the browser's private file system (OPFS), which works
+// in every engine, or a folder of the PC opened with the File System Access API (Chromium).
+import { type Entry, type FileStore, StoreError, pathParts, sortEntries } from './store.ts';
+
+function isNotFound(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'NotFoundError' || error.name === 'TypeMismatchError')
+  );
+}
+
+export class HandleStore implements FileStore {
+  readonly readOnly = false;
+
+  constructor(
+    readonly id: string,
+    readonly label: string,
+    private readonly root: FileSystemDirectoryHandle,
+  ) {}
+
+  private async folder(parts: string[], create = false): Promise<FileSystemDirectoryHandle> {
+    let handle = this.root;
+    for (const part of parts) handle = await handle.getDirectoryHandle(part, { create });
+    return handle;
+  }
+
+  async list(folder: string): Promise<Entry[]> {
+    const handle = await this.folder(pathParts(folder));
+    const entries: Entry[] = [];
+    // values() is in every engine's FileSystemDirectoryHandle, not yet in TypeScript's DOM types.
+    const values = (handle as unknown as { values(): AsyncIterable<FileSystemHandle> }).values();
+    for await (const child of values) {
+      entries.push({ name: child.name, kind: child.kind === 'directory' ? 'folder' : 'file' });
+    }
+    return sortEntries(entries);
+  }
+
+  async read(path: string): Promise<Uint8Array | null> {
+    const parts = pathParts(path);
+    const name = parts.pop();
+    if (!name) return null;
+    try {
+      const file = await (await (await this.folder(parts)).getFileHandle(name)).getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async write(path: string, data: Uint8Array): Promise<void> {
+    const parts = pathParts(path);
+    const name = parts.pop();
+    if (!name) throw new StoreError('No file name');
+    const handle = await (await this.folder(parts, true)).getFileHandle(name, { create: true });
+    if (typeof handle.createWritable !== 'function') {
+      throw new StoreError('This browser cannot write files here');
+    }
+    const writable = await handle.createWritable();
+    try {
+      await writable.write(data as Uint8Array<ArrayBuffer>);
+      await writable.close();
+    } catch (error) {
+      await writable.abort().catch(() => {});
+      throw error;
+    }
+  }
+
+  async remove(path: string): Promise<void> {
+    const parts = pathParts(path);
+    const name = parts.pop();
+    if (!name) throw new StoreError('Cannot remove the root');
+    try {
+      await (await this.folder(parts)).removeEntry(name, { recursive: true });
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+  }
+
+  async makeFolder(path: string): Promise<void> {
+    await this.folder(pathParts(path), true);
+  }
+}
+
+/** The workspace: a folder of the browser's private file system. */
+export async function openWorkspace(): Promise<HandleStore> {
+  const root = await navigator.storage.getDirectory();
+  return new HandleStore(
+    'workspace',
+    'Workspace',
+    await root.getDirectoryHandle('workspace', { create: true }),
+  );
+}

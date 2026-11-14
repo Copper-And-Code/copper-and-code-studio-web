@@ -3,7 +3,8 @@
 // upstream works. Calls wait until Python is ready and are answered one at a time.
 import type { PyodideInterface } from 'pyodide';
 import { installUpstream, type PythonCall } from './boot.ts';
-import type { CallRequest, PythonInfo, WorkerMessage } from './protocol.ts';
+import { handleRequest } from './host.ts';
+import type { PythonInfo, WorkerMessage, WorkerRequest } from './protocol.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -24,16 +25,16 @@ async function fetchBundle(): Promise<Uint8Array> {
   // The index is checked every time, so a new deploy is seen; the zip is named after the
   // upstream tag, so it can stay cached.
   const index = (await (
-    await fetch(new URL('py/bundle.json', site), { cache: 'no-cache' })
+    await fetch(new URL('python/bundle.json', site), { cache: 'no-cache' })
   ).json()) as BundleIndex;
-  const response = await fetch(new URL(`py/${index.file}`, site));
+  const response = await fetch(new URL(`python/${index.file}`, site));
   if (!response.ok) throw new Error(`${index.file}: HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
   if ((await hex(buffer)) !== index.sha256) throw new Error(`${index.file}: wrong sha256`);
   return new Uint8Array(buffer);
 }
 
-async function start(): Promise<PythonCall> {
+async function start(): Promise<{ py: PyodideInterface; call: PythonCall }> {
   const t0 = performance.now();
   post({ kind: 'status', stage: 'loading-python' });
   const indexURL = new URL('pyodide/', site).href;
@@ -52,7 +53,7 @@ async function start(): Promise<PythonCall> {
     startMs: Math.round(performance.now() - t0),
   };
   post({ kind: 'ready', info });
-  return call;
+  return { py, call };
 }
 
 const ready = start();
@@ -61,11 +62,19 @@ ready.catch((error: unknown) => {
   post({ kind: 'failed', error: { type: e.name, message: e.message } });
 });
 
-self.addEventListener('message', (event: MessageEvent<CallRequest>) => {
+self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
-  if (request.kind !== 'call') return;
   ready.then(
-    (call) => post({ kind: 'reply', id: request.id, ...call(request.method, request.args) }),
+    ({ py, call }) => {
+      const reply = handleRequest(py, call, request);
+      // A file read goes back as a transferred buffer, not copied.
+      const transfer =
+        reply.ok && reply.result instanceof Uint8Array ? [reply.result.buffer as ArrayBuffer] : [];
+      self.postMessage(
+        { kind: 'reply', id: request.id, ...reply } satisfies WorkerMessage,
+        transfer,
+      );
+    },
     (error: unknown) =>
       post({
         kind: 'reply',

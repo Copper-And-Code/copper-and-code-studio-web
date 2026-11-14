@@ -4,10 +4,11 @@ prompts/
 test-results/
 playwright-report/
 coverage/
-/public/py/
+/public/python/
 /public/runtime/
 *.log
 .DS_Store
 /public/pyodide/
 /tests/fixtures/goldens/
 test-results-upstream-survey.json
+/public/examples/

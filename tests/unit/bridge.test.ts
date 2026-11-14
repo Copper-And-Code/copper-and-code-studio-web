@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { PythonBridge, PythonCallError, type WorkerLike } from '../../src/py/bridge.ts';
-import type { CallRequest, WorkerMessage } from '../../src/py/protocol.ts';
+import type { WorkerMessage, WorkerRequest } from '../../src/py/protocol.ts';
 
 /** A worker that answers from a script, so the bridge is tested without Pyodide. */
 class FakeWorker implements WorkerLike {
-  sent: CallRequest[] = [];
+  sent: WorkerRequest[] = [];
   private listener: ((event: MessageEvent<WorkerMessage>) => void) | undefined;
-  postMessage(message: CallRequest) {
+  postMessage(message: WorkerRequest) {
     this.sent.push(message);
   }
   addEventListener(_type: 'message', listener: (event: MessageEvent<WorkerMessage>) => void) {
@@ -39,7 +39,7 @@ describe('PythonBridge', () => {
     const bridge = new PythonBridge(worker);
     const first = bridge.generate('{"a": 1}');
     const second = bridge.exportBoard('{"b": 2}', 'esp32_4848s040_480');
-    expect(worker.sent.map((m) => [m.method, m.args])).toEqual([
+    expect(worker.sent.map((m) => (m.kind === 'call' ? [m.method, m.args] : m.op))).toEqual([
       ['generate', ['{"a": 1}']],
       ['export_board', ['{"b": 2}', 'esp32_4848s040_480']],
     ]);

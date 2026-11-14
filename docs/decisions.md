@@ -48,6 +48,43 @@ repeated here. This file records the decisions taken while building, and why.
   file system, so a test can never write into the submodule. "Qt-free" means: upstream's
   dependencies apart from PySide6 and qtawesome. The host run without Qt is the reference for
   what is expected to fail anyway.
+- **The bundle is served from `python/`, not `py/`.** Vite's dev server answers a request for
+  `/py/…` with the page itself, because the project has a `py/` folder of its own (the glue).
+  WebKit then fails on the JSON; the built site was not affected.
 - **Test packages come from the network at test time**: pytest from Pyodide's package index,
   pyserial, mpremote and hypothesis from PyPI through micropip, at exact versions. They are not
   part of the site.
+
+## Phase 2 (2026-11-14)
+
+- **The project document is a temporary copy** of upstream's Qt-free logic, in
+  `py/lms_document.py`, at the owner's choice, until upstream request 5 moves it into a module
+  without Qt. It replaces `QUndoStack` with the few rules of it that `ProjectDocument` relies on:
+  push, merging into the top command unless it is the clean state, undo, redo, clean index.
+- **The file goes through Pyodide's file system.** Upstream reads and writes the project with
+  `Path`. Before each operation that looks at the file on disk (open, save, reload), the session
+  copies it from its store into Pyodide (or removes it there, if it is gone); after a save it
+  copies the result back. So upstream's own revision check sees a file changed in another tab,
+  or by the desktop IDE in a folder of the PC. If writing back to the store fails, the document
+  goes back to unsaved (`doc_mark_unsaved`).
+- **Examples are read-only**, at the owner's choice: one opens as it is, and its first Save is a
+  Save As, which suggests the workspace and the same name.
+- **One store interface for every place**: the workspace (OPFS), a folder of the PC (File System
+  Access, Chromium), the examples (read-only, over HTTP), memory (tests, and the fallback when the
+  browser refuses OPFS). OPFS and a PC folder share one implementation, as both are directory
+  handles. The handles of PC folders are kept in IndexedDB.
+- **The edit used to test saving is Rename Page**, the desktop's own action with its checks and
+  its undo text, as the desktop has no way to change the project's name.
+- **Messages are upstream's English strings** (`tr` in `src/i18n/tr.ts`), so that upstream's
+  `it.json` applies to them in phase 9. The web adds a few menu items the desktop does not need
+  (New for a Board, Open Example, Open a Folder of the PC, Import, Export); their strings will be
+  proposed upstream then.
+- **Shortcuts**: Ctrl+S, Ctrl+Shift+S, Ctrl+O, Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z. Ctrl+N is not
+  taken, because the browsers keep it for a new window.
+- **The asset scripts synchronise their folders** (`scripts/sync-dir.mjs`) instead of deleting
+  and recreating them: Vite's dev server, when its `public/` folders are recreated under it,
+  answers with the page instead of the files.
+- **WebKit gets a profile on disk in the e2e tests** (`tests/e2e/fixtures.ts`), because without one
+  it has no OPFS; Safari has it.
+- **Local e2e runs use 3 workers**: with more, the three browsers compete for the CPU and the
+  start-up time measured is not the browser's.

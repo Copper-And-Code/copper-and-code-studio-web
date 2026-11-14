@@ -11,11 +11,11 @@ import type { PyodideInterface } from 'pyodide';
 let py: PyodideInterface;
 
 beforeAll(async () => {
-  const bundle = JSON.parse(readFileSync(join(ROOT, 'public/py/bundle.json'), 'utf8')) as {
+  const bundle = JSON.parse(readFileSync(join(ROOT, 'public/python/bundle.json'), 'utf8')) as {
     file: string;
   };
   py = await startPyodide();
-  installUpstream(py, new Uint8Array(readFileSync(join(ROOT, 'public/py', bundle.file))));
+  installUpstream(py, new Uint8Array(readFileSync(join(ROOT, 'public/python', bundle.file))));
 }, 120_000);
 
 it('imports every module of the bundle, without Qt, pyserial or mpremote', () => {

@@ -1,16 +1,16 @@
 // The page's side of the Python worker: typed calls that return promises.
 import type {
   BoardExport,
-  CallRequest,
   GeneratedProject,
   PythonError,
   PythonInfo,
   WorkerMessage,
+  WorkerRequest,
 } from './protocol.ts';
 
 /** What the bridge needs of a Worker; a fake one stands in for it in the unit tests. */
 export interface WorkerLike {
-  postMessage(message: CallRequest): void;
+  postMessage(message: WorkerRequest, transfer?: Transferable[]): void;
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerMessage>) => void): void;
   terminate(): void;
 }
@@ -24,11 +24,13 @@ export type PythonState =
 export class PythonCallError extends Error {
   readonly type: string;
   readonly traceback: string | undefined;
+  readonly deleted: boolean | undefined;
   constructor(error: PythonError) {
     super(error.message);
     this.name = 'PythonCallError';
     this.type = error.type;
     this.traceback = error.traceback;
+    this.deleted = error.deleted;
   }
 }
 
@@ -89,10 +91,33 @@ export class PythonBridge {
   }
 
   call<T>(method: string, ...args: unknown[]): Promise<T> {
+    return this.send<T>((id) => ({ kind: 'call', id, method, args }));
+  }
+
+  /** Writes a file into Pyodide's file system. The data is copied, the caller keeps its own. */
+  writeFile(path: string, data: Uint8Array): Promise<void> {
+    return this.send((id) => ({ kind: 'fs', id, op: 'write', path, data }));
+  }
+
+  /** A file of Pyodide's file system, or null if there is none. */
+  readFile(path: string): Promise<Uint8Array | null> {
+    return this.send((id) => ({ kind: 'fs', id, op: 'read', path }));
+  }
+
+  /** Creates a folder of Pyodide's file system, with its parents. */
+  makeFolder(path: string): Promise<void> {
+    return this.send((id) => ({ kind: 'fs', id, op: 'folder', path }));
+  }
+
+  removeFile(path: string): Promise<void> {
+    return this.send((id) => ({ kind: 'fs', id, op: 'remove', path }));
+  }
+
+  private send<T>(request: (id: number) => WorkerRequest): Promise<T> {
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
-      this.worker.postMessage({ kind: 'call', id, method, args });
+      this.worker.postMessage(request(id));
     });
   }
 

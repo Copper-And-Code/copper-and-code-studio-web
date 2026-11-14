@@ -2,17 +2,18 @@
 // (PLAN.md 3.2). The zip keeps upstream's layout, so upstream code that finds files relative to
 // its own path (runtime/display_driver.py, gen/widgets.json...) works unchanged.
 //
-// Output: public/py/lms-upstream-<tag>.zip and public/py/bundle.json, which names it.
+// Output: public/python/lms-upstream-<tag>.zip and public/python/bundle.json, which names it.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
+import { syncDir } from './sync-dir.mjs';
 import { upstreamInfo } from './upstream-info.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const UPSTREAM = join(ROOT, 'upstream');
-const OUT = join(ROOT, 'public', 'py');
+const OUT = join(ROOT, 'public', 'python');
 
 /** What goes into the bundle: [source folder, path inside the zip, files or folders]. */
 const SOURCES = [
@@ -83,13 +84,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     },
   );
   const name = bundleName(info);
-  rmSync(OUT, { recursive: true, force: true });
-  mkdirSync(OUT, { recursive: true });
-  writeFileSync(join(OUT, name), zip);
   const sha256 = createHash('sha256').update(zip).digest('hex');
-  writeFileSync(
-    join(OUT, 'bundle.json'),
-    JSON.stringify({ file: name, sha256, upstream: info }, null, 2) + '\n',
+  const index = JSON.stringify({ file: name, sha256, upstream: info }, null, 2) + '\n';
+  syncDir(
+    OUT,
+    new Map([
+      [name, zip],
+      ['bundle.json', Buffer.from(index)],
+    ]),
   );
   console.log(`${name}: ${Object.keys(files).length} files, ${(zip.length / 1024).toFixed(0)} kB`);
 }

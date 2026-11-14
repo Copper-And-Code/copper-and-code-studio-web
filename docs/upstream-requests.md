@@ -10,6 +10,7 @@ tagged.
 | 2   | `mpy-cross` in WebAssembly as a release asset     | proposed |
 | 3   | A CI check that the Qt-free packages stay Qt-free | proposed |
 | 4   | Test files that load without Qt                   | proposed |
+| 5   | The project document without Qt                   | proposed |
 
 ---
 
@@ -81,3 +82,22 @@ run as whole files (`tests/py/exclusions.json`), so a regression there is not se
 
 **Test.** `pytest --continue-on-collection-errors` in an environment without PySide6 loads every
 test file with no collection error; the Qt tests are skipped.
+
+## 5. The project document without Qt
+
+**What.** Move the Qt-free logic of `ui/document.py` (`ProjectDocument`: open, save, Save As
+with a new `projectId`, the outside-change check, reload; `SnapshotCommand`; `ExternalChangeError`)
+and `ui/main_files.py` `_default_project` into a module without Qt, for example
+`core/document.py`, with a small undo stack of its own. `ui/document.py` keeps the Qt signals and
+the `QUndoStack` on top of it.
+
+**Why.** The web IDE needs exactly this logic, and it cannot import Qt. Today it runs a
+temporary copy, `py/lms_document.py`, which follows upstream line by line; any fix upstream has
+to be copied by hand until this moves. Phase 5 (the designer) will lean on the undo stack even
+more.
+
+**Where.** `lvgl_mpy_studio/ui/document.py`, `lvgl_mpy_studio/ui/main_files.py`, a new
+`lvgl_mpy_studio/core/document.py`.
+
+**Test.** The tests of `ui/document.py` that need no window, moved to a test of the new module;
+it runs without PySide6. Here, `tests/py/session.test.ts` keeps passing with the copy deleted.

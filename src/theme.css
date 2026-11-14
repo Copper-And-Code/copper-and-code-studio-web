@@ -5,6 +5,9 @@
   --muted: #5f6672;
   --border: #d5d9e0;
   --accent: #2563eb;
+  --on-accent: #ffffff;
+  --selection: #dbe7ff;
+  --danger: #b42318;
   font-family:
     system-ui,
     -apple-system,
@@ -22,6 +25,9 @@
     --muted: #9aa1ad;
     --border: #353a42;
     --accent: #60a5fa;
+    --on-accent: #0b1220;
+    --selection: #23324d;
+    --danger: #f97066;
   }
 }
 
