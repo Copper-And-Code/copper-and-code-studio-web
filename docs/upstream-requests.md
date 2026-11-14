@@ -20,6 +20,8 @@ tagged.
 
 **Why.** The web IDE needs the same runtime that upstream's browser demos use, at the same tag.
 It must not build Emscripten (about 1 GB of SDK), and it must not commit 6 MB of binaries.
+The submodule alone does not carry the runtime: upstream's `.gitignore` leaves out
+`runtime/out-web/`.
 Until the asset exists, `scripts/fetch-runtime.mjs` takes the files from a local
 `upstream/runtime/out-web/` and records their sha256, and the web CI cannot run the simulator
 tests.

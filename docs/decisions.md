@@ -7,9 +7,10 @@ repeated here. This file records the decisions taken while building, and why.
 
 - **Upstream pin.** The owner asked for the submodule to go straight to `v0.7.0` rather than
   `v0.6.1`, because only 0.7.0 has display driver contract 1, `runtime/program/`,
-  `runtime/web/program.html` and the shell example. The tag does not exist yet: the submodule
-  points to the commit `a45a85f` ("Release 0.7.0"), and moves to the tag as soon as it is pushed
-  upstream. The About box shows "untagged" until then.
+  `runtime/web/program.html` and the shell example. Until the tag existed the submodule pointed to
+  the commit `a45a85f` ("Release 0.7.0"). The tag, pushed the same day, is one commit later
+  (`220875c`: README and a fix in `core/i18n.py` for the File menu), and the submodule now points
+  to it. That fix matters here too, because the web IDE uses the same translations.
 - **`prompts/` stays out of the repository**, at the owner's request. It is in `.gitignore`.
 - **TypeScript 6.0.3, not 7.** typescript-eslint 8.72 accepts TypeScript below 6.1.
 - **Lit without decorators.** Components use `static properties` and plain fields, so the build

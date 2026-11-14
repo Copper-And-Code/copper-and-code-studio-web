@@ -3,8 +3,7 @@
 Each feature of the desktop LVGL MPY Studio is **done**, **partial** (what is missing) or **not
 started**. A feature is marked only as far as a test or the owner has verified it.
 
-Upstream: the submodule in `upstream/` points to commit `a45a85f` ("Release 0.7.0"), which has
-no tag yet. The About box says so until the tag exists.
+Upstream: the submodule in `upstream/` points to the tag `v0.7.0`.
 
 ## Features
 
@@ -47,12 +46,12 @@ printing.
 
 ## Infrastructure
 
-| Item                                                   | State              | Checked by                                                                             |
-| ------------------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------- |
-| Empty shell with the upstream release in the About box | done               | `tests/e2e/shell.spec.ts`: Chromium and Firefox locally; WebKit in CI only (see below) |
-| Lint, typecheck, unit tests                            | done               | `pnpm lint`, `pnpm typecheck`, `pnpm test` (4 tests)                                   |
-| CI (`ci.yml`)                                          | written, never run | needs the GitHub repository                                                            |
-| Pages deploy (`pages.yml`)                             | written, never run | runs only on the owner's request                                                       |
+| Item                                                   | State              | Checked by                                                                                  |
+| ------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------- |
+| Empty shell with the upstream release in the About box | done               | `tests/e2e/shell.spec.ts`: Chromium, Firefox and WebKit in CI; Chromium and Firefox locally |
+| Lint, typecheck, unit tests                            | done               | `pnpm lint`, `pnpm typecheck`, `pnpm test` (4 tests)                                        |
+| CI (`ci.yml`)                                          | done               | first run green on 2026-11-14 (run 43570952529): 4 unit tests, 3 of 3 e2e                   |
+| Pages deploy (`pages.yml`)                             | written, never run | runs only on the owner's request                                                            |
 
 WebKit does not start on the development PC (Zorin OS 18.1): Playwright asks for the system
 library `libavif16`. In CI `playwright install --with-deps` installs it.
