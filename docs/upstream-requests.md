@@ -12,6 +12,8 @@ tagged.
 | 4   | Test files that load without Qt                   | proposed                                      |
 | 5   | The project document without Qt                   | proposed                                      |
 | 6   | The browser loaders with a host interface         | proposed                                      |
+| 7   | The preview after a quick undo                    | proposed                                      |
+| 8   | `.mpy` files without the temporary folder's path  | proposed                                      |
 
 ---
 
@@ -137,3 +139,39 @@ module; from `lms_web.js` the name is not defined, so the end of a game would ra
 
 **Test.** Upstream's browser test of the shell demo, unchanged; here, `tests/e2e/simulator.spec.ts`
 with `src/sim/frame.js` reduced to the host object.
+
+## 7. The preview after a quick undo
+
+**What.** In `ui/designer/preview.py`, `PreviewRenderer.request` returns early when the page was
+last drawn with the same `design_key`. Skip that early return while a rendering is running or
+its timer is pending; `_start` then draws the latest request, as it already does with `_dirty`.
+
+**Why.** A change starts a rendering of the new page; an undo right after it asks for the page
+as it was, whose key is still the one in `_done`. The request is dropped, the rendering of the
+change ends, and the canvas keeps showing the change that was undone until the next edit. The web
+IDE reimplements the renderer (`src/app/preview.ts`) and met it in its tests: a drag released and
+Ctrl+Z at once. On the desktop it has not been reproduced; the logic is the same, so the window
+for it is the time a rendering takes.
+
+**Where.** `lvgl_mpy_studio/ui/designer/preview.py`, `PreviewRenderer.request`.
+
+**Test.** With a fake `render` that waits for an event: request key A, then B, then A again while
+B is rendering; after it, the renderer draws A once more.
+
+## 8. `.mpy` files without the temporary folder's path
+
+**What.** In `build/compiler.py`, `compile_python` runs mpy-cross on `str(path)`, the absolute
+path, from the folder of the files. Give it `path.name` instead (the folder is already `cwd`), as
+`gen/board_gen.py` does with `-s`.
+
+**Why.** mpy-cross stores the source name in the `.mpy`. With the absolute path, each file carries
+the temporary folder's path: on Linux 113 bytes more for a one-line file. The budget's flash of a
+project without a compatible board grows by that, and depends on where the system keeps
+temporary folders; fifteen measures 13331 bytes on Linux and 13095 with the names. The web IDE
+compiles with the names, so its number is the second one (`scripts/budgets.py`). Tracebacks of the
+simulator would also show `ui.py` instead of a temporary path.
+
+**Where.** `lvgl_mpy_studio/build/compiler.py`, `compile_python`.
+
+**Test.** `measure_budget` of an example without a board gives the same flash from two different
+temporary folders.

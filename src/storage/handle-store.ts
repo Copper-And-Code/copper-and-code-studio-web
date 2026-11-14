@@ -91,3 +91,16 @@ export async function openWorkspace(): Promise<HandleStore> {
     await root.getDirectoryHandle('workspace', { create: true }),
   );
 }
+
+/**
+ * The folder of the browser's private storage where upstream's configuration folder is kept
+ * (board profiles, blocks): not a place for the user's files, so not in the file chooser.
+ */
+export async function openConfig(): Promise<HandleStore> {
+  const root = await navigator.storage.getDirectory();
+  return new HandleStore(
+    'config',
+    'Configuration',
+    await root.getDirectoryHandle('config', { create: true }),
+  );
+}

@@ -49,6 +49,14 @@ export type FormValues = Record<string, string | number>;
 
 type Request =
   | {
+      kind: 'custom';
+      title: string;
+      body: (finish: (value: unknown) => void) => unknown;
+      cancel: unknown;
+      wide: boolean;
+      resolve: (value: unknown) => void;
+    }
+  | {
       kind: 'form';
       title: string;
       fields: FormField[];
@@ -104,6 +112,41 @@ export class Dialogs extends LitElement {
       border-radius: 8px;
       width: min(520px, calc(100vw - 32px));
       box-sizing: border-box;
+    }
+    dialog.wide {
+      width: min(1000px, calc(100vw - 32px));
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px 10px;
+      align-items: center;
+      margin: 8px 0;
+    }
+    .table {
+      max-height: 40vh;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 3px 6px;
+      white-space: nowrap;
+    }
+    tbody tr {
+      cursor: pointer;
+    }
+    tbody tr[aria-selected='true'] {
+      background: var(--selection);
+    }
+    .problem {
+      color: var(--danger);
     }
     dialog::backdrop {
       background: rgb(0 0 0 / 0.35);
@@ -272,6 +315,32 @@ export class Dialogs extends LitElement {
     );
   }
 
+  /**
+   * A dialog whose body the caller draws, for the desktop's own dialogs (project settings, the
+   * profile and block managers); refresh() draws it again after the caller's state changed.
+   */
+  custom<T>(
+    title: string,
+    body: (finish: (value: T) => void) => unknown,
+    cancel: T,
+    wide = false,
+  ): Promise<T> {
+    return new Promise<T>((resolve) =>
+      this.push({
+        kind: 'custom',
+        title,
+        body: body as (finish: (value: unknown) => void) => unknown,
+        cancel,
+        wide,
+        resolve: resolve as (value: unknown) => void,
+      }),
+    );
+  }
+
+  refresh(): void {
+    this.requestUpdate();
+  }
+
   choose(options: ChooseOptions): Promise<Location | null> {
     return new Promise((resolve) => this.push({ kind: 'choose', options, resolve }));
   }
@@ -299,12 +368,14 @@ export class Dialogs extends LitElement {
     if (request.kind === 'message') request.resolve(value);
     else if (request.kind === 'text') request.resolve(value as string | null);
     else if (request.kind === 'form') request.resolve(value as FormValues | null);
+    else if (request.kind === 'custom') request.resolve(value);
     else request.resolve(value as Location | null);
     void this.next();
   }
 
   private cancelValue(): unknown {
-    return this.current?.kind === 'message' ? this.current.cancel : null;
+    const current = this.current;
+    return current?.kind === 'message' || current?.kind === 'custom' ? current.cancel : null;
   }
 
   // ---- file chooser ----
@@ -635,10 +706,14 @@ export class Dialogs extends LitElement {
       `;
     } else if (request?.kind === 'form') {
       body = this.renderForm(request);
+    } else if (request?.kind === 'custom') {
+      body = html`<h1 id="dialog-title">${request.title}</h1>
+        ${request.body((value) => this.finish(value))}`;
     } else if (request?.kind === 'choose') {
       body = this.renderChooser(request.options);
     }
     return html`<dialog
+      class=${request?.kind === 'custom' && request.wide ? 'wide' : ''}
       aria-labelledby="dialog-title"
       @cancel=${(e: Event) => {
         e.preventDefault();

@@ -162,7 +162,67 @@ interface Workflow {
     addPage?: boolean;
     initialPage?: string;
     deletePage?: string;
+    select?: string[];
+    set?: [string, string];
+    event?: string;
+    page?: string;
+    add?: [string, number, number];
+    drop?: [string, number, number];
+    move?: [number, number];
+    resize?: Record<string, [number, number]>;
+    copy?: boolean;
+    cut?: boolean;
+    paste?: boolean;
+    duplicate?: boolean;
+    delete?: boolean;
+    align?: string;
+    distribute?: string;
+    front?: boolean;
+    back?: boolean;
+    adaptPage?: string;
+    code?: [string, string | null, string];
+    projectSettings?: [string, string];
   }[];
+}
+
+/** The widgets selected as a person would: the first in the tree, the others with Ctrl on the canvas. */
+async function selectWidgets(page: Page, names: string[]) {
+  const [first, ...others] = names;
+  await page.getByRole('treeitem', { name: new RegExp(`^${first} — `) }).click();
+  if (others.length) await menu(page, 'View', 'Fit to Window');
+  for (const name of others) {
+    const center = await page.evaluate((name) => {
+      const studio = window.lmsStudio.studio;
+      const id = studio?.currentPage() ?? '';
+      const widget = studio?.designer?.pages.get(id)?.widgets.find((w) => w.name === name);
+      const props = (widget?.props ?? {}) as Record<string, number>;
+      return [(props.x ?? 0) + (props.width ?? 0) / 2, (props.y ?? 0) + (props.height ?? 0) / 2];
+    }, name);
+    await clickAt(page, center[0] ?? 0, center[1] ?? 0, true);
+  }
+  await expect
+    .poll(() => page.evaluate(() => window.lmsStudio.studio?.designer?.propertiesView.names))
+    .toEqual(names);
+}
+
+/** A value typed into the Properties panel, or a box ticked. */
+async function setProperty(page: Page, name: string, text: string) {
+  await page.getByTestId('properties-tab-properties').click();
+  const input = page.getByTestId('properties').locator(`[data-property="${name}"]`);
+  if ((await input.getAttribute('type')) === 'checkbox') await input.setChecked(text === 'true');
+  else {
+    await input.fill(text);
+    await input.press('Enter');
+  }
+  await expect
+    .poll(() =>
+      page.evaluate((name) => {
+        const view = window.lmsStudio.studio?.designer?.propertiesView;
+        const row = view?.categories.flatMap((c) => c.rows).find((r) => r.name === name);
+        return row?.value;
+      }, name),
+    )
+    .toBe(text);
 }
 
 /** A page action from the project tree's context menu on that page. */
@@ -217,6 +277,27 @@ for (const workflow of workflows) {
         await expect(page.getByTestId('page').first()).toHaveText(step.initialPage);
         continue;
       }
+      if (step.page) {
+        await page.getByRole('tab', { name: step.page, exact: true }).click();
+        await menu(page, 'View', 'Fit to Window');
+        continue;
+      }
+      if (await canvasStep(page, step)) continue;
+      if (step.select) {
+        if (step.select.length) await selectWidgets(page, step.select);
+        else await clickAt(page, -6, -6);
+        continue;
+      }
+      if (step.set) {
+        await setProperty(page, ...step.set);
+        continue;
+      }
+      if (step.event) {
+        await page.getByTestId('properties-tab-events').click();
+        await page.getByTestId('events').locator(`[data-event="${step.event}"]`).dblclick();
+        await expect(page.getByTestId('tab-code')).toHaveAttribute('aria-selected', 'true');
+        continue;
+      }
       if (step.deletePage) {
         await pageAction(page, step.deletePage, 'Delete Page');
         await expect(page.getByRole('tab', { name: step.deletePage, exact: true })).toHaveCount(0);
@@ -245,22 +326,21 @@ for (const workflow of workflows) {
       const data = location ? await studio?.stores.get(location.store)?.read(location.path) : null;
       return data ? new TextDecoder().decode(data) : '';
     });
-    const saved = JSON.parse(text) as { projectId: string; pages: { id: string }[] };
+    const saved = JSON.parse(text) as { projectId: string };
     saved.projectId = '<normalised>';
-    // the ids of the pages a step created: uuids, as in scripts/workflows.py
-    const example = JSON.parse(
-      readFileSync(
-        new URL(`../../upstream/examples/${workflow.example}/project.json`, import.meta.url),
-        'utf-8',
-      ),
-    ) as { pages: { id: string }[] };
-    const original = new Set(example.pages.map((item) => item.id));
+    // every id a step created: uuids, numbered by their order in the file, as scripts/workflows.py
+    const ids = (source: string) =>
+      [...source.matchAll(/"id": "([0-9a-f]{32})"/g)].map((m) => m[1]);
+    const exampleText = readFileSync(
+      new URL(`../../upstream/examples/${workflow.example}/project.json`, import.meta.url),
+      'utf-8',
+    );
+    const original = new Set(ids(JSON.stringify(JSON.parse(exampleText), null, 2)));
     let normalised = JSON.stringify(saved, null, 2) + '\n';
-    saved.pages
-      .filter((item) => !original.has(item.id))
-      .forEach((item, index) => {
-        normalised = normalised.replaceAll(item.id, `<new page ${index + 1}>`);
-      });
+    const created = [...new Set(ids(normalised))].filter((id) => id && !original.has(id));
+    created.forEach((id, index) => {
+      normalised = normalised.replaceAll(id ?? '', `<new ${index + 1}>`);
+    });
     const expected = readFileSync(new URL(`${workflow.name}.json`, WORKFLOWS), 'utf-8');
     expect(normalised).toBe(expected);
   });
@@ -294,6 +374,8 @@ async function dragOn(page: Page, from: [number, number], to: [number, number]) 
   await page.mouse.up();
 }
 
+const nameField = (page: Page) => page.getByTestId('properties').locator('[data-property="Name"]');
+
 const selectedOnCanvas = (page: Page) =>
   shownPanel(page)
     .locator('g[data-widget][aria-selected="true"]')
@@ -309,14 +391,14 @@ test('the canvas selects: a click, Ctrl and a click, the band, Select All, the e
   await menu(page, 'View', 'Fit to Window'); // the whole page in view
   await clickAt(page, 240, 318); // btn_play, 120,286 240×64
   await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play']);
-  await expect(page.getByTestId('properties-selection')).toHaveText('btn_play — button');
+  await expect(nameField(page)).toHaveValue('btn_play');
   await expect(shownPanel(page).locator('rect.handle')).toHaveCount(8);
   await clickAt(page, 240, 400, true); // btn_options
   await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play', 'btn_options']);
   // outside the page: nothing
   await clickAt(page, -6, -6);
   await expect.poll(() => selectedOnCanvas(page)).toEqual([]);
-  await expect(page.getByText('No selection')).toBeVisible();
+  await expect(page.getByTestId('properties')).toHaveCount(0);
   // a band from outside the page across btn_play touches it and the background
   await dragOn(page, [-6, 270], [300, 300]);
   await expect.poll(() => selectedOnCanvas(page)).toEqual(['menu_bg', 'btn_play']);
@@ -328,9 +410,7 @@ test('the canvas selects: a click, Ctrl and a click, the band, Select All, the e
   // a double click opens the widget's handler in the Code tab
   await page.mouse.dblclick(...(await toScreen(page, 240, 318)));
   await expect(page.getByTestId('tab-code')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText(
-    'btn_play_clicked',
-  );
+  await expect(page.getByTestId('code-signature')).toHaveText('def btn_play_clicked(e):');
 });
 
 test('the project tree: pages with their widgets, the canvas follows it, components and modules', async ({
@@ -357,20 +437,407 @@ test('the project tree: pages with their widgets, the canvas follows it, compone
   await expect.poll(() => selectedOnCanvas(page)).toEqual(['opt_bg']);
   // a component goes to Properties; the Components strip lists them
   await page.getByTestId('tree-widget').filter({ hasText: 'tick — timer' }).click();
-  await expect(page.getByTestId('properties-selection')).toHaveText('tick — timer');
+  await expect(nameField(page)).toHaveValue('tick');
   await page.getByTestId('bottom-components').click();
   await expect(page.getByTestId('component')).toHaveText(['beeper', 'tick']);
   await expect(page.getByTestId('component').last()).toHaveAttribute('aria-selected', 'true');
   await page.getByTestId('component').first().click();
-  await expect(page.getByTestId('properties-selection')).toHaveText('beeper — buzzer');
+  await expect(nameField(page)).toHaveValue('beeper');
   // a double click on a widget of the tree opens its handler
   await page.getByTestId('tree-widget').filter({ hasText: 'btn_quit — button' }).dblclick();
-  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText(
-    'btn_quit_clicked',
-  );
+  await expect(page.getByTestId('code-signature')).toHaveText('def btn_quit_clicked(e):');
   // the last page cannot be deleted: the error goes to Output and Errors
   await menu(page, 'File', 'New');
   await page.getByTestId('page').first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Delete Page', exact: true }).click();
   await expect(page.getByTestId('errors')).toContainText('The last page cannot be deleted');
+});
+
+test('the Properties panel: categories, the editors, a value refused, a name taken, undo', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('treeitem', { name: 'menu_title — label' }).click();
+  const table = page.getByTestId('properties');
+  await expect(table.locator('tbody[data-category] tr.group')).toHaveText([
+    'Identity',
+    'Position',
+    'Appearance',
+  ]);
+  await expect(table.locator('[data-property="x"]')).toHaveValue('60');
+  await expect(table.locator('[data-property="textAlign"]')).toHaveAttribute(
+    'list',
+    'options-textAlign',
+  );
+  await expect(table.locator('[data-property="recolor"]')).toHaveAttribute('type', 'checkbox');
+  // alphabetical: one list, by label
+  await page.getByTestId('properties-order').selectOption('alphabetical');
+  const labels = await table.locator('th.label').allTextContents();
+  expect(labels).toEqual(
+    [...labels].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+  );
+  await page.getByTestId('properties-order').selectOption('category');
+
+  // a number goes to the project and to the canvas, as one undo step
+  await setProperty(page, 'y', '200');
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText)).toBe(
+    'Change y',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const studio = window.lmsStudio.studio;
+        const page = studio?.designer?.pages.get(studio.currentPage() ?? '');
+        return page?.widgets.find((w) => w.name === 'menu_title')?.props.y;
+      }),
+    )
+    .toBe(200);
+  // a name taken: the message, and the field shows the name again
+  await nameField(page).fill('btn_play');
+  await nameField(page).press('Enter');
+  await expect(page.getByTestId('properties-error')).not.toBeEmpty();
+  await expect(nameField(page)).toHaveValue('menu_title');
+  // a name that is not one
+  await nameField(page).fill('9 lives');
+  await nameField(page).press('Enter');
+  await expect(page.getByTestId('properties-error')).not.toBeEmpty();
+  await expect(nameField(page)).toHaveValue('menu_title');
+  // undo puts the value back
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(table.locator('[data-property="y"]')).toHaveValue('186');
+
+  // two buttons: the name is empty, the values they share are shown, the others are empty
+  await selectWidgets(page, ['btn_play', 'btn_options']);
+  await expect(nameField(page)).toHaveValue('');
+  await expect(table.locator('[data-property="x"]')).toHaveValue('120');
+  await expect(table.locator('[data-property="y"]')).toHaveValue('');
+  // Events are for one widget at a time
+  await page.getByTestId('properties-tab-events').click();
+  await expect(page.getByTestId('events')).toHaveCount(0);
+  await page.getByRole('treeitem', { name: 'btn_play — button' }).click();
+  await expect(page.getByTestId('events').locator('tr.bound')).toHaveText([
+    /CLICKED[\s\S]*btn_play_clicked/,
+  ]);
+});
+
+/** Waits until the project changed: the undo text of the step. */
+async function changed(page: Page, before: number) {
+  await expect
+    .poll(() => page.evaluate(() => window.lmsStudio.studio?.designer?.revisionCount ?? 0))
+    .toBeGreaterThan(before);
+}
+
+const revision = (page: Page) =>
+  page.evaluate(() => window.lmsStudio.studio?.designer?.revisionCount ?? 0);
+
+/** A step of the canvas as a person does it: the Toolbox, the keys, the handles, the menus. */
+async function canvasStep(page: Page, step: Workflow['steps'][number]): Promise<boolean> {
+  const before = await revision(page);
+  const scroller = shownPanel(page).locator('.scroller');
+  if (step.add) {
+    const [type, x, y] = step.add;
+    await page.getByTestId('toolbox').locator(`[data-type="${type}"]`).dblclick();
+    await clickAt(page, x, y);
+  } else if (step.drop) {
+    const [type, x, y] = step.drop;
+    const [left, top] = await toScreen(page, x, y);
+    const box = await shownPanel(page).getByTestId('canvas').boundingBox();
+    await page
+      .getByTestId('toolbox')
+      .locator(`[data-type="${type}"]`)
+      .dragTo(shownPanel(page).getByTestId('canvas'), {
+        targetPosition: { x: left - (box?.x ?? 0), y: top - (box?.y ?? 0) },
+      });
+  } else if (step.move) {
+    await scroller.focus();
+    const [dx, dy] = step.move;
+    const key = dx > 0 ? 'ArrowRight' : dx < 0 ? 'ArrowLeft' : dy > 0 ? 'ArrowDown' : 'ArrowUp';
+    const distance = Math.abs(dx || dy);
+    await page.keyboard.press(distance === 10 ? `Shift+${key}` : key);
+  } else if (step.resize) {
+    // the bottom right handle, dragged to the new size
+    const [name, size] = Object.entries(step.resize)[0] ?? [];
+    const rect = await page.evaluate((name) => {
+      const studio = window.lmsStudio.studio;
+      const widget = studio?.designer?.pages
+        .get(studio.currentPage() ?? '')
+        ?.widgets.find((w) => w.name === name);
+      return widget?.props as { x: number; y: number; width: number; height: number };
+    }, name ?? '');
+    const [width, height] = size ?? [0, 0];
+    const start = await toScreen(page, rect.x + rect.width, rect.y + rect.height);
+    const end = await toScreen(page, rect.x + width, rect.y + height);
+    await page.mouse.move(...start);
+    await page.mouse.down();
+    await page.mouse.move(...end, { steps: 4 });
+    await page.mouse.up();
+  } else if (step.cut || step.copy || step.paste || step.duplicate) {
+    await scroller.focus();
+    const key = step.cut ? 'x' : step.copy ? 'c' : step.paste ? 'v' : 'd';
+    await page.keyboard.press(`ControlOrMeta+${key}`);
+    if (step.copy) return true;
+  } else if (step.delete) {
+    await scroller.focus();
+    await page.keyboard.press('Delete');
+  } else if (step.align) {
+    const labels: Record<string, string> = {
+      left: 'Align Left',
+      center: 'Align Center',
+      right: 'Align Right',
+      top: 'Align Top',
+      middle: 'Align Middle',
+      bottom: 'Align Bottom',
+    };
+    await menu(page, 'Arrange', labels[step.align] ?? '');
+  } else if (step.distribute) {
+    await menu(
+      page,
+      'Arrange',
+      step.distribute === 'horizontal' ? 'Distribute Horizontally' : 'Distribute Vertically',
+    );
+  } else if (step.front || step.back) {
+    await scroller.focus();
+    await page.keyboard.press(step.front ? 'ControlOrMeta+]' : 'ControlOrMeta+[');
+  } else if (step.code) {
+    // the Object, the Procedure, then the text typed into the editor
+    const [object, event, text] = step.code;
+    await page.getByTestId('tab-code').click();
+    await page.getByTestId('code-object').selectOption(object);
+    if (event) {
+      await expect(page.getByTestId('code-procedure').locator('option')).not.toHaveCount(0);
+      await page.getByTestId('code-procedure').selectOption({ label: event });
+      await expect(page.getByTestId('code-signature')).toContainText(`_${event.toLowerCase()}(e):`);
+    }
+    const editor = page.locator('#panel-code .cm-content');
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.insertText(text);
+    await expect.poll(() => page.evaluate(() => window.lmsStudio.studio?.code.text())).toBe(text);
+    await expect
+      .poll(() => page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText))
+      .toBe('Edit Code');
+    return true;
+  } else if (step.projectSettings) {
+    const [profileId, mode] = step.projectSettings;
+    const name = await page.evaluate(
+      async (id) =>
+        (
+          (await window.lmsStudio.python.call('profiles_manager')) as {
+            profiles: { id: string; name: string }[];
+          }
+        ).profiles.find((p) => p.id === id)?.name ?? '',
+      profileId,
+    );
+    await menu(page, 'Project', 'Project Settings…');
+    const d = dialog(page);
+    await expect(d.getByRole('heading', { name: 'Project Settings' })).toBeVisible();
+    await d.getByLabel('Board Profile').selectOption({ label: name });
+    await expect(d.getByLabel('Width')).toBeDisabled();
+    await expect(d.getByTestId('settings-info')).toContainText('Physical display');
+    await d.getByRole('button', { name: 'Apply' }).click();
+    await expect(d.getByRole('heading', { name: 'Change Resolution' })).toBeVisible();
+    await d.getByRole('radio', { name: MODES[mode as 'adapt'] }).check();
+    await d.getByRole('button', { name: 'Apply' }).click();
+  } else if (step.adaptPage) {
+    await page.getByRole('tab', { name: step.adaptPage, exact: true }).click();
+    await menu(page, 'Arrange', 'Adapt Page to Resolution…');
+    const d = dialog(page);
+    await expect(d.getByRole('heading', { name: 'Adapt Page to Resolution' })).toBeVisible();
+    await d.getByRole('radio', { name: MODES[step.mode ?? 'adapt'] }).check();
+    await d.getByRole('button', { name: 'Apply' }).click();
+  } else return false;
+  await changed(page, before);
+  return true;
+}
+
+test('a drag moves the widgets, the real frame follows, Ctrl+Z puts them back', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('tab', { name: 'Menu', exact: true }).click();
+  await shownFrame(page);
+  await menu(page, 'View', 'Fit to Window');
+  await clickAt(page, 240, 318); // btn_play
+  const start_ = await toScreen(page, 240, 318);
+  const end = await toScreen(page, 240, 418);
+  await page.mouse.move(...start_);
+  await page.mouse.down();
+  await page.mouse.move(...end, { steps: 6 });
+  // while dragging: not yet in the project, but drawn by the runtime where it is going
+  const props = () =>
+    page.evaluate(() => {
+      const studio = window.lmsStudio.studio;
+      const p = studio?.designer?.pages.get(studio.currentPage() ?? '');
+      return p?.widgets.find((w) => w.name === 'btn_play')?.props.y;
+    });
+  expect(await props()).toBe(286);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const studio = window.lmsStudio.studio;
+        const id = studio?.currentPage() ?? '';
+        const key = studio?.designer?.pages.get(id)?.key;
+        const preview = studio?.designer?.previews.get(id);
+        return Boolean(preview?.pixels && preview.key !== key);
+      }),
+    )
+    .toBe(true);
+  await page.mouse.up();
+  await expect.poll(props).toBe(386);
+  expect(await page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText)).toBe(
+    'Change Geometry',
+  );
+  await shownPanel(page).locator('.scroller').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(props).toBe(286);
+  const frame = await shownFrame(page);
+  const expected = readPng(new URL('fifteen/Menu.png', FIXTURES).pathname);
+  expect(differentPixels(expected.rgb, frame)).toBe(0);
+
+  // the canvas's menu; Escape takes back a widget armed in the Toolbox
+  await page.mouse.click(...start_, { button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('toolbox').locator('[data-type="slider"]').dblclick();
+  await expect(page.getByTestId('armed')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('armed')).toHaveCount(0);
+
+  // Delete on the Components strip
+  await page.getByTestId('bottom-components').click();
+  await page.getByTestId('component').first().click();
+  await page.getByTestId('component').first().press('Delete');
+  await expect(page.getByTestId('component')).toHaveText(['tick']);
+});
+
+const budgets = (
+  JSON.parse(readFileSync(new URL('../fixtures/budget/index.json', import.meta.url), 'utf-8')) as {
+    budgets: Record<string, { flash: number; flashByName: number; ram: number }>;
+  }
+).budgets;
+
+test("the budget in the status bar: the flash is upstream's on every example, the RAM measured", async ({
+  page,
+}) => {
+  test.setTimeout(30_000 + Object.keys(budgets).length * 20_000);
+  await start(page);
+  for (const [name, expected] of Object.entries(budgets)) {
+    await menu(page, 'File', 'Open Example', name);
+    await expect(page.getByTestId('project-file')).toContainText(`${name}/project.json`);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const studio = window.lmsStudio.studio;
+            return studio?.budget?.budget ?? null;
+          }),
+        { timeout: 20_000 },
+      )
+      .toMatchObject({ flash: expected.flashByName });
+    const measured = await page.evaluate(() => window.lmsStudio.studio?.budget?.budget?.ram ?? 0);
+    expect(measured, `${name}: RAM`).toBeGreaterThan(0);
+    await expect(page.getByTestId('budget')).toContainText('Flash ');
+  }
+});
+
+test('the Code tab: Object and Procedure, a handler made by typing, an action, a completion', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  // a double click on a widget without a handler: its object, at its default event, not made yet
+  await page.getByRole('treeitem', { name: 'menu_title — label' }).dblclick();
+  await expect(page.getByTestId('code-object').locator('option:checked')).toHaveText(
+    'menu_title (label)',
+  );
+  await expect(page.getByTestId('code-signature')).toHaveText('def menu_title_clicked(e):');
+  expect(
+    await page.evaluate(() =>
+      window.lmsStudio.studio?.code.state.handlers.some((h) => h.name === 'menu_title_clicked'),
+    ),
+  ).toBe(false);
+  // the helper: the widget's own group is open; a double click inserts at the cursor mark
+  const actions = page.getByTestId('actions');
+  await actions.getByRole('treeitem', { name: 'Change text', exact: true }).first().dblclick();
+  await page.keyboard.type('Hi');
+  await expect
+    .poll(() => page.evaluate(() => window.lmsStudio.studio?.code.text()))
+    .toBe('ui.menu_title.set_text("Hi")');
+  // the first text made the handler, in bold in the Procedure list, an undo step
+  await expect(page.getByTestId('code-procedure').locator('option.exists')).toContainText([
+    'CLICKED',
+  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText))
+    .toBe('Edit Code');
+  // completion: a widget's name gives ui.<name>., then its actions
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('btn_pl');
+  await page.keyboard.press('ControlOrMeta+Space');
+  await page.locator('.cm-tooltip-autocomplete li', { hasText: 'btn_play' }).first().click();
+  await expect(
+    page.locator('.cm-tooltip-autocomplete li', { hasText: 'add_flag — Hide' }),
+  ).toBeVisible();
+  // the search of the helper
+  await page.getByRole('searchbox', { name: 'Search an object or action' }).fill('Open this page');
+  await expect(actions.getByRole('treeitem', { name: 'Open this page' })).toHaveCount(4);
+});
+
+test('board profiles and blocks: managed, kept in the browser after a reload', async ({ page }) => {
+  page.on('dialog', (question) => void question.accept());
+  await start(page);
+  // a custom profile, from the built-in one
+  await menu(page, 'Device', 'Manage Board Profiles…');
+  const d = dialog(page);
+  await expect(d.getByRole('heading', { name: 'Board Profile Manager' })).toBeVisible();
+  await expect(d.getByTestId('profiles').locator('tbody tr')).toHaveCount(3);
+  await d.getByRole('button', { name: 'Duplicate' }).click();
+  await d.locator('#profile-name').fill('My board');
+  await d.locator('#profile-name').press('Enter');
+  await expect(d.getByTestId('profiles')).toContainText('My board');
+  await d.getByRole('button', { name: 'Apply' }).click();
+  await expect(d).toHaveCount(0);
+
+  // a block from a folder of the workspace: upstream's own example block
+  await page.evaluate(async () => {
+    const workspace = window.lmsStudio.studio?.stores.get('workspace');
+    const examples = window.lmsStudio.studio?.stores.get('examples');
+    for (const name of ['block.json', 'board.py', 'simulator.py', 'LICENSE', 'README.md']) {
+      const data = await examples?.read(`blocks/blinker/${name}`);
+      if (data) await workspace?.write(`blinker/${name}`, data);
+    }
+  });
+  await menu(page, 'Settings', 'Manage Blocks…');
+  await expect(d.getByRole('heading', { name: 'Block Manager' })).toBeVisible();
+  const standard = await d.getByTestId('blocks').locator('tbody tr').count();
+  await d.getByRole('button', { name: 'Add from Folder…' }).click();
+  await expect(d.getByRole('heading', { name: 'Choose the folder of the block' })).toBeVisible();
+  await d.locator('#place').selectOption('workspace');
+  await d.getByRole('option', { name: '📁 blinker' }).click();
+  await expect(d.locator('.crumbs')).toContainText('blinker');
+  await d.getByRole('button', { name: /^(Choose|Select|Open)/ }).click();
+  await expect(d.getByRole('heading', { name: 'Block Manager' })).toBeVisible();
+  await expect(d.getByTestId('blocks').locator('tbody tr')).toHaveCount(standard + 1);
+  await d.getByRole('button', { name: 'Close' }).click();
+  // the Toolbox has it: MainWindow._blocks_changed
+  await expect(page.getByTestId('toolbox').locator('[data-type="blinker"]')).toHaveCount(1);
+
+  // after a reload both are still there
+  await page.reload();
+  await start(page);
+  await menu(page, 'Device', 'Manage Board Profiles…');
+  await expect(d.getByTestId('profiles')).toContainText('My board');
+  await d.getByRole('button', { name: 'Cancel' }).click();
+  await menu(page, 'Settings', 'Manage Blocks…');
+  await expect(d.getByTestId('blocks').locator('tbody tr')).toHaveCount(standard + 1);
+  // removed again
+  await d.getByTestId('blocks').locator('tbody tr', { hasText: 'Installed by you' }).click();
+  await d.getByRole('button', { name: 'Remove' }).click();
+  await expect(d.getByTestId('blocks').locator('tbody tr')).toHaveCount(standard);
+  await d.getByRole('button', { name: 'Close' }).click();
 });

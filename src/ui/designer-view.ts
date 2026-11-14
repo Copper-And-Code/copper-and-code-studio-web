@@ -7,13 +7,20 @@ import {
   type DesignPage,
   type DesignWidget,
   type DesignerController,
+  type Geometry,
   ZOOM_MAX,
   ZOOM_MIN,
 } from '../app/designer.ts';
 import { rgb565ToRgba } from '../app/preview.ts';
 import { tr } from '../i18n/tr.ts';
+import type { ContextMenu } from './context-menu.ts';
+import './context-menu.ts';
 import type { Menu, MenuItem } from './menu-bar.ts';
 import './menu-bar.ts';
+
+/** The type of a widget dragged from the Toolbox: ui/designer/scene.py WIDGET_MIME. */
+export const WIDGET_MIME = 'application/x-lvgl-widget';
+const DROP_PREVIEW_OPACITY = 0.7;
 
 const MARGIN = 40; // DesignerScene.rebuild: setSceneRect(-40, -40, width + 80, height + 80)
 const FIT_MARGIN = 8; // MainWindow._fit_canvas
@@ -59,6 +66,66 @@ export function qtColor(value: unknown, fallback: string): string {
   return (text && parse(text)) || parse(fallback) || '#000000';
 }
 
+/** The cursor of each ResizeHandle, by its index: corners and sides, clockwise from top left. */
+const HANDLE_CURSORS = [
+  'nwse-resize',
+  'ns-resize',
+  'nesw-resize',
+  'ew-resize',
+  'nwse-resize',
+  'ns-resize',
+  'nesw-resize',
+  'ew-resize',
+];
+
+/** The Arrange menu: align, distribute, the order. */
+export function arrangeItems(controller: DesignerController, page: string | null): MenuItem[] {
+  const count = page ? controller.selected(page).length : 0;
+  const run = (action: () => Promise<void>) => () => void action();
+  const align = (label: string, side: string): MenuItem => ({
+    label: tr(label),
+    id: `align-${side}`,
+    disabled: count < 2,
+    action: run(() => controller.align(side, page)),
+  });
+  return [
+    align('Align Left', 'left'),
+    align('Align Center', 'center'),
+    align('Align Right', 'right'),
+    align('Align Top', 'top'),
+    align('Align Middle', 'middle'),
+    align('Align Bottom', 'bottom'),
+    { separator: true },
+    {
+      label: tr('Distribute Horizontally'),
+      id: 'distribute-horizontal',
+      disabled: count < 3,
+      action: run(() => controller.distribute('horizontal', page)),
+    },
+    {
+      label: tr('Distribute Vertically'),
+      id: 'distribute-vertical',
+      disabled: count < 3,
+      action: run(() => controller.distribute('vertical', page)),
+    },
+    { separator: true },
+    {
+      label: tr('Bring to Front'),
+      id: 'front',
+      shortcut: 'Ctrl+]',
+      disabled: !count,
+      action: run(() => controller.changeZ(true, page)),
+    },
+    {
+      label: tr('Send to Back'),
+      id: 'back',
+      shortcut: 'Ctrl+[',
+      disabled: !count,
+      action: run(() => controller.changeZ(false, page)),
+    },
+  ];
+}
+
 const number = (value: unknown, fallback: number): number => {
   const result = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(result) ? result : fallback;
@@ -98,6 +165,44 @@ export function sceneRects(page: DesignPage): Map<string, Rect> {
 const SELECTION = '#1976D2'; // WidgetItem._paint_selection, ResizeHandle.paint
 const CLICK_SLOP = 3;
 
+/** ui/designer/scene.py snapped. */
+const snapped = (value: number, grid: number) =>
+  grid > 1 ? Math.round(value / grid) * grid : Math.round(value);
+
+/** The widgets in the order they are painted: a container, then what it holds, as Qt stacks them. */
+function paintOrder(page: DesignPage): DesignWidget[] {
+  const children = new Map<string | null, DesignWidget[]>();
+  for (const widget of page.widgets) {
+    const list = children.get(widget.parentId) ?? [];
+    list.push(widget);
+    children.set(widget.parentId, list);
+  }
+  const order: DesignWidget[] = [];
+  const walk = (parent: string | null) => {
+    for (const widget of children.get(parent) ?? []) {
+      order.push(widget);
+      walk(widget.id);
+    }
+  };
+  walk(null);
+  return order;
+}
+
+type Drag =
+  | {
+      kind: 'move';
+      start: { x: number; y: number };
+      origins: Map<string, Geometry>;
+      moved: boolean;
+    }
+  | {
+      kind: 'resize';
+      index: number;
+      id: string;
+      start: { x: number; y: number };
+      origin: Geometry;
+    };
+
 export class DesignerView extends LitElement {
   static override properties = {
     controller: { attribute: false },
@@ -105,6 +210,8 @@ export class DesignerView extends LitElement {
     revision: { type: Number },
     resolutions: { state: true },
     band: { state: true },
+    pending: { state: true },
+    ghost: { state: true },
   };
 
   controller: DesignerController | null = null;
@@ -116,6 +223,17 @@ export class DesignerView extends LitElement {
   private band: { x0: number; y0: number; x1: number; y1: number; base: string[] } | null = null;
   private resolutions: MenuItem[] = [];
   private drawn: unknown = null;
+  /** Geometries changed by a drag or a resize, not yet in the project (pending_geometry). */
+  private pending: Record<string, Geometry> = {};
+  private drag: Drag | null = null;
+  /** The widget under the last press. */
+  private pressed: string | null = null;
+  /** The widget the Toolbox drags over the page: show_drop_preview. */
+  private ghost: DesignWidget | null = null;
+  private readonly defaults = new Map<
+    string,
+    { name: string; props: Record<string, unknown> } | null
+  >();
 
   static override styles = css`
     :host {
@@ -172,6 +290,9 @@ export class DesignerView extends LitElement {
       position: relative;
       margin: auto;
     }
+    .scroller[data-armed] svg {
+      cursor: crosshair;
+    }
     canvas,
     svg {
       position: absolute;
@@ -188,8 +309,46 @@ export class DesignerView extends LitElement {
     }
   `;
 
+  /** The page as the project has it, with the geometries being dragged. */
   private get page(): DesignPage | undefined {
-    return this.controller?.pages.get(this.pageId);
+    const page = this.controller?.pages.get(this.pageId);
+    if (!page || !Object.keys(this.pending).length) return page;
+    return {
+      ...page,
+      widgets: page.widgets.map((widget) =>
+        this.pending[widget.id]
+          ? { ...widget, props: { ...widget.props, ...this.pending[widget.id] } }
+          : widget,
+      ),
+    };
+  }
+
+  /** WidgetItem.geometry: x and y in the container, the size at least MINIMUM_SIZE. */
+  private geometry(widget: DesignWidget): Geometry {
+    return {
+      x: Math.round(number(widget.props.x, 0)),
+      y: Math.round(number(widget.props.y, 0)),
+      width: Math.round(Math.max(MINIMUM_SIZE, number(widget.props.width, 100))),
+      height: Math.round(Math.max(MINIMUM_SIZE, number(widget.props.height, 40))),
+    };
+  }
+
+  /** DesignerScene.item_at: the widget on top at a point of the page. */
+  private itemAt(page: DesignPage, x: number, y: number): DesignWidget | null {
+    const rects = sceneRects(page);
+    let found: DesignWidget | null = null;
+    for (const widget of paintOrder(page)) {
+      const rect = rects.get(widget.name);
+      if (
+        rect &&
+        x >= rect.x &&
+        x <= rect.x + rect.width &&
+        y >= rect.y &&
+        y <= rect.y + rect.height
+      )
+        found = widget;
+    }
+    return found;
   }
 
   private get zoom(): number {
@@ -261,24 +420,135 @@ export class DesignerView extends LitElement {
    */
   private pointerDown(event: PointerEvent): void {
     const controller = this.controller;
-    if (!controller || event.button !== 0) return;
+    const page = this.page;
+    if (!controller || !page || event.button !== 0) return;
+    const point = this.scenePoint(event);
+    // DesignerView.mousePressEvent: the Toolbox armed a widget, this click places it
+    if (controller.armed) {
+      const parent = this.itemAt(page, point.x, point.y);
+      void controller.addWidget(
+        this.pageId,
+        controller.armed,
+        point.x,
+        point.y,
+        parent?.id ?? null,
+        false,
+      );
+      controller.arm(null);
+      return;
+    }
+    const handle = event
+      .composedPath()
+      .find((node): node is Element => node instanceof Element && node.hasAttribute('data-handle'));
+    const svgElement = event.currentTarget as Element;
+    if (handle) {
+      // ResizeHandle.mousePressEvent
+      const widget = page.widgets.find((item) => item.id === handle.getAttribute('data-id'));
+      if (!widget) return;
+      this.drag = {
+        kind: 'resize',
+        index: Number(handle.getAttribute('data-handle')),
+        id: widget.id,
+        start: point,
+        origin: this.geometry(widget),
+      };
+      svgElement.setPointerCapture(event.pointerId);
+      return;
+    }
     const name = this.widgetAt(event);
+    this.pressed = name;
     const ctrl = event.ctrlKey || event.metaKey;
-    const selected = controller.selected(this.pageId);
+    let selected = controller.selected(this.pageId);
     if (name) {
       if (!ctrl && !selected.includes(name)) controller.select(this.pageId, [name]);
       else if (ctrl && !selected.includes(name))
         controller.select(this.pageId, [...selected, name]);
+      selected = controller.selected(this.pageId);
+      // DesignerScene.drag_group: the selected widgets whose container is not selected
+      const byName = new Map(page.widgets.map((widget) => [widget.name, widget]));
+      const ids = new Set(selected.map((item) => byName.get(item)?.id));
+      const group = selected
+        .map((item) => byName.get(item))
+        .filter(
+          (widget): widget is DesignWidget => !!widget && !ids.has(widget.parentId ?? undefined),
+        );
+      const grabbed = byName.get(name);
+      const moving = grabbed && group.includes(grabbed) ? group : grabbed ? [grabbed] : [];
+      this.drag = {
+        kind: 'move',
+        start: point,
+        origins: new Map(moving.map((widget) => [widget.id, this.geometry(widget)])),
+        moved: false,
+      };
+      svgElement.setPointerCapture(event.pointerId);
       return;
     }
-    const point = this.scenePoint(event);
     const base = ctrl ? selected : [];
     if (!ctrl) controller.select(this.pageId, []);
     this.band = { x0: point.x, y0: point.y, x1: point.x, y1: point.y, base };
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
   }
 
+  /** WidgetItem.mouseMoveEvent and ResizeHandle.mouseMoveEvent: the geometries follow the pointer. */
+  private dragMove(drag: Drag, point: { x: number; y: number }): void {
+    const controller = this.controller;
+    if (!controller) return;
+    const grid = controller.gridSize;
+    const pending: Record<string, Geometry> = {};
+    if (drag.kind === 'move') {
+      const dx = point.x - drag.start.x;
+      const dy = point.y - drag.start.y;
+      if (
+        !drag.moved &&
+        Math.abs(dx) * this.zoom < CLICK_SLOP &&
+        Math.abs(dy) * this.zoom < CLICK_SLOP
+      )
+        return;
+      drag.moved = true;
+      for (const [id, origin] of drag.origins) {
+        const next = {
+          x: snapped(origin.x + dx, grid),
+          y: snapped(origin.y + dy, grid),
+          width: origin.width,
+          height: origin.height,
+        };
+        if (next.x !== origin.x || next.y !== origin.y) pending[id] = next;
+      }
+    } else {
+      const { origin, index } = drag;
+      const dx = snapped(point.x - drag.start.x, grid);
+      const dy = snapped(point.y - drag.start.y, grid);
+      const left = [0, 6, 7].includes(index);
+      const right = [2, 3, 4].includes(index);
+      const top = [0, 1, 2].includes(index);
+      const bottom = [4, 5, 6].includes(index);
+      let width = left ? origin.width - dx : right ? origin.width + dx : origin.width;
+      let height = top ? origin.height - dy : bottom ? origin.height + dy : origin.height;
+      width = Math.max(MINIMUM_SIZE, width);
+      height = Math.max(MINIMUM_SIZE, height);
+      const next = {
+        x: Math.round(left ? origin.x + origin.width - width : origin.x),
+        y: Math.round(top ? origin.y + origin.height - height : origin.y),
+        width: Math.round(width),
+        height: Math.round(height),
+      };
+      if (
+        next.x !== origin.x ||
+        next.y !== origin.y ||
+        next.width !== origin.width ||
+        next.height !== origin.height
+      )
+        pending[drag.id] = next;
+    }
+    this.pending = pending;
+    controller.previewDrag(this.pageId, pending);
+  }
+
   private pointerMove(event: PointerEvent): void {
+    if (this.drag) {
+      this.dragMove(this.drag, this.scenePoint(event));
+      return;
+    }
     const band = this.band;
     const controller = this.controller;
     const page = this.page;
@@ -312,12 +582,137 @@ export class DesignerView extends LitElement {
     ]);
   }
 
+  /** mouseReleaseEvent: commit_items, one undo step; a click without a move changes nothing. */
   private pointerUp(): void {
     this.band = null;
+    const drag = this.drag;
+    this.drag = null;
+    if (!drag) return;
+    const pending = this.pending;
+    if (!Object.keys(pending).length) return;
+    void this.controller?.commitGeometry(pending).then(() => (this.pending = {}));
+  }
+
+  // ---- the Toolbox's drag: DesignerView.dragEnterEvent, dragMoveEvent, dropEvent ----
+
+  private dragType(event: DragEvent): string | null {
+    if (!event.dataTransfer?.types.includes(WIDGET_MIME)) return null;
+    return this.controller?.dragging ?? null;
+  }
+
+  private async dragOver(event: DragEvent): Promise<void> {
+    const type = this.dragType(event);
+    if (!type) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    if (!this.defaults.has(type)) {
+      this.defaults.set(type, null);
+      this.defaults.set(type, (await this.controller?.defaultWidget(type)) ?? null);
+    }
+    const definition = this.defaults.get(type);
+    if (!definition) return; // a component: no preview on the page
+    const point = this.scenePoint(event);
+    const width = number(definition.props.width, 100);
+    const height = number(definition.props.height, 40);
+    const grid = this.controller?.gridSize ?? 1;
+    this.ghost = {
+      id: '',
+      name: definition.name,
+      type,
+      parentId: null,
+      props: {
+        ...definition.props,
+        x: snapped(Math.max(0, point.x - width / 2), grid),
+        y: snapped(Math.max(0, point.y - height / 2), grid),
+      },
+    };
+  }
+
+  private dragLeave(event: DragEvent): void {
+    const related = event.relatedTarget as Node | null;
+    if (!related || !(event.currentTarget as Element).contains(related)) this.ghost = null;
+  }
+
+  private drop(event: DragEvent): void {
+    const type = this.dragType(event);
+    const page = this.page;
+    this.ghost = null;
+    if (!type || !page) return;
+    event.preventDefault();
+    const point = this.scenePoint(event);
+    const parent = this.itemAt(page, point.x, point.y);
+    void this.controller?.addWidget(this.pageId, type, point.x, point.y, parent?.id ?? null, true);
+  }
+
+  /** DesignerView.keyPressEvent: arrows move (Shift: by 10), Delete deletes. */
+  private keyDown(event: KeyboardEvent): void {
+    const controller = this.controller;
+    if (!controller) return;
+    const step = event.shiftKey ? 10 : 1;
+    const moves: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    const move = moves[event.key];
+    if (move && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (!controller.selected(this.pageId).length) return;
+      void controller.moveSelected(move[0], move[1], this.pageId);
+    } else if (event.key === 'Delete') {
+      void controller.deleteSelected(this.pageId);
+    } else if (event.key === 'Escape' && controller.armed) {
+      controller.arm(null);
+    } else return;
+    event.preventDefault();
+  }
+
+  /** DesignerView.contextMenuEvent and MainWindow._canvas_menu. */
+  private contextMenu(event: MouseEvent): void {
+    const controller = this.controller;
+    if (!controller) return;
+    const name = this.widgetAt(event);
+    if (name && !controller.selected(this.pageId).includes(name)) {
+      controller.select(this.pageId, [name]);
+    }
+    this.renderRoot
+      .querySelector<ContextMenu>('lms-context-menu')
+      ?.show(event, this.editItems(), tr('Designer'));
+  }
+
+  /** The canvas menu: the Edit actions, Arrange, Select All. */
+  private editItems(): MenuItem[] {
+    const controller = this.controller;
+    if (!controller) return [];
+    const page = this.pageId;
+    const none = !controller.selected(page).length;
+    const item = (
+      label: string,
+      id: string,
+      action: () => unknown,
+      disabled = false,
+    ): MenuItem => ({
+      label: tr(label),
+      id,
+      disabled,
+      action: () => void action(),
+    });
+    return [
+      item('Cut', 'cut', () => controller.copy(true, page), none),
+      item('Copy', 'copy', () => controller.copy(false, page), none),
+      item('Paste', 'paste', () => controller.paste(page)),
+      item('Duplicate', 'duplicate', () => controller.duplicate(page), none),
+      item('Delete', 'delete', () => controller.deleteSelected(page), none),
+      { separator: true },
+      ...arrangeItems(controller, page),
+      { separator: true },
+      item('Select All', 'select-all', () => controller.selectAll(page)),
+    ];
   }
 
   private doubleClick(event: MouseEvent): void {
-    const name = this.widgetAt(event);
+    // the pointer is captured by the canvas while it may drag: the widget is the one pressed
+    const name = this.widgetAt(event) ?? this.pressed;
     if (name) this.onActivate(name);
   }
 
@@ -424,7 +819,17 @@ export class DesignerView extends LitElement {
           .menus=${this.resolutionMenu()}
         ></lms-menu-bar>
       </div>
-      <div class="scroller" tabindex="0" aria-label=${page.name} @wheel=${this.wheel}>
+      <div
+        class="scroller"
+        tabindex="0"
+        aria-label=${page.name}
+        data-armed=${controller.armed ?? nothing}
+        @wheel=${this.wheel}
+        @keydown=${this.keyDown}
+        @dragover=${(event: DragEvent) => void this.dragOver(event)}
+        @dragleave=${this.dragLeave}
+        @drop=${this.drop}
+      >
         <div class="stage" style="width:${sceneWidth * zoom}px;height:${sceneHeight * zoom}px">
           ${
             preview
@@ -442,6 +847,7 @@ export class DesignerView extends LitElement {
             @pointerup=${this.pointerUp}
             @pointercancel=${this.pointerUp}
             @dblclick=${this.doubleClick}
+            @contextmenu=${this.contextMenu}
             data-testid="canvas"
             viewBox="${-MARGIN} ${-MARGIN} ${sceneWidth} ${sceneHeight}"
             width=${sceneWidth * zoom}
@@ -454,6 +860,7 @@ export class DesignerView extends LitElement {
           </svg>
         </div>
       </div>
+      <lms-context-menu></lms-context-menu>
       ${
         controller.previewOn && last && !last.pixels
           ? html`<p class="status" data-testid="preview-problem" role="status">
@@ -508,6 +915,7 @@ export class DesignerView extends LitElement {
   private selectionLayer(page: DesignPage): TemplateResult {
     const selected = new Set(this.controller?.selected(page.id) ?? []);
     const handles: TemplateResult[] = [];
+    const ids = new Map(page.widgets.map((widget) => [widget.name, widget.id]));
     for (const [name, rect] of sceneRects(page)) {
       if (!selected.has(name)) continue;
       const { x, y, width, height } = rect;
@@ -521,11 +929,11 @@ export class DesignerView extends LitElement {
         [x, y + height],
         [x, y + height / 2],
       ];
-      for (const [px, py] of points) {
+      points.forEach(([px, py], index) => {
         handles.push(
-          svg`<rect class="handle" x=${(px ?? 0) - 4} y=${(py ?? 0) - 4} width="8" height="8" fill="#FFFFFF" stroke=${SELECTION} stroke-width="1" />`,
+          svg`<rect class="handle" data-handle=${index} data-id=${ids.get(name) ?? ''} x=${(px ?? 0) - 4} y=${(py ?? 0) - 4} width="8" height="8" fill="#FFFFFF" stroke=${SELECTION} stroke-width="1" pointer-events="all" style="cursor:${HANDLE_CURSORS[index] ?? 'default'}" />`,
         );
-      }
+      });
     }
     const band = this.band;
     const rubber = band
@@ -533,7 +941,11 @@ export class DesignerView extends LitElement {
           width=${Math.abs(band.x1 - band.x0)} height=${Math.abs(band.y1 - band.y0)}
           fill="rgb(25 118 210 / 0.15)" stroke=${SELECTION} stroke-width="1" vector-effect="non-scaling-stroke" />`
       : nothing;
-    return svg`<g pointer-events="none" data-testid="selection">${handles}${rubber}</g>`;
+    const ghost = this.ghost;
+    const drop = ghost
+      ? svg`<g transform="translate(${number(ghost.props.x, 0)} ${number(ghost.props.y, 0)})" opacity=${DROP_PREVIEW_OPACITY} data-testid="drop-preview">${this.paintWidget(ghost, page, false, 0, 0)}</g>`
+      : nothing;
+    return svg`<g pointer-events="none" data-testid="selection">${drop}${handles}${rubber}</g>`;
   }
 
   /** WidgetItem.paint. */

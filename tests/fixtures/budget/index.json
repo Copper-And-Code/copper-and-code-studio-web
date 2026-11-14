@@ -1,0 +1,45 @@
+{
+  "upstreamVersion": "0.7.0",
+  "budgets": {
+    "breakout": {
+      "flash": 27968,
+      "ram": 44288,
+      "flashByName": 27968
+    },
+    "eim-01": {
+      "flash": 100862,
+      "ram": 259200,
+      "flashByName": 100862
+    },
+    "eim-01-480": {
+      "flash": 101249,
+      "ram": 256992,
+      "flashByName": 101249
+    },
+    "fifteen": {
+      "flash": 13331,
+      "ram": 42400,
+      "flashByName": 13095
+    },
+    "simon": {
+      "flash": 19220,
+      "ram": 16320,
+      "flashByName": 19220
+    },
+    "snake": {
+      "flash": 28901,
+      "ram": 14688,
+      "flashByName": 28901
+    },
+    "tictactoe": {
+      "flash": 17713,
+      "ram": 24352,
+      "flashByName": 17713
+    },
+    "weather": {
+      "flash": 20786,
+      "ram": 47072,
+      "flashByName": 20786
+    }
+  }
+}

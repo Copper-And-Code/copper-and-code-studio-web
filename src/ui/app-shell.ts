@@ -21,6 +21,9 @@ import './code-panel.ts';
 import './files-panel.ts';
 import './designer-view.ts';
 import './project-tree.ts';
+import './properties-panel.ts';
+import './toolbox.ts';
+import { WIDGET_MIME } from './designer-view.ts';
 import type { TreeKey } from './project-tree.ts';
 
 const OUTPUT_LIMIT = 100_000;
@@ -149,6 +152,16 @@ export class AppShell extends LitElement {
     .preview-host iframe {
       border: none;
     }
+    .toolbox lms-toolbox {
+      max-height: 30vh;
+    }
+    .budget.level-1 {
+      color: #b26a00;
+    }
+    .budget.level-2 {
+      color: var(--danger);
+      font-weight: bold;
+    }
     .components {
       list-style: none;
       display: flex;
@@ -169,10 +182,6 @@ export class AppShell extends LitElement {
     .components [role='option']:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
-    }
-    .selection {
-      margin: 0;
-      padding-left: 18px;
     }
     .file-tab {
       display: inline-flex;
@@ -669,8 +678,8 @@ export class AppShell extends LitElement {
     if (code && studio.run) code.onStop = () => void studio.run?.stop();
   }
 
-  private openErrorRow(error: MappedError): void {
-    const line = this.studio?.openError(error);
+  private async openErrorRow(error: MappedError): Promise<void> {
+    const line = await this.studio?.openError(error);
     if (line == null) return;
     void this.updateComplete.then(() =>
       this.renderRoot.querySelector<CodePanel>('lms-code-panel')?.goToLine(line),
@@ -695,7 +704,7 @@ export class AppShell extends LitElement {
             <td>${name}</td>
             <td>${error.sourceLine ?? error.line}</td>
             <td>
-              <button type="button" @click=${() => this.openErrorRow(error)}>
+              <button type="button" @click=${() => void this.openErrorRow(error)}>
                 ${error.message}
               </button>
             </td>
@@ -705,18 +714,23 @@ export class AppShell extends LitElement {
     </table>`;
   }
 
-  /** What PropertiesPanel shows until its editors come (phase 5, sub-step 3): the selection. */
-  private renderSelection() {
+  /** ComponentTray.dragEnterEvent: only components are taken. */
+  private readonly componentDragOver = (event: DragEvent) => {
     const designer = this.studio?.designer;
-    const names = designer?.properties ?? [];
-    if (!names.length) return html`<p class="placeholder">${tr('No selection')}</p>`;
-    const types = new Map(
-      designer?.tree.pages.flatMap((page) => page.widgets.map((w) => [w.name, w.type] as const)),
-    );
-    return html`<ul class="selection" data-testid="properties-selection">
-      ${names.map((name) => html`<li>${name} — ${types.get(name) ?? ''}</li>`)}
-    </ul>`;
-  }
+    const type = designer?.dragging;
+    if (!type || !event.dataTransfer?.types.includes(WIDGET_MIME)) return;
+    if (designer.isComponent(type)) event.preventDefault();
+  };
+
+  /** ComponentTray.dropEvent: the component goes to the first page, as on the desktop. */
+  private readonly componentDrop = (event: DragEvent) => {
+    const designer = this.studio?.designer;
+    const type = designer?.dragging;
+    const first = this.doc?.pages[0]?.id;
+    if (!designer || !type || !first || !designer.isComponent(type)) return;
+    event.preventDefault();
+    void designer.addWidget(first, type, 0, 0, null, false);
+  };
 
   /** ComponentTray: the non-visual components; a click selects, a double click opens the handler. */
   private renderComponents() {
@@ -724,7 +738,16 @@ export class AppShell extends LitElement {
     const components = designer?.tree.components ?? [];
     if (!components.length) return html`<p class="placeholder">${tr('No components')}</p>`;
     const selected = new Set(designer?.properties ?? []);
+    const names = () =>
+      (designer?.properties ?? []).filter((name) => components.some((c) => c.name === name));
     return html`<ul
+      @keydown=${(event: KeyboardEvent) => {
+        // ComponentTray.keyPressEvent: Delete removes the components selected
+        if (event.key === 'Delete' && names().length) {
+          event.preventDefault();
+          void designer?.deleteComponents(names());
+        }
+      }}
       class="components"
       role="listbox"
       aria-multiselectable="true"
@@ -805,6 +828,13 @@ export class AppShell extends LitElement {
       </header>
       <main>
         <section class="left" aria-label="Project tree">
+          <div class="toolbox">
+            <h2>${tr('Toolbox')}</h2>
+            <lms-toolbox
+              .controller=${this.studio?.designer ?? null}
+              .revision=${this.design}
+            ></lms-toolbox>
+          </div>
           <div>
             <h2>${tr('Project')}</h2>
             ${this.renderProject()}
@@ -837,7 +867,7 @@ export class AppShell extends LitElement {
           >
             <lms-code-panel
               .controller=${this.studio?.code ?? null}
-              .provider=${(qualified: string) => this.studio?.lvCompletions(qualified) ?? []}
+              .provider=${(qualified: string) => this.studio?.codeEntries(qualified) ?? []}
               ?running=${this.running && !this.simPanelProgram()}
             ></lms-code-panel>
           </div>
@@ -853,7 +883,11 @@ export class AppShell extends LitElement {
         </section>
         <section aria-label=${tr('Properties')}>
           <h2>${tr('Properties')}</h2>
-          ${this.renderSelection()}
+          <lms-properties-panel
+            .controller=${this.studio?.designer ?? null}
+            .revision=${this.design}
+            .onEvent=${(widget: string, event: string) => void this.studio?.openEvent(widget, event)}
+          ></lms-properties-panel>
         </section>
       </main>
       <section class="output" aria-label=${tr('Output and Errors')}>
@@ -902,12 +936,24 @@ ${this.outputText}</pre>
           id="bottom-panel-components"
           aria-labelledby="bottom-components"
           ?hidden=${this.bottom !== 'components'}
+          @dragover=${this.componentDragOver}
+          @drop=${this.componentDrop}
         >
           ${this.renderComponents()}
         </div>
       </section>
       <footer>
         <span>${this.statusMessage || `LVGL MPY Studio ${label}`}</span>
+        ${
+          this.studio?.budgetText
+            ? html`<span
+                class="budget level-${this.studio.budgetText.level}"
+                data-testid="budget"
+                title=${this.studio.budgetText.tooltip}
+                >${this.studio.budgetText.text}</span
+              >`
+            : nothing
+        }
         <span data-testid="python-status" role="status">${this.pythonStatus()}</span>
       </footer>
       <lms-dialogs></lms-dialogs>

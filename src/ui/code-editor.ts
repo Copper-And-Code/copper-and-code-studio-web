@@ -7,6 +7,7 @@ import {
   autocompletion,
   closeBrackets,
   completionKeymap,
+  startCompletion,
 } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { python } from '@codemirror/lang-python';
@@ -41,6 +42,9 @@ import { LitElement, css, html } from 'lit';
 export type CompletionProvider = (
   qualified: string,
 ) => (string | [string, string])[] | Promise<(string | [string, string])[]>;
+
+/** core/actions.py CURSOR: where the cursor goes after an action is inserted. */
+const CURSOR = '§';
 
 const setErrors = StateEffect.define<number[]>();
 const errorLine = Decoration.line({ class: 'cm-error-line' });
@@ -179,9 +183,54 @@ export class CodeEditor extends LitElement {
     const entries = await this.provider(qualified);
     if (!entries.length) return null;
     const options: Completion[] = entries.map((entry) =>
-      typeof entry === 'string' ? { label: entry } : { label: entry[0], apply: entry[1] },
+      typeof entry === 'string'
+        ? { label: entry }
+        : {
+            label: entry[0],
+            apply: (view: EditorView, _completion: Completion, from: number, to: number) =>
+              this.insertAt(view, from, to, entry[1]),
+          },
     );
     return { from: word.from + dot + 1, options, validFor: /^\w*$/ };
+  }
+
+  /**
+   * CodeEditor.insert_code: the code without its CURSOR mark (§), the cursor left at the mark;
+   * after a dot, the completion opens again.
+   */
+  private insertAt(view: EditorView, from: number, to: number, code: string): void {
+    const mark = code.indexOf(CURSOR);
+    const text = code.replace(CURSOR, '');
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: from + (mark >= 0 ? mark : text.length) },
+      scrollIntoView: true,
+    });
+    // after the double click that asked for it, the focus would stay on the list (mark_line)
+    setTimeout(() => {
+      view.focus();
+      if (code.endsWith('.')) startCompletion(view);
+    }, 0);
+  }
+
+  /**
+   * CodePanel.insert_action: on a line that has text the code goes on a new line below, with
+   * its indentation; then insert_code.
+   */
+  insertCode(code: string): void {
+    const view = this.view;
+    if (!view || this.locked) return;
+    view.focus();
+    const head = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(head);
+    if (line.text.trim()) {
+      const indent = /^\s*/.exec(line.text)?.[0] ?? '';
+      view.dispatch({ changes: { from: line.to, insert: `\n${indent}` } });
+      const at = line.to + 1 + indent.length;
+      this.insertAt(view, at, at, code);
+    } else {
+      this.insertAt(view, head, head, code);
+    }
   }
 
   get text(): string {

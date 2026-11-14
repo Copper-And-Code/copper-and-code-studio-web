@@ -1,7 +1,8 @@
-// The Code tab: what to edit, the editor, the errors of what is open. The logic is in
-// src/app/code.ts; the texts are upstream's (ui/code/editor.py).
+// The Code tab, as upstream's ui/code/editor.py CodePanel: the Object and Procedure lists, the
+// signature line, the editor with "What do you want to do?" (ActionHelper) beside it, the errors
+// of what is open. The logic is in src/app/code.ts.
 import { LitElement, css, html, nothing } from 'lit';
-import { type CodeController, keyId, parseKey } from '../app/code.ts';
+import { type CodeController, keyId } from '../app/code.ts';
 import { tr } from '../i18n/tr.ts';
 import type { CodeEditor, CompletionProvider } from './code-editor.ts';
 import './code-editor.ts';
@@ -11,6 +12,8 @@ export class CodePanel extends LitElement {
     controller: { attribute: false },
     running: { type: Boolean },
     revision: { state: true },
+    search: { state: true },
+    collapsed: { state: true },
   };
 
   controller: CodeController | null = null;
@@ -20,6 +23,9 @@ export class CodePanel extends LitElement {
   onStop: () => void = () => {};
   private unsubscribe: (() => void) | null = null;
   private shown = '';
+  search = '';
+  /** ActionHelper: the groups closed by the user, by title. */
+  collapsed = new Set<string>();
 
   static override styles = css`
     :host {
@@ -56,9 +62,70 @@ export class CodePanel extends LitElement {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
-    lms-code-editor {
+    .work {
       flex: 1 1 auto;
       min-height: 120px;
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(160px, 1fr);
+      gap: 6px;
+    }
+    @media (max-width: 900px) {
+      .work {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(120px, 1fr) minmax(80px, 30%);
+      }
+    }
+    lms-code-editor {
+      min-height: 120px;
+    }
+    .signature {
+      font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+      background: var(--bg);
+      padding: 4px 6px;
+      border-radius: 4px;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .helper {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 0;
+      overflow: auto;
+    }
+    .helper h3 {
+      font-size: 0.95rem;
+      margin: 0;
+    }
+    .helper input {
+      font: inherit;
+      color: inherit;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+    .helper ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .helper ul ul {
+      padding-left: 12px;
+    }
+    .helper button {
+      border: none;
+      background: none;
+      text-align: left;
+      width: 100%;
+      padding: 1px 4px;
+      cursor: pointer;
+    }
+    .helper .group {
+      font-weight: bold;
+    }
+    option.exists {
+      font-weight: bold;
     }
     .running {
       display: flex;
@@ -120,6 +187,92 @@ export class CodePanel extends LitElement {
     );
   }
 
+  /** ActionHelper._filter: a group shows when its title or one of its actions matches. */
+  private renderHelper() {
+    const controller = this.controller;
+    if (!controller) return nothing;
+    const needle = this.search.trim().toLowerCase();
+    const groups = controller.actions
+      .map((group) => {
+        const titleMatch = needle !== '' && group.title.toLowerCase().includes(needle);
+        const actions = group.actions.filter(
+          (action) => !needle || titleMatch || action.label.toLowerCase().includes(needle),
+        );
+        return { ...group, actions };
+      })
+      .filter((group) => group.actions.length);
+    return html`<div class="helper" aria-label=${tr('What do you want to do?')} role="region">
+      <h3>${tr('What do you want to do?')}</h3>
+      <input
+        type="search"
+        aria-label=${tr('Search an object or action')}
+        placeholder=${tr('Search an object or action')}
+        .value=${this.search}
+        @input=${(event: Event) => (this.search = (event.target as HTMLInputElement).value)}
+      />
+      <ul role="tree" aria-label=${tr('What do you want to do?')} data-testid="actions">
+        ${groups.map((group) => {
+          const open = needle
+            ? true
+            : this.collapsed.has(group.title)
+              ? false
+              : group.expanded || this.opened.has(group.title);
+          return html`<li role="none">
+            <button
+              type="button"
+              class="group"
+              role="treeitem"
+              aria-expanded=${String(open)}
+              @click=${() => this.toggleGroup(group.title, open)}
+            >
+              ${group.title}
+            </button>
+            ${
+              open
+                ? html`<ul role="group">
+                    ${group.actions.map(
+                      (action) =>
+                        html`<li role="none">
+                          <button
+                            type="button"
+                            role="treeitem"
+                            title=${action.code.replace('§', '')}
+                            data-code=${action.code}
+                            ?disabled=${this.running}
+                            @dblclick=${() => this.editor?.insertCode(action.code)}
+                            @keydown=${(event: KeyboardEvent) => {
+                              if (event.key === 'Enter') this.editor?.insertCode(action.code);
+                            }}
+                          >
+                            ${action.label}
+                          </button>
+                        </li>`,
+                    )}
+                  </ul>`
+                : nothing
+            }
+          </li>`;
+        })}
+      </ul>
+      <p class="hint">${tr('Double-click to insert the code')}</p>
+    </div>`;
+  }
+
+  /** The groups the user opened, besides those the helper opens itself. */
+  private opened = new Set<string>();
+
+  private toggleGroup(title: string, open: boolean): void {
+    const collapsed = new Set(this.collapsed);
+    if (open) {
+      collapsed.add(title);
+      this.opened.delete(title);
+    } else {
+      collapsed.delete(title);
+      this.opened.add(title);
+    }
+    this.collapsed = collapsed;
+  }
+
   /** Opens a line, from the Errors panel. */
   async goToLine(line: number): Promise<void> {
     await this.updateComplete;
@@ -129,52 +282,47 @@ export class CodePanel extends LitElement {
   override render() {
     const controller = this.controller;
     if (!controller) return nothing;
-    const state = controller.state;
     const current = keyId(controller.current);
     const module = controller.current.kind === 'pymodule';
     const errors = controller.errors();
     return html`
       <div class="row">
-        <label for="code-select">${tr('Code')}</label>
+        <label for="code-object">${tr('Object')}</label>
         <select
-          id="code-select"
-          data-testid="code-select"
-          .value=${current}
+          id="code-object"
+          data-testid="code-object"
+          .value=${controller.object}
           @change=${(event: Event) =>
-            controller.select(parseKey((event.target as HTMLSelectElement).value))}
+            void controller.selectObject((event.target as HTMLSelectElement).value)}
         >
-          <option value="module" ?selected=${current === 'module'}>${tr('(General)')}</option>
-          ${
-            state.handlers.length
-              ? html`<optgroup label=${tr('Handlers')}>
-                  ${state.handlers.map(
-                    (h) =>
-                      html`<option
-                        value="handler:${h.name}"
-                        ?selected=${current === `handler:${h.name}`}
-                      >
-                        ${h.name}
-                      </option>`,
-                  )}
-                </optgroup>`
-              : nothing
-          }
-          ${
-            state.modules.length
-              ? html`<optgroup label=${tr('Modules')}>
-                  ${state.modules.map(
-                    (m) =>
-                      html`<option
-                        value="pymodule:${m.id}"
-                        ?selected=${current === `pymodule:${m.id}`}
-                      >
-                        ${m.name}.py
-                      </option>`,
-                  )}
-                </optgroup>`
-              : nothing
-          }
+          ${controller.objects.map(
+            (object) =>
+              html`<option value=${object.key} ?selected=${object.key === controller.object}>
+                ${object.label}
+              </option>`,
+          )}
         </select>
+        <label for="code-procedure">${tr('Procedure')}</label>
+        <select
+          id="code-procedure"
+          data-testid="code-procedure"
+          .value=${current.startsWith('handler:') ? current.slice(8) : (controller.procedures[0]?.handler ?? '')}
+          @change=${(event: Event) =>
+            void controller.selectProcedure((event.target as HTMLSelectElement).value)}
+        >
+          ${controller.procedures.map(
+            (procedure) =>
+              html`<option
+                value=${procedure.handler}
+                class=${procedure.exists ? 'exists' : ''}
+                ?selected=${current === `handler:${procedure.handler}`}
+              >
+                ${procedure.event}${procedure.exists ? '' : ''}
+              </option>`,
+          )}
+        </select>
+      </div>
+      <div class="row">
         <button type="button" ?disabled=${this.running} @click=${() => void controller.newModule()}>
           ${tr('New Python Module…')}
         </button>
@@ -193,6 +341,7 @@ export class CodePanel extends LitElement {
           ${tr('Delete Module')}
         </button>
       </div>
+      <p class="signature" data-testid="code-signature">${controller.signature}</p>
       ${
         this.running
           ? html`<div class="running" role="status">
@@ -201,7 +350,10 @@ export class CodePanel extends LitElement {
             </div>`
           : nothing
       }
-      <lms-code-editor label=${tr('Code')}></lms-code-editor>
+      <div class="work">
+        <lms-code-editor label=${tr('Code')}></lms-code-editor>
+        ${this.renderHelper()}
+      </div>
       ${
         module
           ? html`<p class="hint">

@@ -17,3 +17,4 @@ public/runtime/
 .cache/
 runtime.lock.json
 public/mpy-cross/
+tests/fixtures/budget/

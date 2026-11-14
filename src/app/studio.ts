@@ -6,7 +6,9 @@ import { ProjectSession, type Prompts } from '../project/session.ts';
 import { download, pickFiles } from '../storage/download.ts';
 import { ExamplesStore } from '../storage/examples-store.ts';
 import { canOpenFolders, pickFolder, savedFolders } from '../storage/folders.ts';
-import { openWorkspace } from '../storage/handle-store.ts';
+import { openConfig, openWorkspace } from '../storage/handle-store.ts';
+import { ConfigSync, manageBlocks, manageProfiles } from './managers.ts';
+import { BudgetMonitor, type BudgetText, type Limits } from './budget.ts';
 import { MemoryStore } from '../storage/memory-store.ts';
 import { recentFiles } from '../storage/recent.ts';
 import type { Settings } from '../storage/settings.ts';
@@ -19,6 +21,7 @@ import type { DocState } from '../project/session.ts';
 import { MpyCross } from '../mpy/mpy-cross.ts';
 import { CodeController, type MappedError } from './code.ts';
 import { DesignerController } from './designer.ts';
+import { arrangeItems } from '../ui/designer-view.ts';
 import { FileTabs } from './file-tabs.ts';
 import { RunController, type RunView } from './run.ts';
 
@@ -78,6 +81,7 @@ export class Studio {
     this.code.onChange(() => this.workbenchChanged());
     // the code as Python has it, after new, open, reload, undo and redo
     this.session.onChange(() => {
+      this.scheduleBudget(); // the code counts too: MainWindow connects code_changed
       // an edit of the Code tab changes no page: design_key leaves the code out
       if (this.code.adopting) return;
       void this.code.refresh();
@@ -260,11 +264,50 @@ export class Studio {
     if (page) this.session.adopt(await this.python.call<DocState>('doc_initial_page', page));
   }
 
-  /** open_handler: the Code tab with the widget's handler, when it has one. */
-  async openHandler(name: string): Promise<void> {
-    const handler = await this.python.call<string | null>('widget_handler', name);
-    if (handler) this.code.openHandler(handler);
+  /** PropertiesPanel._event_activated: the handler made if missing, then open_handler. */
+  async openEvent(widget: string, event: string): Promise<void> {
+    const result = await this.python.call<{ handler: string; state: DocState }>(
+      'event_handler',
+      widget,
+      event,
+    );
+    this.session.adopt(result.state);
+    await this.code.refresh();
+    await this.code.openObject(widget, event);
     this.show('code');
+  }
+
+  /** open_handler: the Code tab on the widget, at its default event; typing makes the handler. */
+  async openHandler(name: string): Promise<void> {
+    this.show('code');
+    await this.code.openObject(name);
+  }
+
+  /** Upstream's configuration folder, kept in the browser. */
+  config: ConfigSync | null = null;
+
+  /** Device → Manage Board Profiles…. */
+  async manageProfiles(): Promise<void> {
+    if (this.config) await manageProfiles(this.python, this.dialogs, this.config);
+  }
+
+  /** Settings → Manage Blocks…: then MainWindow._blocks_changed, everything reads them again. */
+  async manageBlocks(): Promise<void> {
+    if (!this.config) return;
+    const changed = await manageBlocks(this.python, this.dialogs, this.config, async () => {
+      const chosen = await this.dialogs.choose({
+        mode: 'folder',
+        title: tr('Choose the folder of the block'),
+        stores: [...this.stores.values()],
+        readOnlyPlaces: true,
+      });
+      const store = chosen ? this.stores.get(chosen.store) : undefined;
+      return chosen && store ? { store, path: chosen.path } : null;
+    });
+    if (changed) {
+      this.designer?.blocksChanged();
+      await this.code.refresh();
+    }
   }
 
   /** The first project shows its first page, as the desktop opens on it. */
@@ -284,7 +327,41 @@ export class Studio {
     );
     this.designer.setActive(this.currentPage());
     void this.designer.refresh();
+    // a host of its own: a simulator replaces what its container holds when it starts
+    const budgetHost = document.createElement('div');
+    previewHost.after(budgetHost);
+    budgetHost.className = previewHost.className;
+    this.budget = new BudgetMonitor(this.python, this.mpyCross, budgetHost);
+    this.budget.onUpdate(() => void this.showBudget());
+    this.budget.paused = () => this.run?.running ?? false;
+    this.scheduleBudget();
     return this.designer;
+  }
+
+  // ---- the budget: MainWindow._schedule_budget and _show_budget ----
+
+  budget: BudgetMonitor | null = null;
+  budgetText: BudgetText | null = null;
+
+  /** _board_limits: the free memory read from the board at the last connection (phase 6). */
+  private boardLimits(): Limits {
+    const board = this.session.state?.board;
+    const saved = board ? this.settings.get<string>(`device/memory/${board}`, '') : '';
+    try {
+      return saved ? (JSON.parse(saved) as Limits) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private scheduleBudget(): void {
+    if (this.session.state) this.budget?.schedule(this.boardLimits());
+  }
+
+  private async showBudget(): Promise<void> {
+    if (!this.budget) return;
+    this.budgetText = await this.budget.text();
+    this.workbenchChanged();
   }
 
   /** ui/main_run.py append_error: a line in Output and a row of Errors. */
@@ -331,6 +408,11 @@ export class Studio {
   async saveCurrent(): Promise<boolean> {
     const tab = this.currentFile();
     return tab ? this.files.save(tab) : this.session.save();
+  }
+
+  /** CodePanel._entries: what completes a name in the Code tab. */
+  codeEntries(qualified: string): Promise<(string | [string, string])[]> {
+    return this.python.call<(string | [string, string])[]>('code_entries', qualified);
   }
 
   /** The names after lv., for completion. */
@@ -519,13 +601,18 @@ export class Studio {
   }
 
   /** RunMixin._error_activated: the line in the module or the handler. */
-  openError(error: MappedError): number | null {
+  async openError(error: MappedError): Promise<number | null> {
     const line = error.sourceLine ?? error.line ?? 1;
+    const code = this.code;
     if (error.module) {
-      if (!this.code.openModule(error.module)) return null;
+      const module = code.state.modules.find((m) => m.name === error.module);
+      if (!module) return null;
+      await code.select({ kind: 'pymodule', id: module.id });
     } else if (error.handler) {
-      if (error.handler === 'module') this.code.select({ kind: 'module' });
-      else if (!this.code.openHandler(error.handler)) return null;
+      if (error.handler === 'module') await code.select({ kind: 'module' });
+      else if (code.state.handlers.some((h) => h.name === error.handler))
+        await code.select({ kind: 'handler', name: error.handler });
+      else return null;
     } else {
       return null;
     }
@@ -544,6 +631,19 @@ export class Studio {
     for (const folder of await savedFolders()) this.addStore(folder);
     const saved = this.settings.get<Location | null>(FILES_FOLDER, null);
     if (saved && this.stores.has(saved.store)) this.filesFolder = saved;
+    let config: FileStore;
+    try {
+      config = await openConfig();
+    } catch {
+      config = new MemoryStore('config', 'Configuration');
+    }
+    this.config = new ConfigSync(this.python, config);
+    await this.python.ready;
+    try {
+      await this.config.load(); // the user's profiles and blocks, before the first project
+    } catch (error) {
+      this.output(`${error instanceof Error ? error.message : String(error)}\n`);
+    }
     await this.session.start();
     if (this.workspaceProblem) {
       void this.dialogs.notice(
@@ -972,6 +1072,8 @@ export class Studio {
             action: () => void session.redo(),
           },
           { separator: true },
+          ...this.editItems(),
+          { separator: true },
           {
             label: tr('Select All'),
             id: 'select-all',
@@ -981,10 +1083,99 @@ export class Studio {
           },
         ],
       },
-      { label: tr('Project'), items: () => this.pageItems() },
-      ...(this.designer ? [this.viewMenu(this.designer)] : []),
+      ...(this.designer ? [this.arrangeMenu(this.designer)] : []),
       ...(this.run ? [this.runMenu(this.run, ready)] : []),
+      {
+        label: tr('Project'),
+        items: () => [
+          ...this.pageItems(),
+          { separator: true },
+          {
+            label: tr('Project Settings…'),
+            id: 'project-settings',
+            disabled: !ready || !this.designer,
+            action: () => void this.designer?.projectSettings(),
+          },
+          {
+            label: tr('Update Project Profile'),
+            id: 'update-profile',
+            disabled: !ready || !this.session.state?.board,
+            action: () => void this.designer?.updateProjectProfile(),
+          },
+        ],
+      },
+      {
+        label: tr('Device'),
+        items: () => [
+          {
+            label: tr('Manage Board Profiles…'),
+            id: 'profiles',
+            disabled: !ready,
+            action: () => void this.manageProfiles(),
+          },
+        ],
+      },
+      {
+        label: tr('Settings'),
+        items: () => [
+          {
+            label: tr('Manage Blocks…'),
+            id: 'blocks',
+            disabled: !ready,
+            action: () => void this.manageBlocks(),
+          },
+        ],
+      },
+      ...(this.designer ? [this.viewMenu(this.designer)] : []),
     ];
+  }
+
+  /** Cut, Copy, Paste, Duplicate, Delete: on the canvas shown. */
+  private editItems(): MenuItem[] {
+    const designer = this.designer;
+    const page = this.currentPage();
+    const none = !designer || !page || !designer.selected(page).length;
+    const item = (
+      label: string,
+      id: string,
+      shortcut: string,
+      action: (d: DesignerController) => Promise<void>,
+      disabled: boolean,
+    ): MenuItem => ({
+      label: tr(label),
+      id,
+      shortcut,
+      disabled,
+      action: () => designer && void action(designer),
+    });
+    return [
+      item('Cut', 'cut', 'Ctrl+X', (d) => d.copy(true), none),
+      item('Copy', 'copy', 'Ctrl+C', (d) => d.copy(false), none),
+      item('Paste', 'paste', 'Ctrl+V', (d) => d.paste(), !designer || !page),
+      item('Duplicate', 'duplicate', 'Ctrl+D', (d) => d.duplicate(), none),
+      item('Delete', 'delete', 'Del', (d) => d.deleteSelected(), none),
+    ];
+  }
+
+  /** ui/main_window.py, the Arrange menu. */
+  private arrangeMenu(designer: DesignerController): Menu {
+    return {
+      label: tr('Arrange'),
+      items: () => {
+        const page = this.currentPage();
+        const designSize = page ? designer.pages.get(page)?.designSize : null;
+        return [
+          ...arrangeItems(designer, page),
+          { separator: true },
+          {
+            label: tr('Adapt Page to Resolution…'),
+            id: 'adapt-page',
+            disabled: !designSize,
+            action: () => void designer.adaptPage(this.selectedPage()),
+          },
+        ];
+      },
+    };
   }
 
   /** ui/main_window.py, the View menu's designer actions. */
@@ -1084,9 +1275,31 @@ export class Studio {
       return true;
     }
     if (inTerminal) return false;
+    if (event.key === 'Escape' && this.designer?.armed) {
+      this.designer.arm(null);
+      return true;
+    }
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
     // QKeySequence.ZoomIn, ZoomOut and Fit to Window, while a page is shown
+    // the Edit actions on the canvas shown; in a text field they are the field's
+    const designer = this.designer;
+    if (designer && this.currentPage() && !inEditor && !event.shiftKey) {
+      const actions: Record<string, () => Promise<void>> = {
+        x: () => designer.copy(true),
+        c: () => designer.copy(false),
+        v: () => designer.paste(),
+        d: () => designer.duplicate(),
+        ']': () => designer.changeZ(true),
+        '[': () => designer.changeZ(false),
+      };
+      const action = actions[key];
+      if (action) {
+        void action();
+        event.preventDefault();
+        return true;
+      }
+    }
     if (this.designer && this.currentPage() && !inEditor && key === 'a' && !event.shiftKey) {
       this.designer.selectAll();
       event.preventDefault();

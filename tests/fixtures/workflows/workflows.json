@@ -1,5 +1,5 @@
 {
-  "comment": "Designer workflows of upstream/docs/manual.md. scripts/workflows.py replays each one with upstream's core on the host and writes <name>.json; tests/e2e/designer.spec.ts replays it in the web IDE and compares the saved project. projectId, and the ids of pages a step creates, are normalised.",
+  "comment": "Designer workflows of upstream/docs/manual.md. scripts/workflows.py replays each one on the host with upstream's code (its core, and for the canvas its own DesignerScene) and writes <name>.json; tests/e2e/designer.spec.ts replays it in the web IDE and compares the saved project. projectId, and every id a step creates, are normalised.",
   "workflows": [
     {
       "name": "resolution-adapt",
@@ -77,6 +77,251 @@
         },
         {
           "deletePage": "settings"
+        }
+      ]
+    },
+    {
+      "name": "properties",
+      "manual": "5. Widgets: Properties panel values, a multiple selection, a new name that the handlers follow, the Events tab",
+      "example": "fifteen",
+      "steps": [
+        {
+          "select": [
+            "menu_title"
+          ]
+        },
+        {
+          "set": [
+            "text",
+            "Fifteen!"
+          ]
+        },
+        {
+          "set": [
+            "textColor",
+            "#FF0000"
+          ]
+        },
+        {
+          "set": [
+            "textAlign",
+            "LV_TEXT_ALIGN_LEFT"
+          ]
+        },
+        {
+          "select": [
+            "btn_play",
+            "btn_options"
+          ]
+        },
+        {
+          "set": [
+            "height",
+            "70"
+          ]
+        },
+        {
+          "select": [
+            "btn_play"
+          ]
+        },
+        {
+          "set": [
+            "Name",
+            "btn_start"
+          ]
+        },
+        {
+          "select": [
+            "tick"
+          ]
+        },
+        {
+          "set": [
+            "period",
+            "500"
+          ]
+        },
+        {
+          "set": [
+            "enabled",
+            "false"
+          ]
+        },
+        {
+          "select": [
+            "menu_bg"
+          ]
+        },
+        {
+          "event": "CLICKED"
+        }
+      ]
+    },
+    {
+      "name": "editing",
+      "manual": "6. Drawing the page: place from the Toolbox (a click, a drop, into a container), move with the keys, resize, duplicate, cut and paste, align, distribute, the order, delete; 7. Adapt Page to Resolution",
+      "example": "fifteen",
+      "steps": [
+        {
+          "page": "Menu"
+        },
+        {
+          "add": [
+            "button",
+            400,
+            20
+          ]
+        },
+        {
+          "drop": [
+            "label",
+            240,
+            450
+          ]
+        },
+        {
+          "drop": [
+            "timer",
+            100,
+            100
+          ]
+        },
+        {
+          "select": [
+            "menu_tile_a",
+            "menu_tile_b",
+            "menu_tile_c"
+          ]
+        },
+        {
+          "align": "top"
+        },
+        {
+          "select": [
+            "menu_title",
+            "menu_tile_b",
+            "btn_play"
+          ]
+        },
+        {
+          "distribute": "horizontal"
+        },
+        {
+          "select": [
+            "btn_play"
+          ]
+        },
+        {
+          "move": [
+            10,
+            0
+          ]
+        },
+        {
+          "resize": {
+            "btn_play": [
+              260,
+              70
+            ]
+          }
+        },
+        {
+          "select": [
+            "btn_options"
+          ]
+        },
+        {
+          "duplicate": true
+        },
+        {
+          "select": [
+            "menu_subtitle"
+          ]
+        },
+        {
+          "cut": true
+        },
+        {
+          "select": []
+        },
+        {
+          "paste": true
+        },
+        {
+          "select": [
+            "menu_title"
+          ]
+        },
+        {
+          "front": true
+        },
+        {
+          "select": [
+            "menu_tile_gap"
+          ]
+        },
+        {
+          "delete": true
+        },
+        {
+          "resolution": [
+            240,
+            240
+          ],
+          "mode": "keep"
+        },
+        {
+          "adaptPage": "Menu",
+          "mode": "adapt"
+        }
+      ]
+    },
+    {
+      "name": "code",
+      "manual": "8. Writing code: an Object and its Procedure, a handler made by typing it, a page's handler, the general code",
+      "example": "fifteen",
+      "steps": [
+        {
+          "code": [
+            "widget:menu_bg",
+            "CLICKED",
+            "ui.menu_title.set_text(\"Hello\")"
+          ]
+        },
+        {
+          "code": [
+            "widget:opt_sound",
+            "VALUE_CHANGED",
+            "print(\"sound\")"
+          ]
+        },
+        {
+          "code": [
+            "page:Options",
+            "SCREEN_LOADED",
+            "print(\"options\")"
+          ]
+        },
+        {
+          "code": [
+            "module",
+            null,
+            "# the general code\nSPEED = 3\n"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "project-settings",
+      "manual": "7. Resolution: Project → Project Settings…, a board profile and its resolution, Adapt",
+      "example": "weather",
+      "steps": [
+        {
+          "projectSettings": [
+            "waveshare_rp2350_touch_lcd_4_240",
+            "adapt"
+          ]
         }
       ]
     }

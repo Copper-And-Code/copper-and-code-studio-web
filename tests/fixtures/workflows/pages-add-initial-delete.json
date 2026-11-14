@@ -8,7 +8,7 @@
   },
   "pages": [
     {
-      "id": "<new page 1>",
+      "id": "<new 1>",
       "name": "page3",
       "canvasSize": [
         480,
@@ -713,7 +713,7 @@
       }
     }
   },
-  "currentPageId": "<new page 1>",
+  "currentPageId": "<new 1>",
   "assets": {
     "images": [
       {

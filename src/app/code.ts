@@ -1,7 +1,9 @@
 // The project's Code tab, as upstream's ui/code/editor.py CodePanel and the module actions of
-// ui/main_tree.py: the general code, the handlers and the Python modules in one editor; each edit
-// is a step of the project's undo, merged while the same thing stays open; the syntax check
-// compiles the generated project with mpy-cross and keeps the errors of what is open.
+// ui/main_tree.py: an Object (the general code, a module, a page, a widget, an orphan handler)
+// and its Procedure (an event) choose what the one editor shows; a handler not written yet is
+// made by the first text typed; each edit is a step of the project's undo, merged while the same
+// thing stays open; the syntax check compiles the generated project with mpy-cross and keeps the
+// errors of what is open.
 import { tr } from '../i18n/tr.ts';
 import type { MpyCross } from '../mpy/mpy-cross.ts';
 import type { PythonBridge } from '../py/bridge.ts';
@@ -14,9 +16,34 @@ export interface CodeState {
   modules: { id: string; name: string; source: string }[];
 }
 
-/** What is open: the general code, a handler by name, a module by id (the name changes). */
+/**
+ * What is open: the general code, a handler by name, a module by id (the name changes). A
+ * handler not made yet has its owner and event: the first text typed makes it.
+ */
 export type CodeKey =
-  { kind: 'module' } | { kind: 'handler'; name: string } | { kind: 'pymodule'; id: string };
+  | { kind: 'module' }
+  | { kind: 'handler'; name: string; owner?: string; event?: string }
+  | { kind: 'pymodule'; id: string };
+
+/** An entry of the Object list: module, pymodule:<id>, page:<name>, widget:<name>, orphan:<name>. */
+export interface CodeObject {
+  key: string;
+  label: string;
+}
+
+/** An entry of the Procedure list: an event and its handler; exists is shown in bold. */
+export interface Procedure {
+  event: string;
+  handler: string;
+  exists: boolean;
+}
+
+/** A group of ActionHelper: what can be done with an object, as code to insert. */
+export interface ActionGroup {
+  title: string;
+  expanded: boolean;
+  actions: { label: string; code: string }[];
+}
 
 export interface MappedError {
   file?: string | null;
@@ -30,6 +57,9 @@ export interface MappedError {
 }
 
 const CHECK_DELAY_MS = 500; // CodePanel.check_timer
+
+const keyOf = (key: CodeKey) =>
+  key.kind === 'module' ? 'module' : key.kind === 'handler' ? `h:${key.name}` : `m:${key.id}`;
 
 export const keyId = (key: CodeKey) =>
   key.kind === 'module'
@@ -47,6 +77,14 @@ export function parseKey(id: string): CodeKey {
 export class CodeController {
   state: CodeState = { module: '', handlers: [], modules: [] };
   current: CodeKey = { kind: 'module' };
+  objects: CodeObject[] = [{ key: 'module', label: '(General)' }];
+  /** The object chosen in the Object list. */
+  object = 'module';
+  procedures: Procedure[] = [];
+  /** The line above the editor: def <handler>(e): or what the text is. */
+  signature = '';
+  actions: ActionGroup[] = [];
+  private choosing = Promise.resolve();
   /** Errors of the whole project at the last check; errors() keeps those of what is open. */
   allErrors: MappedError[] = [];
   private session = 0;
@@ -83,8 +121,16 @@ export class CodeController {
   async refresh(): Promise<void> {
     await this.editing;
     this.state = await this.python.call<CodeState>('code_state');
-    if (!this.exists(this.current)) this.current = { kind: 'module' };
-    this.changed();
+    this.objects = await this.python.call<CodeObject[]>('code_objects');
+    // CodePanel.populate: the same object if it is still there, the handler's own if it moved
+    let object = this.object;
+    const current = this.current;
+    if (current.kind === 'handler' && this.exists(current)) {
+      object = (await this.python.call<string | null>('code_object_of', current.name)) ?? object;
+    }
+    if (!this.objects.some((item) => item.key === object)) object = 'module';
+    if (current.kind === 'pymodule' && !this.exists(current)) object = 'module';
+    await this.load(object, current.kind === 'handler' ? current.name : undefined, false);
     if (this.active) this.scheduleCheck();
   }
 
@@ -114,34 +160,121 @@ export class CodeController {
       : null;
   }
 
-  /** Opens something else: a new editing session, so the next edit is a new undo step. */
-  select(key: CodeKey): void {
-    this.current = key;
-    this.session++;
+  /**
+   * _load_object and _load_body: the procedures of the object, the one asked for (a handler, an
+   * event) or the current or default one, its text and signature. newSession: a new undo step
+   * for the next edit, as when another thing is opened.
+   */
+  private async load(
+    object: string,
+    pick?: string,
+    newSession = true,
+    event?: string,
+  ): Promise<void> {
+    const listed = await this.python.call<{ procedures: Procedure[]; default: string | null }>(
+      'code_procedures',
+      object,
+    );
+    const byEvent = event ? listed.procedures.find((p) => p.event === event)?.handler : undefined;
+    const handler =
+      byEvent ??
+      (pick && listed.procedures.some((p) => p.handler === pick) ? pick : null) ??
+      listed.default ??
+      listed.procedures[0]?.handler ??
+      'module';
+    const opened = await this.python.call<{
+      current: CodeKey;
+      signature: string;
+      state: DocState;
+    }>('code_open', object, handler);
+    if (opened.state.undoText !== this.project.state?.undoText) {
+      // an orphan handler attached again: "Create Handler"
+      this.adoptState(opened.state);
+      this.state = await this.python.call<CodeState>('code_state');
+    }
+    const same = keyOf(opened.current) === keyOf(this.current);
+    this.object = object;
+    this.procedures = listed.procedures;
+    this.current = opened.current;
+    this.signature = opened.signature;
+    if (newSession || !same) this.session++;
+    this.actions = await this.python.call<ActionGroup[]>(
+      'code_actions',
+      object.startsWith('widget:') ? object.slice(7) : null,
+      object.startsWith('pymodule:') ? object.slice(9) : null,
+    );
     this.changed();
-    this.scheduleCheck(0);
+    if (newSession) this.scheduleCheck(0);
+  }
+
+  /** Runs the choices one after the other, as the combo boxes change one at a time. */
+  private choose(task: () => Promise<void>): Promise<void> {
+    this.choosing = this.choosing.then(task, task);
+    return this.choosing;
+  }
+
+  /** The Object list: _object_changed. */
+  selectObject(object: string): Promise<void> {
+    return this.choose(() => this.load(object));
+  }
+
+  /** The Procedure list: _procedure_changed. */
+  selectProcedure(handler: string): Promise<void> {
+    return this.choose(() => this.load(this.object, handler));
+  }
+
+  /** Opens something else: a new editing session, so the next edit is a new undo step. */
+  select(key: CodeKey): Promise<void> {
+    return this.choose(async () => {
+      if (key.kind === 'module') return this.load('module');
+      if (key.kind === 'pymodule') return this.load(`pymodule:${key.id}`);
+      const object = await this.python.call<string | null>('code_object_of', key.name);
+      return this.load(object ?? 'module', key.name);
+    });
   }
 
   openModule(name: string): boolean {
     const module = this.state.modules.find((m) => m.name === name);
     if (!module) return false;
-    this.select({ kind: 'pymodule', id: module.id });
+    void this.select({ kind: 'pymodule', id: module.id });
     return true;
   }
 
   openHandler(name: string): boolean {
     if (!this.state.handlers.some((h) => h.name === name)) return false;
-    this.select({ kind: 'handler', name });
+    void this.select({ kind: 'handler', name });
     return true;
+  }
+
+  /** CodePanel.open_handler: a widget or a page and an event, the default one if none. */
+  openObject(name: string, event?: string): Promise<void> {
+    return this.choose(async () => {
+      const object = this.objects.some((item) => item.key === `widget:${name}`)
+        ? `widget:${name}`
+        : `page:${name}`;
+      if (!this.objects.some((item) => item.key === object)) return;
+      await this.load(object, undefined, true, event);
+    });
   }
 
   /** CodePanel._text_changed: the text into the project, one undo step per session. */
   edit(text: string): void {
     const key = this.current;
     if (text === this.text(key)) return;
+    let made = false;
     if (key.kind === 'handler') {
       const handler = this.state.handlers.find((h) => h.name === key.name);
       if (handler) handler.body = text;
+      else if (key.owner && key.event) {
+        // the first text of a handler not made yet: ensure_handler makes it
+        this.state.handlers.push({
+          name: key.name,
+          widget: key.owner,
+          event: key.event,
+          body: text,
+        });
+        made = true;
+      }
     } else if (key.kind === 'pymodule') {
       const module = this.state.modules.find((m) => m.id === key.id);
       if (module) module.source = text;
@@ -149,10 +282,27 @@ export class CodeController {
       this.state.module = text;
     }
     const id = key.kind === 'handler' ? key.name : key.kind === 'pymodule' ? key.id : 'module';
+    const owner = made && key.kind === 'handler' ? key.owner : undefined;
+    const event = made && key.kind === 'handler' ? key.event : undefined;
+    if (made && key.kind === 'handler') {
+      this.current = { kind: 'handler', name: key.name };
+      const procedure = this.procedures.find((p) => p.handler === key.name);
+      if (procedure) procedure.exists = true;
+    }
     const session = this.session;
     this.editing = this.editing.then(async () => {
-      const state = await this.python.call<DocState>('code_set', key.kind, id, text, session);
-      this.adoptState(state);
+      const state = await this.python.call<DocState>(
+        'code_set',
+        key.kind,
+        id,
+        text,
+        session,
+        owner ?? null,
+        event ?? null,
+      );
+      // a handler made changes the widget's events: the designer reads the project again
+      if (owner) this.project.adopt(state);
+      else this.adoptState(state);
     });
     this.scheduleCheck();
   }

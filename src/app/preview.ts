@@ -68,15 +68,28 @@ export class PreviewRenderer {
 
   /** A page to draw; key is its design_key, the page is skipped if already drawn so. */
   request(pageId: string, key: string, pending: PendingGeometry | null = null): boolean {
-    if (!pending && this.done.get(pageId) === key) return false;
+    // Upstream skips a page already drawn so. While another drawing of it is running or due, the
+    // page would be left with that one: an undo right after a change (upstream request 7).
+    const busy = this.running || this.scheduled;
+    if (!pending && !busy && this.done.get(pageId) === key) return false;
     this.request_ = { pageId, pending };
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.start(), pending ? 0 : DELAY_MS);
+    this.scheduled = true;
+    this.timer = setTimeout(
+      () => {
+        this.scheduled = false;
+        void this.start();
+      },
+      pending ? 0 : DELAY_MS,
+    );
     return true;
   }
 
+  private scheduled = false;
+
   stop(): void {
     clearTimeout(this.timer);
+    this.scheduled = false;
     this.dirty = false;
   }
 
@@ -120,7 +133,11 @@ export class PreviewRenderer {
     if (this.dirty) {
       this.dirty = false;
       clearTimeout(this.timer);
-      this.timer = setTimeout(() => void this.start(), DELAY_MS);
+      this.scheduled = true;
+      this.timer = setTimeout(() => {
+        this.scheduled = false;
+        void this.start();
+      }, DELAY_MS);
     }
   }
 

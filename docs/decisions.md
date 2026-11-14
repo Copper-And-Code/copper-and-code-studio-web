@@ -185,3 +185,66 @@ Sub-gate 2, the tree and the selection.
   name; a click now shows the page, as on the desktop.
 - **The chevrons of the tree are drawn by CSS with empty alternative text**, so that each
   item's text and accessible name are its label alone.
+
+Sub-gate 3, the Properties panel.
+
+- **The panel's logic is ported to `py/lms_bridge.py`** (`properties_view`, `properties_set`,
+  `event_handler`): `ui/properties/panel.py` holds it in a Qt widget. The checks and the
+  conversions are upstream's: `validate_name`, `rename_widget`, `parse_pin`, `ensure_handler`.
+- **The validation messages are the panel's, not `core/validation.py`'s.** PLAN.md names
+  `core/validation.py`, but the desktop's panel does not use it: it checks the project file when
+  it is loaded. The web IDE shows what the desktop shows.
+- **A change to several widgets is one execute**, where the desktop opens an undo macro of one
+  execute per widget: the result and the undo step are the same, without a macro in the
+  temporary document of upstream request 5.
+- **A value goes to the project on Enter or when the field is left**, as a delegate commits. The
+  field being typed into is not rewritten by a rebuild that arrives meanwhile; after the commit
+  it shows what the project holds, a refused value included.
+
+Sub-gate 4, editing.
+
+- **The canvas's operations are ported to `py/lms_bridge.py`** from `ui/designer/scene.py`
+  (`add_widget`, `delete_selected`, `move_selected`, `commit_items`, `copy_selected`, `paste`,
+  `duplicate_selected`, `align_selected`, `distribute_selected`, `change_z`), because that file
+  is Qt. The pointer and the keys stay in the page (`src/ui/designer-view.ts`).
+- **The workflow references for the canvas come from upstream's own `DesignerScene`**, run
+  offscreen with PySide6 on the host (`scripts/workflows.py`, with the Python of a desktop
+  checkout's environment), so that the port is compared with the original, not with itself.
+- **"Reparent" is what the desktop does**: a widget placed on a container goes inside it, and
+  a pasted widget keeps its container. The desktop has no way to move a placed widget into
+  another container, so neither has the web IDE.
+- **Undo and redo stay with the document**: PLAN.md names `core/actions.py`, which holds the
+  code actions of the Code tab, not the undo.
+- **A page is drawn again when another drawing of it is running or due**, even if its key is
+  the one drawn last: upstream skips it, and a quick undo left the canvas showing the change
+  undone (upstream request 7).
+- **The Toolbox's drag is HTML drag and drop**, whose data cannot be read before the drop: the
+  type being dragged is kept by the designer for the drop preview.
+
+Sub-gate 5, events, blocks, budget, settings, profiles.
+
+- **The Code tab follows `ui/code/editor.py`**: one list of what to edit is replaced by its
+  Object and Procedure lists. The logic of `populate`, `_load_object`, `_load_body`,
+  `_text_changed`, `ActionHelper.rebuild` and `_entries` is ported to `py/lms_bridge.py`, the
+  actions themselves are upstream's `core/actions.py`. A widget's double click opens its default
+  event as `open_handler` does, without making the handler: typing makes it.
+- **The workflow reference of the Code tab comes from upstream's own `CodePanel`**, run offscreen
+  on the host, as the canvas's comes from `DesignerScene`.
+- **Upstream's `distribute_selected` takes the widgets from a set**: two at the same position come
+  in a different order from one run to the next, and so does the result. The workflow picks
+  widgets at different positions; the web IDE takes them in page order.
+- **Upstream's configuration folder** (`platform.config_dir`: board profiles, blocks) is in
+  Pyodide's file system and kept in a folder of the browser's private storage, `config`, outside
+  the workspace (`src/app/managers.ts`). It is copied in at start-up and out after each change.
+- **The managers' dialogs are drawn by the caller** inside the IDE's dialog element; the IDE
+  shows one dialog at a time, so a question inside a manager is the browser's own `confirm`, and
+  Add from Folder… closes the Block Manager, chooses, and opens it again.
+- **The budget runs upstream's `measure_budget` unchanged**, with its two processes replaced:
+  `compile_python` and `_bytecode_file` answer from compilations the page made first with
+  mpy-cross in WebAssembly, and `_measure_ram` leaves the instrumented app to the page, which runs
+  it in a hidden simulator of its own. A file already compiled with the same text is not compiled
+  again, and nothing is measured while the simulator runs a program: without these the measure
+  after every change slowed the rest of the IDE (and its tests).
+- **The budget's tooltip says the RAM is measured in the WebAssembly simulator**: upstream's says
+  "64-bit simulator", which is not true here. `ui/budget.py`'s texts are ported, because that file
+  imports Qt.

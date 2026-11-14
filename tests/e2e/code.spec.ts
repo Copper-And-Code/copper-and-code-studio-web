@@ -107,13 +107,15 @@ test('the Code tab: a new module, its syntax error, Start stops on it, the Error
   await menu(page, 'File', 'Open Example', 'snake');
   await expect(page.getByTestId('project-file')).toHaveText('Examples: snake/project.json');
   await page.getByTestId('tab-code').click();
-  await expect(page.getByTestId('code-select')).toHaveValue('module');
+  await expect(page.getByTestId('code-object')).toHaveValue('module');
 
   await page.getByRole('button', { name: 'New Python Module…' }).click();
   await dialog(page).locator('#text').fill('helpers');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
   await expect(page.getByTestId('module')).toHaveText('helpers.py');
-  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText('helpers.py');
+  await expect(page.getByTestId('code-object').locator('option:checked')).toHaveText(
+    'Module: helpers.py',
+  );
   expect(await page.evaluate(() => window.lmsStudio.studio?.code.text())).toBe(
     'import lvgl as lv\nimport ui\n\n\n',
   );
@@ -134,7 +136,9 @@ test('the Code tab: a new module, its syntax error, Start stops on it, the Error
   await page.locator('[data-testid^="tab-page-"]').first().click();
   await page.getByTestId('errors').getByRole('button').first().click();
   await expect(page.getByTestId('tab-code')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText('helpers.py');
+  await expect(page.getByTestId('code-object').locator('option:checked')).toHaveText(
+    'Module: helpers.py',
+  );
 
   // undo takes the module away again, step by step
   await page.locator('[data-testid^="tab-page-"]').first().focus();
@@ -158,7 +162,7 @@ test('a traceback in the simulator becomes a row of Errors that opens the line',
   await editor.click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('raise ValueError("boom")\n');
-  await page.getByTestId('code-select').selectOption('module');
+  await page.getByTestId('code-object').selectOption('module');
   await editor.click();
   await page.keyboard.press('ControlOrMeta+Home');
   await page.keyboard.type('import boom\n');
@@ -172,7 +176,9 @@ test('a traceback in the simulator becomes a row of Errors that opens the line',
   await expect(row).toBeVisible();
   await page.keyboard.press('Shift+F5');
   await row.click();
-  await expect(page.getByTestId('code-select').locator('option:checked')).toHaveText('boom.py');
+  await expect(page.getByTestId('code-object').locator('option:checked')).toHaveText(
+    'Module: boom.py',
+  );
   await expect(page.locator('[role="tabpanel"]:not([hidden]) .cm-activeLine')).toHaveText(
     'raise ValueError("boom")',
   );

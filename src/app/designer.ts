@@ -2,6 +2,8 @@
 // Preview (ui/designer/preview.py) of the page shown, the grid, the zoom and Fit to Window, the
 // resolution (ui/main_resolution.py, ui/resolution.py). What a page holds comes from Python
 // (py/lms_bridge.py design_page): the canvas draws it as ui/designer/scene.py does.
+import { html } from 'lit';
+import { live } from 'lit/directives/live.js';
 import { tr } from '../i18n/tr.ts';
 import type { PythonBridge } from '../py/bridge.ts';
 import type { DocState, ProjectSession } from '../project/session.ts';
@@ -44,6 +46,33 @@ export interface DesignTree {
   components: { name: string; type: string; events: boolean }[];
 }
 
+/** A row of the Properties panel: ui/properties/panel.py rebuild. */
+export interface PropertyRow {
+  name: string;
+  label: string;
+  type: string;
+  value: string;
+  checked?: boolean;
+  descriptor: { name: string; type?: string; options?: string[]; min?: number; max?: number };
+}
+
+export interface PropertiesView {
+  names: string[];
+  categories: { name: string; label: string; rows: PropertyRow[] }[];
+  events: { event: string; description: string; handler: string; bound: boolean }[];
+  /** The fonts of the project, offered for a font property. */
+  fonts: string[];
+}
+
+export interface ToolboxCategory {
+  category: string;
+  label: string;
+  entries: { type: string; name: string; component: boolean }[];
+}
+
+/** A widget's geometry while it is dragged or resized, not yet in the project. */
+export type Geometry = { x: number; y: number; width: number; height: number };
+
 export interface ResolutionMenu {
   boards: { width: number; height: number; names: string[] }[];
   common: Size[];
@@ -79,9 +108,21 @@ export class DesignerController {
   private readonly selections = new Map<string, string[]>();
   /** The widgets the Properties panel shows: PropertiesPanel.set_selection. */
   properties: string[] = [];
+  /** What the Properties panel shows of them. */
+  propertiesView: PropertiesView = { names: [], categories: [], events: [], fonts: [] };
+  /** The panel's message: a value refused, or the warnings of a rename. */
+  propertiesMessage = '';
+  private viewTicket = 0;
+  /** Toolbox._arm_views: the widget the next click on a page places; null when none. */
+  armed: string | null = null;
+  /** The widget type the Toolbox is dragging: a drag's data cannot be read until it is dropped. */
+  dragging: string | null = null;
+  private toolboxEntries: Promise<ToolboxCategory[]> | null = null;
   private readonly renderer: PreviewRenderer;
   private readonly listeners = new Set<() => void>();
   private loading = Promise.resolve();
+  /** How many times the pages were read again after a change: for tests that wait for one. */
+  revisionCount = 0;
 
   constructor(
     private readonly python: PythonBridge,
@@ -159,7 +200,9 @@ export class DesignerController {
         );
       }
       this.properties = this.properties.filter((name) => names.has(name));
+      await this.loadProperties();
       this.fitIfResized();
+      this.revisionCount++;
       this.changed();
       this.requestPreview();
     });
@@ -201,15 +244,54 @@ export class DesignerController {
     const before = this.selected(pageId);
     if (before.length === unique.length && before.every((name, i) => name === unique[i])) return;
     this.selections.set(pageId, unique);
-    this.properties = unique;
+    this.setProperties(unique);
+  }
+
+  /** PropertiesPanel.set_selection, then rebuild. */
+  private setProperties(names: string[]): void {
+    this.properties = names; // the message stays until the next change, as on the desktop
+    this.changed();
+    void this.loadProperties().then(() => this.changed());
+  }
+
+  private async loadProperties(): Promise<void> {
+    const ticket = ++this.viewTicket;
+    const view = await this.python.call<PropertiesView>('properties_view', this.properties);
+    if (ticket === this.viewTicket) this.propertiesView = view;
+  }
+
+  /**
+   * PropertiesPanel._item_changed: a value typed or chosen, for every widget shown; a new name for
+   * one. The canvas keeps the widget selected under its new name.
+   */
+  async setProperty(name: string, text: string, checked?: boolean): Promise<void> {
+    const result = await this.python.call<{
+      error: string | null;
+      warnings: string[];
+      names: string[];
+      state: DocState;
+    }>('properties_set', this.properties, name, text, checked ?? null);
+    if (name === 'Name' && result.names.length === 1 && this.properties.length === 1) {
+      const [old] = this.properties;
+      const [renamed] = result.names;
+      for (const [id, selected] of this.selections) {
+        this.selections.set(
+          id,
+          selected.map((item) => (item === old ? (renamed ?? item) : item)),
+        );
+      }
+    }
+    this.properties = result.names;
+    this.propertiesMessage = result.error ?? result.warnings.join('\n');
+    this.session.adopt(result.state);
+    await this.loadProperties();
     this.changed();
   }
 
   /** ComponentTray._selection_changed: components only reach the Properties panel. */
   selectComponents(names: string[]): void {
     if (!names.length) return;
-    this.properties = names;
-    this.changed();
+    this.setProperties(names);
   }
 
   /** Edit → Select All, on the canvas shown: DesignerScene.select_all. */
@@ -225,6 +307,185 @@ export class DesignerController {
   /** The page a widget is on, from the tree. */
   pageOf(name: string): string | null {
     return this.tree.pages.find((page) => page.widgets.some((w) => w.name === name))?.id ?? null;
+  }
+
+  // ---- editing: ui/designer/scene.py ----
+
+  toolbox(): Promise<ToolboxCategory[]> {
+    this.toolboxEntries ??= this.python.call<ToolboxCategory[]>('toolbox').then((categories) => {
+      for (const category of categories)
+        for (const entry of category.entries)
+          if (entry.component) this.componentTypes.add(entry.type);
+      return categories;
+    });
+    return this.toolboxEntries;
+  }
+
+  /** MainWindow._blocks_changed: the Toolbox, the canvases and Properties read the blocks again. */
+  blocksChanged(): void {
+    this.toolboxEntries = null;
+    this.componentTypes.clear();
+    this.blocksRevision++;
+    void this.refresh();
+  }
+
+  /** Grows when the blocks change: the Toolbox reads its entries again. */
+  blocksRevision = 0;
+
+  /** Whether a type of the Toolbox is a component: it has no place on a page. */
+  isComponent(widgetType: string): boolean {
+    return this.componentTypes.has(widgetType);
+  }
+
+  private readonly componentTypes = new Set<string>();
+
+  /** DesignerView.arm_widget, for every page. */
+  arm(widgetType: string | null): void {
+    this.armed = widgetType;
+    this.changed();
+  }
+
+  /** A change made: the project as Python has it, the canvases rebuilt, then what to select. */
+  private async adopt(state: DocState, pageId?: string | null, select?: string[]): Promise<void> {
+    this.session.adopt(state);
+    await this.loading; // the refresh the change started: the new widgets are on the page
+    if (pageId && select) this.select(pageId, select);
+  }
+
+  /** DesignerScene.add_widget: inside the container under the point, then selected. */
+  async addWidget(
+    pageId: string,
+    widgetType: string,
+    x: number,
+    y: number,
+    parentId: string | null,
+    centered: boolean,
+  ): Promise<void> {
+    const result = await this.python.call<{ created: string[]; state: DocState }>(
+      'design_add_widget',
+      pageId,
+      widgetType,
+      x,
+      y,
+      parentId,
+      centered,
+      this.gridSize,
+    );
+    await this.adopt(result.state, pageId, result.created);
+  }
+
+  /** The size of a new widget, for the drop preview; null for a component. */
+  defaultWidget(
+    widgetType: string,
+  ): Promise<{ name: string; props: Record<string, unknown> } | null> {
+    return this.python.call('design_default_size', widgetType);
+  }
+
+  async deleteSelected(pageId = this.active): Promise<void> {
+    if (!pageId || !this.selected(pageId).length) return;
+    await this.adopt(await this.python.call<DocState>('design_delete', this.selected(pageId)));
+  }
+
+  /** The Delete key on the Components strip. */
+  async deleteComponents(names: string[]): Promise<void> {
+    if (names.length) await this.adopt(await this.python.call<DocState>('design_delete', names));
+  }
+
+  /** The arrow keys: move_selected. */
+  async moveSelected(dx: number, dy: number, pageId = this.active): Promise<void> {
+    if (!pageId || !this.selected(pageId).length) return;
+    await this.adopt(
+      await this.python.call<DocState>('design_move', this.selected(pageId), dx, dy),
+    );
+  }
+
+  /** commit_items: the end of a drag or a resize. */
+  async commitGeometry(changed: Record<string, Geometry>): Promise<void> {
+    if (!Object.keys(changed).length) return;
+    await this.adopt(await this.python.call<DocState>('design_geometry', changed));
+  }
+
+  /** _preview_drag: while dragging, the real frame follows the widgets. */
+  previewDrag(pageId: string, pending: Record<string, Geometry>): void {
+    const page = this.pages.get(pageId);
+    if (!this.previewOn || !page || !Object.keys(pending).length) return;
+    this.renderer.request(pageId, page.key, pending);
+  }
+
+  async copy(cut = false, pageId = this.active): Promise<void> {
+    if (!pageId) return;
+    const state = await this.python.call<DocState>(
+      'design_copy',
+      pageId,
+      this.selected(pageId),
+      cut,
+    );
+    if (cut) await this.adopt(state);
+  }
+
+  async paste(pageId = this.active): Promise<void> {
+    if (!pageId) return;
+    const result = await this.python.call<{ created: string[]; state: DocState }>(
+      'design_paste',
+      pageId,
+    );
+    if (result.created.length) await this.adopt(result.state, pageId, result.created);
+  }
+
+  async duplicate(pageId = this.active): Promise<void> {
+    if (!pageId || !this.selected(pageId).length) return;
+    const result = await this.python.call<{ created: string[]; state: DocState }>(
+      'design_duplicate',
+      pageId,
+      this.selected(pageId),
+    );
+    await this.adopt(result.state, pageId, result.created);
+  }
+
+  async align(side: string, pageId = this.active): Promise<void> {
+    if (!pageId) return;
+    await this.adopt(
+      await this.python.call<DocState>('design_align', pageId, this.selected(pageId), side),
+    );
+  }
+
+  async distribute(axis: 'horizontal' | 'vertical', pageId = this.active): Promise<void> {
+    if (!pageId) return;
+    await this.adopt(
+      await this.python.call<DocState>('design_distribute', pageId, this.selected(pageId), axis),
+    );
+  }
+
+  async changeZ(front: boolean, pageId = this.active): Promise<void> {
+    if (!pageId || !this.selected(pageId).length) return;
+    await this.adopt(
+      await this.python.call<DocState>('design_z', pageId, this.selected(pageId), front),
+    );
+  }
+
+  /** Arrange → Adapt Page to Resolution…: adapt_current_page. */
+  async adaptPage(pageId: string | null): Promise<boolean> {
+    if (!pageId || this.blocked()) return false;
+    const plan = await this.python.call<{
+      designSize: [number, number] | null;
+      display: Size;
+    }>('adapt_page_plan', pageId);
+    if (!plan.designSize) return false;
+    const [width, height] = plan.designSize;
+    const mode = await this.resizeMode(plan.display, false, '', { width, height });
+    if (mode === null) return false;
+    const result = await this.python.call<{ outside: string[]; state: DocState }>(
+      'doc_adapt_page',
+      pageId,
+      mode,
+    );
+    await this.adopt(result.state);
+    if (result.outside.length) {
+      this.output(
+        `${tr('Widgets outside canvas: {names}', { names: result.outside.join(', ') })}\n`,
+      );
+    }
+    return true;
   }
 
   /** View → Real LVGL Preview: _toggle_preview. */
@@ -310,6 +571,138 @@ export class DesignerController {
       );
     }
     return true;
+  }
+
+  /** Project → Project Settings…: ProjectSettingsDialog, then the question, one undo step. */
+  async projectSettings(): Promise<boolean> {
+    if (this.blocked()) return false;
+    const view = await this.python.call<{
+      presets: { width: number; height: number; label: string }[];
+      profiles: { key: string; name: string; width: number; height: number; info: string }[];
+      current: string | null;
+      display: Size;
+      diagnostics: string[];
+    }>('project_settings_view');
+    const form = {
+      width: view.display.width,
+      height: view.display.height,
+      profile: view.current,
+      info: view.diagnostics.join('\n'),
+    };
+    const profile = () => view.profiles.find((item) => item.key === form.profile);
+    const sync = () => {
+      // _sync_resolution: a profile fixes the resolution
+      const chosen = profile();
+      if (chosen) {
+        form.width = chosen.width;
+        form.height = chosen.height;
+      }
+      this.dialogs.refresh();
+    };
+    sync();
+    const number = (value: string, fallback: number) => {
+      const parsed = Math.round(Number(value));
+      return Number.isFinite(parsed) ? Math.min(10000, Math.max(1, parsed)) : fallback;
+    };
+    const accepted = await this.dialogs.custom<boolean>(
+      tr('Project Settings'),
+      (finish) => html`
+        <div class="grid">
+          <label for="settings-preset">${tr('Preset')}</label>
+          <select
+            id="settings-preset"
+            ?disabled=${!!profile()}
+            @change=${(event: Event) => {
+              const preset = view.presets[Number((event.target as HTMLSelectElement).value)];
+              if (preset) {
+                form.width = preset.width;
+                form.height = preset.height;
+              }
+              this.dialogs.refresh();
+            }}
+          >
+            <option value="">${tr('Custom')}</option>
+            ${view.presets.map((preset, index) => html`<option value=${index}>${preset.label}</option>`)}
+          </select>
+          <span>${tr('Resolution')}</span>
+          <div class="row">
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              aria-label=${tr('Width')}
+              ?disabled=${!!profile()}
+              .value=${live(String(form.width))}
+              @change=${(event: Event) =>
+                (form.width = number((event.target as HTMLInputElement).value, form.width))}
+            />
+            <input
+              type="number"
+              min="1"
+              max="10000"
+              aria-label=${tr('Height')}
+              ?disabled=${!!profile()}
+              .value=${live(String(form.height))}
+              @change=${(event: Event) =>
+                (form.height = number((event.target as HTMLInputElement).value, form.height))}
+            />
+          </div>
+          <label for="settings-profile">${tr('Board Profile')}</label>
+          <select
+            id="settings-profile"
+            .value=${live(form.profile ?? '')}
+            @change=${(event: Event) => {
+              const value = (event.target as HTMLSelectElement).value;
+              form.profile = value === '' ? null : value;
+              const chosen = profile();
+              if (chosen) form.info = chosen.info;
+              sync();
+            }}
+          >
+            <option value="">${tr('No Profile')}</option>
+            ${view.profiles.map((item) => html`<option value=${item.key}>${item.name}</option>`)}
+          </select>
+        </div>
+        ${form.info ? html`<p data-testid="settings-info">${form.info}</p>` : ''}
+        <div class="buttons">
+          <button type="button" @click=${() => finish(false)}>${tr('Cancel')}</button>
+          <button type="button" class="primary" @click=${() => finish(true)}>${tr('Apply')}</button>
+        </div>
+      `,
+      false,
+    );
+    if (!accepted) return false;
+    const mode = await this.resizeMode({ width: form.width, height: form.height }, true, '');
+    if (mode === null) return false;
+    const result = await this.python.call<{ outside: string[]; state: DocState }>(
+      'doc_project_settings',
+      form.width,
+      form.height,
+      form.profile,
+      mode,
+    );
+    await this.adopt(result.state);
+    this.reportOutside(result.outside);
+    return true;
+  }
+
+  /** Project → Update Project Profile: the project's copy of its board from the catalog. */
+  async updateProjectProfile(): Promise<boolean> {
+    const result = await this.python.call<{ error: string | null; state: DocState }>(
+      'doc_update_profile',
+    );
+    if (result.error) {
+      this.error(result.error);
+      return false;
+    }
+    await this.adopt(result.state);
+    return true;
+  }
+
+  private reportOutside(outside: string[]): void {
+    if (outside.length) {
+      this.output(`${tr('Widgets outside canvas: {names}', { names: outside.join(', ') })}\n`);
+    }
   }
 
   /** _custom_resolution: CustomSizeDialog. */
