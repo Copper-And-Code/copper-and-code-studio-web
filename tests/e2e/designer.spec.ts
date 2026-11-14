@@ -261,6 +261,7 @@ async function chooseResolution(page: Page, width: number, height: number) {
 
 for (const workflow of workflows) {
   test(`workflow ${workflow.name}: the saved project is upstream's`, async ({ page }) => {
+    test.setTimeout(60_000); // the longest replay many steps of the canvas
     await start(page);
     await menu(page, 'File', 'Open Example', workflow.example);
     await expect(page.getByTestId('project-file')).toContainText('project.json');
@@ -662,8 +663,14 @@ test('a drag moves the widgets, the real frame follows, Ctrl+Z puts them back', 
   await shownFrame(page);
   await menu(page, 'View', 'Fit to Window');
   await clickAt(page, 240, 318); // btn_play
-  const start_ = await toScreen(page, 240, 318);
-  const end = await toScreen(page, 240, 418);
+  // whole pixels, as the browser reports them: the page moves by what they make at this zoom
+  const start_ = (await toScreen(page, 240, 318)).map(Math.round) as [number, number];
+  const end = (await toScreen(page, 240, 418)).map(Math.round) as [number, number];
+  const zoom = await page.evaluate(() => {
+    const studio = window.lmsStudio.studio;
+    return studio?.designer?.view(studio.currentPage() ?? '').zoom ?? 1;
+  });
+  const moved = 286 + Math.round((end[1] - start_[1]) / zoom);
   await page.mouse.move(...start_);
   await page.mouse.down();
   await page.mouse.move(...end, { steps: 6 });
@@ -687,7 +694,7 @@ test('a drag moves the widgets, the real frame follows, Ctrl+Z puts them back', 
     )
     .toBe(true);
   await page.mouse.up();
-  await expect.poll(props).toBe(386);
+  await expect.poll(props).toBe(moved);
   expect(await page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText)).toBe(
     'Change Geometry',
   );
