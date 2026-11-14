@@ -91,8 +91,14 @@ export class PythonBridge {
   }
 
   call<T>(method: string, ...args: unknown[]): Promise<T> {
+    const before = this.before;
+    if (before)
+      return before(method).then(() => this.send<T>((id) => ({ kind: 'call', id, method, args })));
     return this.send<T>((id) => ({ kind: 'call', id, method, args }));
   }
+
+  /** Awaited before each call: the fonts are converted before a call that generates code. */
+  before: ((method: string) => Promise<void>) | null = null;
 
   /** Writes a file into Pyodide's file system. The data is copied, the caller keeps its own. */
   writeFile(path: string, data: Uint8Array): Promise<void> {

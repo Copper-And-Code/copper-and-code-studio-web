@@ -16,6 +16,9 @@ A step is what the desktop's ui/ code does after its dialogs:
   ui/document.py ProjectDocument; "adaptPage": ui/main_resolution.py adapt_current_page;
 - "projectSettings" [profile id, mode]: ui/main_resolution.py open_project_settings with the
   profile chosen in ProjectSettingsDialog, which fixes the resolution;
+- "file" [property, file under tests/fixtures]: upstream's own ui/properties/panel.py
+  PropertiesPanel, the file's path typed into the property, as its … button does: Qt reads the
+  picture, fontconv.py converts the font;
 - "code" [object, event, text]: upstream's own ui/code/editor.py CodePanel: the object and the
   procedure chosen, the text typed into its editor (a handler not made yet is made by it).
   These need PySide6: run the script with the Python of a desktop checkout's environment.
@@ -23,7 +26,11 @@ A step is what the desktop's ui/ code does after its dialogs:
 The project is written as core/model.py Project.save writes it, with projectId normalised (Save
 As gives the copy a new one), and every id a step created, a uuid, by its order in the file.
 
-The web IDE must save the same file (tests/e2e/designer.spec.ts).
+The web IDE must save the same file (tests/e2e/designer.spec.ts). A picture is stored as PNG,
+which Qt and the browser encode differently: its data is replaced by the size of the picture, its
+pixels are compared by the e2e test. With "frame", the page is also drawn by the native runtime,
+as the designer's preview draws it (build/preview.py render_page): pass the runtime executable
+of a desktop checkout in LMS_RUNTIME.
 
 Usage: <python with PySide6> -I scripts/workflows.py [out]   (default: tests/fixtures/workflows)
 """
@@ -91,6 +98,16 @@ def set_property(project, names, name, text):
 
 
 ID = re.compile(r'"id": "([0-9a-f]{32})"')
+PICTURE = re.compile(r'"data": "data:image/png;base64,([A-Za-z0-9+/=]+)"')
+
+
+def picture_size(match):
+    """A picture's PNG data, as its size: Qt and the browser encode the same pixels differently."""
+    import base64
+
+    data = base64.b64decode(match.group(1))
+    width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    return f'"data": "<png {width}x{height}>"'
 
 
 def normalised(project, original_ids):
@@ -98,6 +115,7 @@ def normalised(project, original_ids):
     data = project.to_dict()
     data["projectId"] = NORMALISED
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    text = PICTURE.sub(picture_size, text)
     created = []
     for found in ID.findall(text):
         if found not in original_ids and found not in created:
@@ -105,6 +123,24 @@ def normalised(project, original_ids):
     for number, new_id in enumerate(created, 1):
         text = text.replace(new_id, f"<new {number}>")
     return text
+
+
+def write_frame(project, page_name, target):
+    """build/preview.py render_page with the native runtime, as the designer's preview draws it."""
+    import os
+
+    from lvgl_mpy_studio.build import preview
+    from lvgl_mpy_studio.build.visual import rgb565_to_rgb, write_png
+
+    runtime = os.environ.get("LMS_RUNTIME")
+    if not runtime:
+        raise SystemExit("LMS_RUNTIME: the native runtime, for the frame of a workflow")
+    preview.runtime_path = lambda: Path(runtime)
+    index = next(number for number, page in enumerate(project.pages) if page.name == page_name)
+    pixels, log = preview.render_with_log(project, index)
+    if pixels is None:
+        raise SystemExit(f"no frame: {log}")
+    write_png(target, rgb565_to_rgb(pixels), project.display.width, project.display.height)
 
 
 def all_ids(project):
@@ -133,19 +169,39 @@ class Canvas:
         return self.scenes[page.id]
 
     def select(self, names):
-        scene = self.scene()
+        self.selected = list(names)
+        scene = self.scene() if self.page else None
+        if scene is None:
+            return
         scene.clearSelection()
         for item in scene.widget_items.values():
             if item.name in names:
                 item.setSelected(True)
 
     def step(self, step):
-        from PySide6.QtCore import QPointF
+        from PySide6.QtCore import QPointF, Qt  # noqa: F401
 
         from lvgl_mpy_studio.core.i18n import tr
 
         if "page" in step:
             self.page = step["page"]
+            return True
+        if "file" in step:
+            from lvgl_mpy_studio.ui.properties.panel import DESCRIPTOR_ROLE, PropertiesPanel
+
+            if not hasattr(self, "properties"):
+                self.properties = PropertiesPanel(self.document)
+            name, path = step["file"]
+            self.properties.set_selection(self.selected)
+            for row in self.properties.model.findItems("", Qt.MatchContains | Qt.MatchRecursive, 0):
+                value = row.parent().child(row.row(), 1) if row.parent() else self.properties.model.item(row.row(), 1)
+                descriptor = value.data(DESCRIPTOR_ROLE) if value else None
+                if descriptor and descriptor.get("name") == name:
+                    value.setText(str(ROOT / "tests" / "fixtures" / path))
+                    break
+            else:
+                raise SystemExit(f"no property {name}")
+            self.properties.rebuild()
             return True
         if "code" in step:
             from lvgl_mpy_studio.ui.code.editor import CodePanel
@@ -206,11 +262,16 @@ def main(argv):
         selected = []
         canvas = None
         for step in workflow["steps"]:
-            if canvas is not None or any(key in step for key in ("page", "adaptPage", "code")):
-                canvas = canvas or Canvas(project)
+            if canvas is not None or any(key in step for key in ("page", "adaptPage", "code", "file")):
+                if canvas is None:
+                    canvas = Canvas(project)
+                    canvas.selected = list(selected)
                 project = canvas.document.project  # undo and redo replace it
                 if "select" in step:
                     canvas.select(step["select"])
+                    continue
+                if "set" in step:
+                    canvas.selected = set_property(project, canvas.selected, *step["set"])
                     continue
                 if "resolution" in step:
                     width, height = step["resolution"]
@@ -245,6 +306,8 @@ def main(argv):
             else:
                 raise SystemExit(f"{workflow['name']}: unknown step {step}")
         (out / f"{workflow['name']}.json").write_text(normalised(project, original_ids), encoding="utf-8", newline="\n")
+        if workflow.get("frame"):
+            write_frame(project, workflow["frame"], out / f"{workflow['name']}.png")
         print(workflow["name"])
     return 0
 

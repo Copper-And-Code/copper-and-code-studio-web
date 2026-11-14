@@ -13,6 +13,12 @@ Every dependency is listed here with its licence. GPL-incompatible licences are 
 | fflate                                                                                    | 0.8.3                       | MIT                                                    | zip import, export and bundles    |
 | CodeMirror 6 (`@codemirror/*`, `@lezer/*`)                                                | as pinned in `package.json` | MIT                                                    | the code editor                   |
 | xterm.js (`@xterm/xterm`, `@xterm/addon-fit`)                                             | 6.0.0, 0.11.0               | MIT                                                    | the terminal of a program         |
+| opentype.js                                                                               | 1.3.4                       | MIT                                                    | the kerning of a project's fonts  |
+| FreeType in WebAssembly, from lv_font_conv (`lib/freetype/build/ft_render.js`)            | lv_font_conv 1.5.3          | lv_font_conv MIT; FreeType FTL (chosen of FTL/GPL-2.0) | rasterising a project's fonts     |
+
+FreeType's licence asks for a credit: portions of this software are copyright © The FreeType
+Project (www.freetype.org). All rights reserved. The About box says it too. The FreeType Project
+Licence is compatible with the GPL version 3, the IDE's licence.
 
 ### The WebAssembly runtime of the simulator
 
@@ -30,17 +36,18 @@ serves their licence texts in `runtime/licenses/`, as upstream's web build does.
 
 ## Development only (not shipped)
 
-| Component                       | Version         | Licence    |
-| ------------------------------- | --------------- | ---------- |
-| Vite                            | 8.3.5           | MIT        |
-| TypeScript                      | 6.0.3           | Apache-2.0 |
-| Vitest                          | 5.0.5           | MIT        |
-| Playwright (`@playwright/test`) | 1.64.1          | Apache-2.0 |
-| ESLint, `@eslint/js`            | 10.14.0, 10.0.1 | MIT        |
-| typescript-eslint               | 8.72.1          | MIT        |
-| Prettier                        | 3.9.10          | MIT        |
-| globals                         | 17.13.0         | MIT        |
-| `@types/node`                   | 26.6.6          | MIT        |
+| Component                                                        | Version         | Licence    |
+| ---------------------------------------------------------------- | --------------- | ---------- |
+| Vite                                                             | 8.3.5           | MIT        |
+| TypeScript                                                       | 6.0.3           | Apache-2.0 |
+| Vitest                                                           | 5.0.5           | MIT        |
+| Playwright (`@playwright/test`)                                  | 1.64.1          | Apache-2.0 |
+| ESLint, `@eslint/js`                                             | 10.14.0, 10.0.1 | MIT        |
+| typescript-eslint                                                | 8.72.1          | MIT        |
+| Prettier                                                         | 3.9.10          | MIT        |
+| globals                                                          | 17.13.0         | MIT        |
+| `@types/node`                                                    | 26.6.6          | MIT        |
+| lv_font_conv (the package; only its FreeType build ships, above) | 1.5.3           | MIT        |
 
 ### Test only (Python packages loaded into Pyodide under Node)
 
@@ -50,5 +57,11 @@ serves their licence texts in `runtime/licenses/`, as upstream's web build does.
 | hypothesis | 6.170.14 | MPL-2.0      |
 | pyserial   | 3.5      | BSD-3-Clause |
 | mpremote   | 1.29.0   | MIT          |
+
+### Test fixtures
+
+| Component                                                                                                         | Licence                   | Use                                 |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------- | ----------------------------------- |
+| Montserrat Medium (`tests/fixtures/fonts/Montserrat-Medium.ttf`), the file LVGL ships in `scripts/built_in_font/` | SIL Open Font License 1.1 | the reference of the font converter |
 
 The full list of transitive development packages is in `pnpm-lock.yaml`.

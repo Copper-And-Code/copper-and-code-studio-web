@@ -18,3 +18,4 @@ public/runtime/
 runtime.lock.json
 public/mpy-cross/
 tests/fixtures/budget/
+tests/fixtures/fonts/

@@ -324,6 +324,60 @@
           ]
         }
       ]
+    },
+    {
+      "name": "fonts",
+      "manual": "5. Fonts: … next to font, a .ttf file; fontSize at any size; the page drawn with it",
+      "example": "weather",
+      "frame": "main",
+      "steps": [
+        {
+          "select": [
+            "city"
+          ]
+        },
+        {
+          "file": [
+            "font",
+            "fonts/Montserrat-Medium.ttf"
+          ]
+        },
+        {
+          "set": [
+            "fontSize",
+            "30"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "images",
+      "manual": "5. Images: an Image, … next to src, a picture file; it becomes part of the project",
+      "example": "weather",
+      "frame": "main",
+      "steps": [
+        {
+          "page": "main"
+        },
+        {
+          "drop": [
+            "image",
+            205,
+            345
+          ]
+        },
+        {
+          "select": [
+            "image1"
+          ]
+        },
+        {
+          "file": [
+            "src",
+            "workflows/picture.png"
+          ]
+        }
+      ]
     }
   ]
 }

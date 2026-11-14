@@ -6,6 +6,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import type { DesignerController, PropertyRow } from '../app/designer.ts';
 import { tr } from '../i18n/tr.ts';
+import { pickFiles } from '../storage/download.ts';
 
 type Tab = 'properties' | 'events';
 
@@ -240,15 +241,42 @@ export class PropertiesPanel extends LitElement {
         </div>`;
       }
       case 'font':
-        return html`${this.textEditor(row, 'project-fonts')}
+        return html`<div class="with-button">
+            ${this.textEditor(row, 'project-fonts')} ${this.fileButton(row, 'font')}
+          </div>
           <datalist id="project-fonts">
             ${(this.controller?.propertiesView.fonts ?? []).map(
               (font) => html`<option value=${font}></option>`,
             )}
           </datalist>`;
+      case 'image':
+        return html`<div class="with-button">
+          ${this.textEditor(row)} ${this.fileButton(row, 'image')}
+        </div>`;
       default:
         return this.textEditor(row);
     }
+  }
+
+  /** PropertyDelegate's … button: choose an image or a font file for the property. */
+  private fileButton(row: PropertyRow, kind: 'image' | 'font') {
+    const title = kind === 'image' ? tr('Choose an image') : tr('Choose a font');
+    return html`<button
+      type="button"
+      class="choose"
+      title=${title}
+      aria-label=${title}
+      data-choose=${row.name}
+      @click=${async () => {
+        const [file] = await pickFiles(
+          kind === 'image' ? 'image/png,image/jpeg,image/bmp,.png,.jpg,.jpeg,.bmp' : '.ttf,.otf',
+          false,
+        );
+        if (file) await this.controller?.setPropertyFile(row.name, kind, file);
+      }}
+    >
+      …
+    </button>`;
   }
 
   private renderRow(row: PropertyRow) {

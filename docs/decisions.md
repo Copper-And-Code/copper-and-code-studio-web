@@ -248,3 +248,25 @@ Sub-gate 5, events, blocks, budget, settings, profiles.
 - **The budget's tooltip says the RAM is measured in the WebAssembly simulator**: upstream's says
   "64-bit simulator", which is not true here. `ui/budget.py`'s texts are ported, because that file
   imports Qt.
+
+Sub-gate 6, images and fonts.
+
+- **Fonts are rasterised with lv_font_conv's FreeType** (PLAN.md 6.7, choice a): its WebAssembly
+  build, rendered as lv_font_conv renders (light autohinting, the top four bits of each pixel),
+  the unhinted advance as `fontconv.py` takes it. Measured on Montserrat Medium at 14, 24 and 40
+  px (`tests/unit/fonts.test.ts`, references by `scripts/fonts.py` from LVGL's sources and from
+  `fontconv.py` itself): the same metrics on all 95 glyphs, the same pixels but one at 40 px, and
+  within upstream's own test of the glyphs LVGL ships. FreeType compiled by us (b) and Canvas 2D
+  (c) were not needed.
+- **Kerning adds up every pair lookup of the font's kern feature**, as HarfBuzz applies them for
+  `fontconv.py`: opentype.js's `getKerningValue`, which lv_font_conv uses, reads one lookup and
+  missed 333 pairs of Montserrat. Now every pair is the same as `fontconv.py`'s.
+- **`lvgl_mpy_studio.fontconv` is replaced in Pyodide** by a module of `py/lms_bridge.py`: upstream's
+  `gen/fonts.py` imports it to convert, and the replacement answers from the glyphs the page made,
+  written by upstream's own `write_binfont`. Before every call that generates code the bridge
+  converts the fonts the project asks for (`fonts_needed`, `fonts_put`), in a worker.
+- **Pictures are read by the browser** (`createImageBitmap`), scaled into the screen with their
+  proportions and stored as PNG, as `_read_image` does with QImage. The PNG bytes are not Qt's;
+  the pixels are the same, and so is the frame the runtime draws.
+- **The workflow references of pictures and fonts come from upstream's own `PropertiesPanel`** on
+  the host, the file's path typed into the property as its … button does.

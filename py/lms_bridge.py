@@ -1053,6 +1053,88 @@ def budget_texts(budget_value, limits):
     return {"text": text, "level": level, "tooltip": tip}
 
 
+# ---- Fonts: lvgl_mpy_studio/fontconv.py, which is Qt, answered by the page ----
+# gen/fonts.py imports lvgl_mpy_studio.fontconv only to call convert(data, size, characters).
+# Here that module is one of this file's: convert answers from the glyphs the page rasterised
+# (src/fonts/rasterise.ts) and writes them with upstream's own gen/binfont.py. Before each call
+# that generates code, the page asks fonts_needed and converts what is missing.
+FONTS = "/sim/fonts"
+_glyphs = {}
+
+
+def _font_key(data, size, characters):
+    import hashlib
+
+    return f"{hashlib.sha256(bytes(data)).hexdigest()}:{size}:{hashlib.sha256(characters.encode()).hexdigest()[:16]}"
+
+
+def _fontconv_convert(data, size, characters):
+    """fontconv.convert: {"output", "missing"} or {"error"}."""
+    from lvgl_mpy_studio.gen.binfont import write_binfont
+
+    found = _glyphs.get(_font_key(data, size, characters))
+    if found is None:
+        return {"error": "the font was not converted yet"}
+    if found.get("error"):
+        return {"error": found["error"]}
+    font = found["font"]
+    glyphs = [{**glyph, "pixels": bytes(glyph["pixels"])} for glyph in font["glyphs"]]
+    if not glyphs:
+        return {"error": "the font has none of the characters used"}
+    kerning = {tuple(int(code) for code in pair.split(",")): value for pair, value in font["kerning"].items()}
+    return {"output": write_binfont({**font, "glyphs": glyphs, "kerning": kerning}), "missing": found["missing"]}
+
+
+def _install_fontconv():
+    import types
+
+    module = types.ModuleType("lvgl_mpy_studio.fontconv")
+    module.__doc__ = "lvgl_mpy_studio.fontconv for the browser: see py/lms_bridge.py"
+    module.convert = _fontconv_convert
+    sys.modules["lvgl_mpy_studio.fontconv"] = module
+
+
+_install_fontconv()
+
+
+def fonts_needed():
+    """The fonts the open project asks for, at each size, that the page has not converted yet:
+    gen/fonts.py convert_fonts's requests."""
+    import base64
+
+    from lvgl_mpy_studio.gen.gen_python import build_project_code
+    from lvgl_mpy_studio.gen.project_gen import legacy_data
+
+    project = _doc().project
+    if not (project.assets or {}).get("fonts"):
+        return []
+    needed = []
+    Path(FONTS).mkdir(parents=True, exist_ok=True)
+    for request in build_project_code(legacy_data(project))["fontRequests"]:
+        try:
+            data = base64.b64decode(str(request["data"]).split(",", 1)[-1], validate=True)
+        except ValueError:
+            continue
+        key = _font_key(data, request["size"], request["characters"])
+        if key in _glyphs:
+            continue
+        path = f"{FONTS}/{key.split(':')[0]}.font"
+        if not Path(path).exists():
+            Path(path).write_bytes(data)
+        needed.append({"key": key, "path": path, "size": request["size"], "characters": request["characters"]})
+    return needed
+
+
+def fonts_put(key, font=None, missing="", error=None):
+    """What the page made of a request; upstream's cache of conversions is emptied, so that a
+    conversion asked before it was ready is asked again."""
+    from lvgl_mpy_studio.gen import fonts
+
+    _glyphs[key] = {"font": font, "missing": missing, "error": error}
+    fonts._cache.clear()
+    return True
+
+
 # ---- The Properties panel (src/ui/properties-panel.ts): ui/properties/panel.py ----
 CATEGORIES = ("Identity", "Position", "Appearance", "Behavior")
 
@@ -1171,6 +1253,62 @@ def properties_set(names, name, text, checked=None):
     selected = [widget.name for widget in widgets]
 
     def mutate(project):
+        for widget_name in selected:
+            project.find_widget(widget_name).props[name] = value
+
+    document.execute(tr("Change {name}", name=name), mutate)
+    return {**reply, "state": doc_state()}
+
+
+ASSET_UPLOAD = "/sim/asset"
+
+
+def asset_upload_path():
+    """Where the page writes a picture or a font file the user chose."""
+    Path(ASSET_UPLOAD).parent.mkdir(parents=True, exist_ok=True)
+    return ASSET_UPLOAD
+
+
+def image_sizes():
+    """core/assets.py images: the pictures of the project with their size."""
+    from lvgl_mpy_studio.core.assets import images
+
+    return [{"name": item["name"], "width": item["width"], "height": item["height"]} for item in images(_doc().project)]
+
+
+def properties_set_asset(names, name, kind, file_name):
+    """PropertiesPanel._item_changed for a file chosen with … next to an image or font property:
+    the picture (already PNG and no larger than the screen, as _read_image makes it) or the font
+    becomes part of the project, and the property names it, in one undo step."""
+    from lvgl_mpy_studio.core.assets import AssetError, add_font, add_image, font_name, fonts, free_image_name
+    from lvgl_mpy_studio.core.i18n import tr
+    from lvgl_mpy_studio.core.model import Project
+
+    document = _doc()
+    widgets = _selected_widgets(names)
+    reply = {"error": None, "warnings": [], "names": [widget.name for widget in widgets]}
+    data = Path(ASSET_UPLOAD).read_bytes()
+    image = font = None
+    try:
+        if kind == "image":
+            image = (free_image_name(document.project, file_name), data)
+            add_image(Project(), *image)  # the checks, before anything changes
+            value = image[0]
+        else:
+            value = font_name(file_name)
+            existing = next((item["name"] for item in fonts(document.project) if item["name"] == value), None)
+            font = (value, data) if existing is None else None
+            if font:
+                add_font(Project(), *font)
+    except AssetError as exc:
+        return {**reply, "error": str(exc), "state": doc_state()}
+    selected = [widget.name for widget in widgets]
+
+    def mutate(project):  # the desktop's macro: Add Image or Add Font, then Change <name>
+        if image:
+            add_image(project, *image)
+        if font:
+            add_font(project, *font)
         for widget_name in selected:
             project.find_widget(widget_name).props[name] = value
 
@@ -1618,6 +1756,8 @@ METHODS = {
     "module_rename": module_rename,
     "module_delete": module_delete,
     "design_page": design_page,
+    "fonts_needed": fonts_needed,
+    "fonts_put": fonts_put,
     "budget_prepare": budget_prepare,
     "budget_measure": budget_measure,
     "budget_texts": budget_texts,
@@ -1656,6 +1796,9 @@ METHODS = {
     "doc_adapt_page": doc_adapt_page,
     "properties_view": properties_view,
     "properties_set": properties_set,
+    "asset_upload_path": asset_upload_path,
+    "properties_set_asset": properties_set_asset,
+    "image_sizes": image_sizes,
     "event_handler": event_handler,
     "design_tree": design_tree,
     "widget_handler": widget_handler,

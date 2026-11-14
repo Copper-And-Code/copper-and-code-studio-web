@@ -3,6 +3,7 @@
 // (tests/fixtures/previews, from scripts/previews.py; threshold 0, upstream's visual tests'
 // default). Zoom, Fit to Window and the resolution work as on the desktop.
 import { readFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.ts';
 import { differentPixels, readPng } from './png.ts';
@@ -156,6 +157,8 @@ test('a new resolution: the question, the widgets adapted, one undo step, the fr
 interface Workflow {
   name: string;
   example: string;
+  /** A page whose preview must be the native runtime's frame of the saved project. */
+  frame?: string;
   steps: {
     resolution?: [number, number];
     mode?: 'adapt' | 'stretch' | 'keep';
@@ -182,6 +185,7 @@ interface Workflow {
     adaptPage?: string;
     code?: [string, string | null, string];
     projectSettings?: [string, string];
+    file?: [string, string];
   }[];
 }
 
@@ -265,6 +269,16 @@ for (const workflow of workflows) {
     await start(page);
     await menu(page, 'File', 'Open Example', workflow.example);
     await expect(page.getByTestId('project-file')).toContainText('project.json');
+    // the tree is filled after the project opens: every page of the example in it first
+    const pages = (
+      JSON.parse(
+        readFileSync(
+          new URL(`../../upstream/examples/${workflow.example}/project.json`, import.meta.url),
+          'utf-8',
+        ),
+      ) as { pages: unknown[] }
+    ).pages.length;
+    await expect(page.getByTestId('page')).toHaveCount(pages);
     await page.locator('[data-testid^="tab-page-"]').first().click();
     for (const step of workflow.steps) {
       if (step.addPage) {
@@ -291,6 +305,20 @@ for (const workflow of workflows) {
       }
       if (step.set) {
         await setProperty(page, ...step.set);
+        continue;
+      }
+      if (step.file) {
+        // the … button of the property, and the file chosen in the browser's own dialog
+        const [name, path] = step.file;
+        await page.getByTestId('properties-tab-properties').click();
+        const chooser = page.waitForEvent('filechooser');
+        await page.getByTestId('properties').locator(`[data-choose="${name}"]`).click();
+        const before = await page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText);
+        await (await chooser).setFiles(new URL(`../fixtures/${path}`, import.meta.url).pathname);
+        await expect
+          .poll(() => page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText))
+          .toBe(`Change ${name}`);
+        void before;
         continue;
       }
       if (step.event) {
@@ -337,13 +365,27 @@ for (const workflow of workflows) {
       'utf-8',
     );
     const original = new Set(ids(JSON.stringify(JSON.parse(exampleText), null, 2)));
-    let normalised = JSON.stringify(saved, null, 2) + '\n';
+    let normalised = (JSON.stringify(saved, null, 2) + '\n').replace(
+      // a picture as its size, as scripts/workflows.py: Qt and the browser encode PNG differently
+      /"data": "data:image\/png;base64,([A-Za-z0-9+/=]+)"/g,
+      (_all, base64: string) => {
+        const data = Buffer.from(base64, 'base64');
+        return `"data": "<png ${data.readUInt32BE(16)}x${data.readUInt32BE(20)}>"`;
+      },
+    );
     const created = [...new Set(ids(normalised))].filter((id) => id && !original.has(id));
     created.forEach((id, index) => {
       normalised = normalised.replaceAll(id ?? '', `<new ${index + 1}>`);
     });
     const expected = readFileSync(new URL(`${workflow.name}.json`, WORKFLOWS), 'utf-8');
     expect(normalised).toBe(expected);
+    if (workflow.frame) {
+      // the page drawn with the font or the picture: the native runtime's frame, pixel for pixel
+      await page.getByRole('tab', { name: workflow.frame, exact: true }).click();
+      const frame = await shownFrame(page);
+      const reference = readPng(new URL(`${workflow.name}.png`, WORKFLOWS).pathname);
+      expect(differentPixels(reference.rgb, frame), `${workflow.name}: different pixels`).toBe(0);
+    }
   });
 }
 
@@ -770,6 +812,7 @@ test('the Code tab: Object and Procedure, a handler made by typing, an action, a
   // the helper: the widget's own group is open; a double click inserts at the cursor mark
   const actions = page.getByTestId('actions');
   await actions.getByRole('treeitem', { name: 'Change text', exact: true }).first().dblclick();
+  await expect(page.locator('#panel-code .cm-editor.cm-focused')).toHaveCount(1);
   await page.keyboard.type('Hi');
   await expect
     .poll(() => page.evaluate(() => window.lmsStudio.studio?.code.text()))
@@ -847,4 +890,67 @@ test('board profiles and blocks: managed, kept in the browser after a reload', a
   await d.getByRole('button', { name: 'Remove' }).click();
   await expect(d.getByTestId('blocks').locator('tbody tr')).toHaveCount(standard);
   await d.getByRole('button', { name: 'Close' }).click();
+});
+
+/** A PNG of one colour, as upstream's write_png writes it. */
+function solidPng(width: number, height: number): Buffer {
+  const crc = (data: Buffer) => {
+    let value = ~0;
+    for (const byte of data) {
+      value ^= byte;
+      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (0xedb88320 & -(value & 1));
+    }
+    return ~value >>> 0;
+  };
+  const chunk = (kind: string, body: Buffer) => {
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(body.length);
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc(Buffer.concat([Buffer.from(kind), body])));
+    return Buffer.concat([head, Buffer.from(kind), body, tail]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x80)]);
+  const rows = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(rows)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+test('a picture larger than the screen is made smaller, a file that is not one is refused, one Undo', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'weather');
+  await page.getByRole('treeitem', { name: 'current_icon — image' }).click();
+  const choose = async (file: { name: string; mimeType: string; buffer: Buffer }) => {
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByTestId('properties').locator('[data-choose="src"]').click();
+    await (await chooser).setFiles(file);
+  };
+  await choose({ name: 'notes.png', mimeType: 'image/png', buffer: Buffer.from('not a picture') });
+  await expect(page.getByTestId('properties-error')).toContainText(
+    'notes.png is not a picture this program can read',
+  );
+  await choose({ name: 'wide photo.png', mimeType: 'image/png', buffer: solidPng(960, 240) });
+  await expect(page.getByTestId('properties').locator('[data-property="src"]')).toHaveValue(
+    'wide_photo.png',
+  );
+  const size = await page.evaluate(() => window.lmsStudio.python.call('image_sizes'));
+  // 480×480 screen: 960×240 becomes 480×120, proportions kept
+  expect(size).toContainEqual({ name: 'wide_photo.png', width: 480, height: 120 });
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(page.getByTestId('properties').locator('[data-property="src"]')).toHaveValue(
+    'sunny.png',
+  );
+  expect(await page.evaluate(() => window.lmsStudio.python.call('image_sizes'))).not.toContainEqual(
+    expect.objectContaining({ name: 'wide_photo.png' }),
+  );
 });

@@ -714,6 +714,22 @@ export class AppShell extends LitElement {
     </table>`;
   }
 
+  /**
+   * The tree's pages come from the document, at once, as the old list of pages did; the widgets
+   * of each from the designer, which reads them a moment later.
+   */
+  private projectTree(doc: DocState) {
+    const tree = this.studio?.designer?.tree ?? { pages: [], components: [] };
+    return {
+      components: tree.components,
+      pages: doc.pages.map((page) => ({
+        id: page.id,
+        name: page.name,
+        widgets: tree.pages.find((item) => item.id === page.id)?.widgets ?? [],
+      })),
+    };
+  }
+
   /** ComponentTray.dragEnterEvent: only components are taken. */
   private readonly componentDragOver = (event: DragEvent) => {
     const designer = this.studio?.designer;
@@ -810,7 +826,7 @@ export class AppShell extends LitElement {
         <dd>${doc.display.width}×${doc.display.height}</dd>
       </dl>
       <lms-project-tree
-        .tree=${this.studio?.designer?.tree ?? { pages: [], components: [] }}
+        .tree=${this.projectTree(doc)}
         .modules=${doc.modules}
         .selected=${this.studio?.treeSelected ?? null}
         .onSelect=${(key: TreeKey) => this.studio?.treeSelect(key)}
@@ -973,6 +989,10 @@ ${this.outputText}</pre>
           >
         </p>
         <p>Licence: GPL-3.0-or-later</p>
+        <p>
+          Portions of this software are copyright © The FreeType Project (www.freetype.org). All
+          rights reserved.
+        </p>
         <form method="dialog">
           <button type="submit" @click=${this.closeAbout}>Close</button>
         </form>

@@ -9,6 +9,7 @@ import { canOpenFolders, pickFolder, savedFolders } from '../storage/folders.ts'
 import { openConfig, openWorkspace } from '../storage/handle-store.ts';
 import { ConfigSync, manageBlocks, manageProfiles } from './managers.ts';
 import { BudgetMonitor, type BudgetText, type Limits } from './budget.ts';
+import { FontConverter, GENERATING } from '../fonts/fonts.ts';
 import { MemoryStore } from '../storage/memory-store.ts';
 import { recentFiles } from '../storage/recent.ts';
 import type { Settings } from '../storage/settings.ts';
@@ -60,6 +61,9 @@ export class Studio {
     private readonly dialogs: Dialogs,
     private readonly settings: Settings,
   ) {
+    // fontconv.py is Qt: the fonts of a project are converted here, before Python generates code
+    const fonts = new FontConverter(python);
+    python.before = (method) => (GENERATING.has(method) ? fonts.ensure() : Promise.resolve());
     this.session = new ProjectSession(python, this.stores, this.prompts(), settings);
     this.files = new FileTabs(
       this.stores,

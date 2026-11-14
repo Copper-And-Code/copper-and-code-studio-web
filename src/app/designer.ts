@@ -705,6 +705,37 @@ export class DesignerController {
     }
   }
 
+  /**
+   * The … button of an image or font property: the file becomes part of the project and the
+   * property names it, in one undo step (PropertiesPanel._item_changed with a file chosen).
+   */
+  async setPropertyFile(name: string, kind: 'image' | 'font', file: File): Promise<void> {
+    let data: Uint8Array;
+    try {
+      const display = this.session.state?.display ?? { width: 1024, height: 600 };
+      data =
+        kind === 'image'
+          ? await pictureAsPng(file, display)
+          : new Uint8Array(await file.arrayBuffer());
+    } catch (error) {
+      this.propertiesMessage = error instanceof Error ? error.message : String(error);
+      this.changed();
+      return;
+    }
+    const path = await this.python.call<string>('asset_upload_path');
+    await this.python.writeFile(path, data);
+    const result = await this.python.call<{
+      error: string | null;
+      warnings: string[];
+      names: string[];
+      state: DocState;
+    }>('properties_set_asset', this.properties, name, kind, file.name);
+    this.propertiesMessage = result.error ?? '';
+    this.session.adopt(result.state);
+    await this.loadProperties();
+    this.changed();
+  }
+
   /** _custom_resolution: CustomSizeDialog. */
   async customResolution(): Promise<boolean> {
     const display = this.session.state?.display;
@@ -783,4 +814,39 @@ export class DesignerController {
   dispose(): void {
     this.renderer.dispose();
   }
+}
+
+/**
+ * PropertiesPanel._read_image: a picture the browser can read, as PNG, made no larger than the
+ * screen with its proportions kept.
+ */
+export async function pictureAsPng(
+  file: File,
+  display: { width: number; height: number },
+): Promise<Uint8Array> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error(tr('{file} is not a picture this program can read', { file: file.name }));
+  }
+  let { width, height } = bitmap;
+  if (width > display.width || height > display.height) {
+    const scale = Math.min(display.width / width, display.height / height);
+    width = Math.max(1, Math.round(width * scale));
+    height = Math.max(1, Math.round(height * scale));
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context)
+    throw new Error(tr('{file} is not a picture this program can read', { file: file.name }));
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob)
+    throw new Error(tr('{file} is not a picture this program can read', { file: file.name }));
+  return new Uint8Array(await blob.arrayBuffer());
 }

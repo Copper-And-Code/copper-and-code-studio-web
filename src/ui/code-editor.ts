@@ -206,9 +206,14 @@ export class CodeEditor extends LitElement {
       selection: { anchor: from + (mark >= 0 ? mark : text.length) },
       scrollIntoView: true,
     });
-    // after the double click that asked for it, the focus would stay on the list (mark_line)
+    // after the double click that asked for it, the focus would stay on the list (mark_line);
+    // WebKit puts the caret at the start when the editor takes the focus back: set it again
+    const anchor = view.state.selection.main.anchor;
+    const inserted = view.state.doc;
     setTimeout(() => {
       view.focus();
+      // only if nothing was typed meanwhile: then the caret is where the typing left it
+      if (view.state.doc === inserted) view.dispatch({ selection: { anchor } });
       if (code.endsWith('.')) startCompletion(view);
     }, 0);
   }
