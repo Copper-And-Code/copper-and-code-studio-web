@@ -1,0 +1,10 @@
+node_modules/
+dist/
+prompts/
+test-results/
+playwright-report/
+coverage/
+/public/py/
+/public/runtime/
+*.log
+.DS_Store

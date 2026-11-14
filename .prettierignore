@@ -1,0 +1,9 @@
+upstream/
+prompts/
+dist/
+coverage/
+playwright-report/
+test-results/
+pnpm-lock.yaml
+public/py/
+public/runtime/

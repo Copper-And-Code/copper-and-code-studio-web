@@ -1,0 +1,2 @@
+# Only install versions released at least two weeks ago (PLAN.md 3.1), transitive ones included.
+minimumReleaseAge: 20160
