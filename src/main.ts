@@ -35,7 +35,18 @@ if (shell) {
   shell.studio = studio;
   window.lmsStudio.studio = studio;
   window.lmsStudio.started = studio.start();
-  window.addEventListener('keydown', (event) => studio.shortcut(event));
+  // In the capture phase: the terminal keeps the keys it handles from bubbling up.
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      const panel = shell.renderRoot.querySelector('lms-sim-panel');
+      const terminal = panel?.renderRoot.querySelector('.terminal');
+      if (studio.shortcut(event, terminal ? event.composedPath().includes(terminal) : false)) {
+        event.stopPropagation();
+      }
+    },
+    true,
+  );
   // the browser's own question when a page with unsaved changes is closed
   window.addEventListener('beforeunload', (event) => {
     if (studio.session.modified) event.preventDefault();

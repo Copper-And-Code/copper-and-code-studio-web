@@ -11,3 +11,6 @@ public/pyodide/
 tests/fixtures/goldens/
 test-results-upstream-survey.json
 public/examples/
+public/runtime/
+.cache/
+runtime.lock.json

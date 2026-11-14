@@ -9,6 +9,12 @@ import type { Dialogs } from './dialogs.ts';
 import './dialogs.ts';
 import type { Menu } from './menu-bar.ts';
 import './menu-bar.ts';
+import type { SimPanel } from './sim-panel.ts';
+import './sim-panel.ts';
+import type { SimState } from '../sim/simulator.ts';
+
+type CenterTab = 'designer' | 'simulator';
+const OUTPUT_LIMIT = 100_000;
 
 /** The IDE window: menu bar, the three working areas, the status bar, the dialogs. */
 export class AppShell extends LitElement {
@@ -18,6 +24,9 @@ export class AppShell extends LitElement {
     pythonState: { state: true },
     doc: { state: true },
     statusMessage: { state: true },
+    tab: { state: true },
+    outputText: { state: true },
+    running: { state: true },
   };
 
   python: PythonBridge | undefined;
@@ -25,13 +34,16 @@ export class AppShell extends LitElement {
   pythonState: PythonState | undefined;
   doc: DocState | undefined;
   statusMessage = '';
+  tab: CenterTab = 'designer';
+  outputText = '';
+  running = false;
   private unsubscribe: (() => void)[] = [];
   private statusTimer: ReturnType<typeof setTimeout> | undefined;
 
   static override styles = css`
     :host {
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto minmax(0, 1fr) minmax(70px, 22vh) auto;
       height: 100vh;
       height: 100dvh;
     }
@@ -53,6 +65,65 @@ export class AppShell extends LitElement {
     }
     section:last-child {
       border-right: none;
+    }
+    .center {
+      display: flex;
+      flex-direction: column;
+      padding-top: 4px;
+    }
+    [role='tablist'] {
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    [role='tab'] {
+      font: inherit;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 4px 12px;
+      cursor: pointer;
+    }
+    [role='tab'][aria-selected='true'] {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+    }
+    [role='tab']:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    [role='tabpanel'] {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    [role='tabpanel'][hidden] {
+      display: none;
+    }
+    .output {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 4px 12px;
+    }
+    .output h2 {
+      margin-bottom: 4px;
+    }
+    .output pre {
+      flex: 1 1 auto;
+      margin: 0;
+      overflow: auto;
+      font:
+        12px ui-monospace,
+        'SFMono-Regular',
+        Menlo,
+        Consolas,
+        monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .placeholder {
       color: var(--muted);
@@ -133,7 +204,8 @@ export class AppShell extends LitElement {
     @media (max-width: 720px) {
       main {
         grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: auto minmax(320px, 1fr) auto;
+        overflow: auto;
       }
       section {
         border-right: none;
@@ -141,6 +213,62 @@ export class AppShell extends LitElement {
       }
     }
   `;
+
+  get simPanel(): SimPanel {
+    const panel = this.renderRoot.querySelector('lms-sim-panel');
+    if (!panel) throw new Error('The shell is not rendered yet');
+    return panel;
+  }
+
+  /** The Simulator tab and the Output panel, as the run controller sees them. */
+  runView() {
+    const panel = this.simPanel;
+    return {
+      output: (text: string) => {
+        this.outputText = (this.outputText + text).slice(-OUTPUT_LIMIT);
+        void this.updateComplete.then(() => {
+          const pre = this.renderRoot.querySelector('.output pre');
+          if (pre) pre.scrollTop = pre.scrollHeight;
+        });
+      },
+      terminal: (text: string) => panel.write(text),
+      clearTerminal: () => panel.clear(),
+      focusTerminal: () => panel.focusTerminal(),
+      state: (state: SimState, program: boolean) => this.simState(state, program),
+      status: (message: string) => {
+        if (message) this.showStatus(message);
+      },
+    };
+  }
+
+  private simState(state: SimState, program: boolean): void {
+    const panel = this.simPanel;
+    this.running = state === 'starting' || state === 'running';
+    if (this.running) {
+      this.tab = 'simulator';
+      panel.program = program;
+    }
+    const doc = this.doc;
+    switch (state) {
+      case 'starting':
+        panel.status = tr('Starting {target} simulator…', { target: 'MicroPython' });
+        break;
+      case 'running':
+        panel.status = program
+          ? tr('Program running')
+          : `${doc?.display.width ?? ''}×${doc?.display.height ?? ''} RGB565`;
+        break;
+      case 'ended':
+        panel.status = tr('Simulator finished ({code})', { code: 0 });
+        break;
+      case 'failed':
+        panel.status = tr('Simulator not started');
+        break;
+      case 'stopped':
+        panel.status = tr('Simulator stopped');
+        break;
+    }
+  }
 
   get dialogs(): Dialogs {
     const dialogs = this.renderRoot.querySelector('lms-dialogs');
@@ -164,6 +292,13 @@ export class AppShell extends LitElement {
         this.unsubscribe.push(studio.session.onChange(refresh));
         this.unsubscribe.push(studio.onStatus((message) => this.showStatus(message)));
         refresh();
+        void this.updateComplete.then(() => {
+          if (!studio.run) {
+            const run = studio.attachRun(this.runView(), this.simPanel.screen);
+            this.simPanel.onType = (data) => run.type(data);
+            this.requestUpdate();
+          }
+        });
       }
     }
   }
@@ -213,6 +348,34 @@ export class AppShell extends LitElement {
     this.renderRoot.querySelector<HTMLDialogElement>('#about')?.close();
   }
 
+  private simPanelProgram(): boolean {
+    return this.renderRoot.querySelector('lms-sim-panel')?.program ?? false;
+  }
+
+  private renderTab(tab: CenterTab, label: string) {
+    const selected = this.tab === tab;
+    return html`<button
+      type="button"
+      role="tab"
+      id="tab-${tab}"
+      aria-controls="panel-${tab}"
+      aria-selected=${selected ? 'true' : 'false'}
+      tabindex=${selected ? 0 : -1}
+      @click=${() => (this.tab = tab)}
+    >
+      ${label}
+    </button>`;
+  }
+
+  private tabKeys(event: KeyboardEvent): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    this.tab = this.tab === 'designer' ? 'simulator' : 'designer';
+    void this.updateComplete.then(() =>
+      this.renderRoot.querySelector<HTMLElement>(`#tab-${this.tab}`)?.focus(),
+    );
+    event.preventDefault();
+  }
+
   private renderProject() {
     const doc = this.doc;
     if (!doc) return html`<p class="placeholder">${tr('Loading…')}</p>`;
@@ -242,6 +405,7 @@ export class AppShell extends LitElement {
                 type="button"
                 title=${tr('Rename Page')}
                 data-testid="page"
+                ?disabled=${this.running && !this.simPanelProgram()}
                 @click=${() => this.studio?.renamePageDialog(page.id)}
               >
                 ${page.name}
@@ -263,12 +427,34 @@ export class AppShell extends LitElement {
           <h2>${tr('Project')}</h2>
           ${this.renderProject()}
         </section>
-        <section aria-label="Designer">
-          <h2>Designer</h2>
-          <p class="placeholder">${tr('The page designer comes in a later phase.')}</p>
+        <section class="center" aria-label=${tr('Editor')}>
+          <div role="tablist" @keydown=${this.tabKeys}>
+            ${this.renderTab('designer', tr('Designer'))}
+            ${this.renderTab('simulator', tr('Simulator'))}
+          </div>
+          <div
+            role="tabpanel"
+            id="panel-designer"
+            aria-labelledby="tab-designer"
+            ?hidden=${this.tab !== 'designer'}
+          >
+            <p class="placeholder">${tr('The page designer comes in a later phase.')}</p>
+          </div>
+          <div
+            role="tabpanel"
+            id="panel-simulator"
+            aria-labelledby="tab-simulator"
+            ?hidden=${this.tab !== 'simulator'}
+          >
+            <lms-sim-panel></lms-sim-panel>
+          </div>
         </section>
         <section aria-label="Properties"><h2>Properties</h2></section>
       </main>
+      <section class="output" aria-label="Output">
+        <h2>Output</h2>
+        <pre data-testid="output" tabindex="0">${this.outputText}</pre>
+      </section>
       <footer>
         <span>${this.statusMessage || `LVGL MPY Studio ${label}`}</span>
         <span data-testid="python-status" role="status">${this.pythonStatus()}</span>

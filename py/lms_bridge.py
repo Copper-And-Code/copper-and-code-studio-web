@@ -189,6 +189,66 @@ def doc_generate():
     return generate(json.dumps(_doc().project.to_dict(), ensure_ascii=False, indent=2) + "\n")
 
 
+# ---- The simulator (src/sim/): what runs in it comes from upstream, as on the desktop ----
+SIM_PROJECT = "/sim/project"
+
+
+def _files_under(directory):
+    root = Path(directory)
+    return [path.relative_to(root).as_posix() for path in sorted(root.rglob("*")) if path.is_file()]
+
+
+def sim_project():
+    """ui/main_run.py run_project: the open project generated for the simulator. The page reads the
+    files from Pyodide's file system and runs them as upstream's runtime/web/lms_web.js does.
+    compile_python is not called: mpy-cross for the browser is upstream request 2, and the
+    runtime runs the .py files as they are."""
+    from lvgl_mpy_studio.gen.project_gen import generate_project
+
+    project = _doc().project
+    shutil.rmtree(SIM_PROJECT, ignore_errors=True)
+    generated = generate_project(project, SIM_PROJECT)
+    return {
+        "directory": SIM_PROJECT,
+        "files": _files_under(SIM_PROJECT),
+        "warnings": generated["warnings"],
+        "width": project.display.width,
+        "height": project.display.height,
+        "board": project.board.get("id") if isinstance(project.board, dict) else "simulator",
+    }
+
+
+def sim_reset_folder(folder):
+    """An empty folder in Pyodide's file system, for the flash the page copies in."""
+    shutil.rmtree(folder, ignore_errors=True)
+    Path(folder).mkdir(parents=True)
+
+
+def sim_program(entry, flash):
+    """ui/main_run.py run_program with build/program.py: the folder of entry copied over the
+    program's flash, as an upload; the board every program runs as; the system files that
+    build/web.py gives a program in the browser."""
+    from lvgl_mpy_studio.build.program import copy_program, program_board
+    from lvgl_mpy_studio.build.web import PROGRAM_SYSTEM
+    from lvgl_mpy_studio.platform import root_dir
+
+    entry = Path(entry)
+    if entry.suffix != ".py" or not entry.is_file():  # as prepare_program
+        raise ValueError(f"Not a Python file: {entry}")
+    Path(flash).mkdir(parents=True, exist_ok=True)
+    copy_program(entry.parent, Path(flash))
+    board, width, height = program_board()
+    system = root_dir() / "runtime" / "program"
+    return {
+        "files": _files_under(flash),
+        "board": board,
+        "width": width,
+        "height": height,
+        "entry": entry.name,
+        "system": [str(system / name) for name in PROGRAM_SYSTEM],
+    }
+
+
 METHODS = {
     "info": info,
     "generate": generate,
@@ -205,6 +265,9 @@ METHODS = {
     "doc_redo": doc_redo,
     "doc_rename_page": doc_rename_page,
     "doc_generate": doc_generate,
+    "sim_project": sim_project,
+    "sim_reset_folder": sim_reset_folder,
+    "sim_program": sim_program,
 }
 
 

@@ -9,6 +9,23 @@ Every dependency is listed here with its licence. GPL-incompatible licences are 
 | LVGL MPY Studio (`upstream/`)                                                             | the pinned tag | GPL-3.0-or-later; generated code and runtime files MIT | Python core, runtime files, data  |
 | Lit (`lit`, `lit-html`, `lit-element`, `@lit/reactive-element`, `@lit-labs/ssr-dom-shim`) | 3.3.3          | BSD-3-Clause                                           | UI components                     |
 | `@types/trusted-types`                                                                    | as locked      | MIT                                                    | type definitions pulled in by Lit |
+| Pyodide (`pyodide`), with CPython's standard library                                      | 314.0.7        | MPL-2.0; CPython PSF-2.0                               | upstream's Python in a Web Worker |
+| fflate                                                                                    | 0.8.3          | MIT                                                    | zip import, export and bundles    |
+| xterm.js (`@xterm/xterm`, `@xterm/addon-fit`)                                             | 6.0.0, 0.11.0  | MIT                                                    | the terminal of a program         |
+
+### The WebAssembly runtime of the simulator
+
+`micropython.mjs` and `micropython.wasm`, built by upstream's `runtime/build_web.sh` and taken from
+the asset `lms-web-runtime-<tag>.zip` of upstream's release (`runtime.lock.json`). The site
+serves their licence texts in `runtime/licenses/`, as upstream's web build does.
+
+| Component                | Licence |
+| ------------------------ | ------- |
+| MicroPython              | MIT     |
+| LVGL                     | MIT     |
+| lvgl-bindings            | MIT     |
+| lvgl-micropython         | MIT     |
+| SDL2 (Emscripten's port) | Zlib    |
 
 ## Development only (not shipped)
 
@@ -23,5 +40,14 @@ Every dependency is listed here with its licence. GPL-incompatible licences are 
 | Prettier                        | 3.9.10          | MIT        |
 | globals                         | 17.13.0         | MIT        |
 | `@types/node`                   | 26.6.6          | MIT        |
+
+### Test only (Python packages loaded into Pyodide under Node)
+
+| Component  | Version  | Licence      |
+| ---------- | -------- | ------------ |
+| pytest     | 9.0.2    | MIT          |
+| hypothesis | 6.170.14 | MPL-2.0      |
+| pyserial   | 3.5      | BSD-3-Clause |
+| mpremote   | 1.29.0   | MIT          |
 
 The full list of transitive development packages is in `pnpm-lock.yaml`.

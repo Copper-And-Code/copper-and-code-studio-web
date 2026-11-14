@@ -14,12 +14,15 @@ import { type FileStore, type Location, baseName, joinPath, walkFiles } from '..
 import { exportZip, importZip, readZip } from '../storage/zip.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 import type { Menu, MenuItem } from '../ui/menu-bar.ts';
+import { RunController, type RunView } from './run.ts';
 
 const isProject = (name: string) => name.toLowerCase().endsWith('.json');
 
 export class Studio {
   readonly stores = new Map<string, FileStore>();
   readonly session: ProjectSession;
+  /** Running in the simulator: set when the shell has its Simulator tab. */
+  run: RunController | null = null;
   /** Set when the browser's private storage could not be opened: files live until a reload. */
   workspaceProblem: string | null = null;
   private readonly statusListeners = new Set<(message: string) => void>();
@@ -51,6 +54,22 @@ export class Studio {
         ),
       );
     }
+  }
+
+  /** The Simulator tab and the Output panel of the shell. */
+  attachRun(view: RunView, screen: HTMLElement): RunController {
+    this.run = new RunController(
+      {
+        python: this.python,
+        session: this.session,
+        stores: this.stores,
+        settings: this.settings,
+        dialogs: this.dialogs,
+        view,
+      },
+      screen,
+    );
+    return this.run;
   }
 
   onStatus(listener: (message: string) => void): () => void {
@@ -446,11 +465,64 @@ export class Studio {
           },
         ],
       },
+      ...(this.run ? [this.runMenu(this.run, ready)] : []),
     ];
   }
 
-  /** Shortcuts the browser lets a page take. */
-  shortcut(event: KeyboardEvent): boolean {
+  /** ui/main_window.py, the Run menu; the browser's own pages come in phase 7. */
+  private runMenu(run: RunController, ready: boolean): Menu {
+    return {
+      label: tr('Run'),
+      items: () => [
+        {
+          label: tr('Start'),
+          id: 'run-start',
+          shortcut: 'F5',
+          disabled: !ready || run.running,
+          action: () => void run.runProject(),
+        },
+        {
+          label: tr('Stop'),
+          id: 'run-stop',
+          shortcut: 'Shift+F5',
+          disabled: !run.running,
+          action: () => void run.stop(),
+        },
+        {
+          label: tr('Restart'),
+          id: 'run-restart',
+          disabled: !ready,
+          action: () => void run.restart(),
+        },
+        { separator: true },
+        {
+          label: tr('Run Program…'),
+          id: 'run-program',
+          disabled: !ready || run.running,
+          action: () => void run.runProgram(),
+        },
+        {
+          label: tr('Erase Program Flash…'),
+          id: 'erase-flash',
+          disabled: !ready,
+          action: () => void run.eraseProgramFlash(),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Shortcuts the browser lets a page take. In the terminal of a program the keys are the
+   * program's, Ctrl-C and Ctrl-Z included: only F5 and Shift+F5 stay the IDE's.
+   */
+  shortcut(event: KeyboardEvent, inTerminal = false): boolean {
+    if (event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.metaKey && this.run) {
+      if (event.shiftKey) void this.run.stop();
+      else if (!this.run.running && this.session.state) void this.run.runProject();
+      event.preventDefault();
+      return true;
+    }
+    if (inTerminal) return false;
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
     if (key === 's') void (event.shiftKey ? this.session.saveAs() : this.session.save());

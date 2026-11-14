@@ -88,3 +88,43 @@ repeated here. This file records the decisions taken while building, and why.
   it has no OPFS; Safari has it.
 - **Local e2e runs use 3 workers**: with more, the three browsers compete for the CPU and the
   start-up time measured is not the browser's.
+
+## Phase 3 (2026-11-14)
+
+- **The runtime comes from upstream's release**, at the owner's choice (upstream request 1):
+  `runtime.lock.json` names the asset and its sha256; `scripts/fetch-runtime.mjs` downloads and
+  checks it; `scripts/pack-runtime.mjs` makes it from a `runtime/build_web.sh` output. Neither
+  the runtime nor Emscripten is in this repository.
+- **The simulator is a sandboxed iframe without `allow-same-origin`.** A program has the `js`
+  module, so with the IDE's origin it could read the workspace; with an opaque origin it reaches
+  nothing of the IDE. Stop removes the iframe, so a crash or an endless loop never survives it.
+  A loop that never waits still holds the browser's thread meanwhile, as upstream says for its own
+  page.
+- **The iframe's page is a `srcdoc` with its script inline** (`src/sim/frame.js`), and receives the
+  runtime as text and bytes by `postMessage`, then loads it from `blob:` URLs. An opaque-origin frame
+  cannot load module scripts from the IDE's origin without CORS headers, which static hosting does
+  not always send.
+- **`frame.js` reimplements upstream's two browser loaders** (`lms_web.js` for a project,
+  `lms_program.js` for a program): they fetch their files by URL and print to the browser's
+  console, and the IDE needs `postMessage` for both. The Python they run is upstream's, unchanged:
+  `lms_web_boot.py`, `display_driver.py`, `lms_sandbox.py`, the generated project. Upstream
+  request 6 would let the IDE load the loaders as they are.
+- **The project runs as `.py`**, without `compile_python`: `mpy-cross` for the browser is upstream
+  request 2, and the runtime imports source files. The Output panel does not claim a compilation.
+- **The first frame is taken as `build/preview.py` takes it**: LVGL's tick stands still
+  (`LVSIM_TICK_MS=0`), the frame buffer is written after the first complete frame
+  (`LVSIM_FRAMES=1`, `LVSIM_DUMP`) and the main loop ends. The browser has no environment for
+  `lvsim`, so the frame page sets the same three things on the generated `display_driver` before
+  `main` runs. The references come from the native runtime (`scripts/frames.py`), and the 5
+  example games match with 0 different pixels, the default threshold of upstream's visual tests.
+- **A program's flash is kept in OPFS** (`simulator/<key>/flash`, the key from the place and the
+  folder, as `build/program.py` keys it from the path). The folder is copied over it by
+  upstream's `copy_program` in Pyodide. The frame sends what the program writes every second,
+  when the page reloads for `machine.reset()`, and when Stop asks for it (up to 300 ms).
+- **Tones are played by the IDE**, not by the frame: the click on Start is a user gesture of the
+  IDE's page, so its `AudioContext` may play; the frame's would wait for a click on the screen.
+- **The terminal takes the focus when a program starts**, as on the desktop; every key there is
+  the program's, Ctrl-C and Ctrl-Z included. F5 and Shift+F5 stay the IDE's, also when the
+  focus is on the screen (the frame forwards them).
+- **xterm.js** (MIT) draws the terminal, with `convertEol`: a board's `print` ends lines with LF,
+  and the desktop's terminal adds the CR as well.

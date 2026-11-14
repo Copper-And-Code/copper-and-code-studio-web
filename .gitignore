@@ -12,3 +12,5 @@ coverage/
 /tests/fixtures/goldens/
 test-results-upstream-survey.json
 /public/examples/
+/public/runtime/
+/.cache/

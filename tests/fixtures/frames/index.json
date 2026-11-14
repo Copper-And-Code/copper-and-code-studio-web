@@ -1,0 +1,30 @@
+{
+  "upstreamVersion": "0.7.0",
+  "frames": {
+    "breakout": {
+      "page": "main",
+      "width": 1024,
+      "height": 600
+    },
+    "fifteen": {
+      "page": "Menu",
+      "width": 480,
+      "height": 480
+    },
+    "simon": {
+      "page": "main",
+      "width": 1024,
+      "height": 600
+    },
+    "snake": {
+      "page": "main",
+      "width": 1024,
+      "height": 600
+    },
+    "tictactoe": {
+      "page": "main",
+      "width": 1024,
+      "height": 600
+    }
+  }
+}
