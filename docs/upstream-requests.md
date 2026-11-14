@@ -7,7 +7,7 @@ tagged.
 | #   | Request                                           | State                                         |
 | --- | ------------------------------------------------- | --------------------------------------------- |
 | 1   | Web runtime as a release asset                    | done for `v0.7.0` (asset uploaded 2026-11-14) |
-| 2   | `mpy-cross` in WebAssembly as a release asset     | proposed                                      |
+| 2   | `mpy-cross` in WebAssembly as a release asset     | done for `v0.7.0` (asset uploaded 2026-11-14) |
 | 3   | A CI check that the Qt-free packages stay Qt-free | proposed                                      |
 | 4   | Test files that load without Qt                   | proposed                                      |
 | 5   | The project document without Qt                   | proposed                                      |
@@ -54,6 +54,11 @@ next to the runtime, in the same zip or as `lms-mpy-cross-<tag>.zip`.
 **Test.** Compile every `.py` of `examples/` with the native and the wasm `mpy-cross`: the
 `.mpy` files are byte-identical, and a file with a syntax error gives the same message, file
 and line.
+
+**State on 14 November 2026.** Built here by `scripts/build-mpy-cross-web.sh`, at the owner's
+choice, and uploaded by the owner to the release `v0.7.0` as `lms-mpy-cross-v0.7.0.zip` (sha256
+`dc72a1e1ec7c1f60e9b06657f66792620106a31bdbb3268910c3c459ff39073e`, in `runtime.lock.json`).
+The downloaded asset has the same sha256.
 
 ## 3. A CI check that the Qt-free packages stay Qt-free
 

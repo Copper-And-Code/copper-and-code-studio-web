@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "goldens": "python3 -I scripts/goldens.py",
-    "test:py": "node scripts/bundle-upstream.mjs && vitest run -c vitest.py.config.ts && node tests/py/upstream-tests.mjs",
+    "test:py": "node scripts/bundle-upstream.mjs && node scripts/fetch-runtime.mjs && vitest run -c vitest.py.config.ts && node tests/py/upstream-tests.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
