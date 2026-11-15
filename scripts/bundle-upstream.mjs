@@ -36,6 +36,7 @@ const SOURCES = [
       'lvgl_mpy_studio/translations',
       'runtime/display_driver.py',
       'runtime/program',
+      'runtime/web',
     ],
   ],
   [join(ROOT, 'py'), '', ['.']],

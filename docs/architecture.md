@@ -96,6 +96,18 @@ BoardPort (Web Serial, open) ◄── serial-write / drain ──────  
 - `src/board/board-store.ts` is the board as a `FileStore`, for the Files panel's board view and
   the file tabs.
 
+## Web version
+
+```
+Run → Open in Browser ─► WebPublisher ── web_prepare ──► Pyodide: the project generated
+                         mpy-cross (WebAssembly) ─► the cache
+                                         ── web_build ──► build/web.py build_web, unchanged
+                         ◄── the folder's files ──
+   preview/<id>/ (public/preview/sw.js, Cache Storage) · zip · a folder of the PC
+```
+
+- `src/app/web.ts` follows `ui/main_files.py` `open_in_browser` and `program_in_browser`.
+
 ## Rules
 
 - Python logic comes from `upstream/`, unchanged, running in Pyodide. The TypeScript side is UI,

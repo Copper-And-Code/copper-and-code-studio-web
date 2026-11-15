@@ -35,6 +35,7 @@ import { RunController, type RunView } from './run.ts';
 import { DeviceController, type DeviceView } from './device.ts';
 import { BOARD_STORE, BoardStore, boardPath } from '../board/board-store.ts';
 import { skippedPath, uploadFilesDialog } from './upload-files.ts';
+import { WebPublisher } from './web.ts';
 
 /** A failure the board's queue has already shown (DeviceController.failed). */
 const reported = () => {};
@@ -52,6 +53,8 @@ export class Studio {
   run: RunController | null = null;
   /** The board: set when the shell has its Device Console. */
   device: DeviceController | null = null;
+  /** The web version of a game or a program (phase 7). */
+  readonly web: WebPublisher;
   /** Set when the browser's private storage could not be opened: files live until a reload. */
   workspaceProblem: string | null = null;
   private readonly statusListeners = new Set<(message: string) => void>();
@@ -96,6 +99,13 @@ export class Studio {
       (text) => this.output(text),
       (message) => this.status(message),
     );
+    this.web = new WebPublisher(python, this.mpyCross, dialogs, this.stores, {
+      saveProject: () => this.session.save(),
+      saveFilesIn: (folder) => this.files.saveFilesIn(folder),
+      output: (text) => this.output(text),
+      appendError: (text) => this.appendError(text),
+      status: (text) => this.status(text),
+    });
     this.files.onChange(() => this.workbenchChanged());
     this.code.onChange(() => this.workbenchChanged());
     // the code as Python has it, after new, open, reload, undo and redo
@@ -742,6 +752,12 @@ export class Studio {
             id: 'files-run',
             disabled: !this.run || this.run.running,
             action: () => void this.run?.runProgram(entry.location),
+          },
+          {
+            label: tr('Run in the Browser'),
+            id: 'files-run-browser',
+            disabled: this.web.busy,
+            action: () => void this.programInBrowser(entry.location),
           },
           {
             label: tr('Run on the Board'),
@@ -1814,6 +1830,12 @@ export class Studio {
           action: () => void run.runProgram(),
         },
         {
+          label: tr('Run in the Browser…'),
+          id: 'run-browser-program',
+          disabled: !ready || this.web.busy,
+          action: () => void this.programInBrowser(),
+        },
+        {
           label: tr('Run on the Board…'),
           id: 'run-board-program',
           disabled: !ready || !this.device?.available || (this.device?.busy ?? false),
@@ -1825,8 +1847,33 @@ export class Studio {
           disabled: !ready,
           action: () => void run.eraseProgramFlash(),
         },
+        { separator: true },
+        {
+          label: tr('Open in Browser'),
+          id: 'web-open',
+          disabled: !ready || this.web.busy,
+          action: () => void this.web.openProject(),
+        },
       ],
     };
+  }
+
+  /** program_in_browser: the program chosen, or the one given, as a web page of its own. */
+  async programInBrowser(entry?: Location): Promise<boolean> {
+    if (!entry) {
+      const chosen = await this.dialogs.choose({
+        mode: 'open',
+        title: tr('Run in the Browser'),
+        stores: [...this.stores.values()],
+        suggested: this.currentPythonFile() ?? this.run?.lastProgram() ?? null,
+        accept: (name) => name.toLowerCase().endsWith('.py'),
+      });
+      if (!chosen) return false;
+      entry = chosen;
+    }
+    this.setFilesFolder({ store: entry.store, path: parentPath(entry.path) });
+    this.settings.set('simulator/program', entry);
+    return this.web.openProgram(entry);
   }
 
   /**

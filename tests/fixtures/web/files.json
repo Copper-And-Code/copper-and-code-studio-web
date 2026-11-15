@@ -1,0 +1,203 @@
+{
+  "breakout": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Breakout-web"
+  },
+  "eim-01": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "EIM-01-Ecosystem-Industrial-Monitor-web"
+  },
+  "eim-01-480": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "EIM-01-Ecosistema-Industrial-Monitor-web"
+  },
+  "fifteen": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Fifteen-web"
+  },
+  "program:shell": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "flash/OFL.txt",
+      "flash/README.md",
+      "flash/ansifont.py",
+      "flash/ansiterm.py",
+      "flash/demo.json",
+      "flash/edit.py",
+      "flash/files.json",
+      "flash/shell.py",
+      "flash/vi.py",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_program.js",
+      "micropython.mjs",
+      "micropython.wasm",
+      "system/display_driver.py",
+      "system/lms_sandbox.py",
+      "system/lms_web_boot.py"
+    ],
+    "folder": "shell-web"
+  },
+  "simon": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Simon-web"
+  },
+  "snake": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Snake-web"
+  },
+  "tictactoe": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "TicTacToe-web"
+  },
+  "weather": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/forecast.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Weather-web"
+  }
+}

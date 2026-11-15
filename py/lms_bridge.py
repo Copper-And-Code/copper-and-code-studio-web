@@ -1012,10 +1012,10 @@ def budget_prepare(board_mpy=None):
     return {"jobs": jobs, "cache": BUDGET_CACHE}
 
 
-def _cached(path, args):
+def _cached(path, args, cache=BUDGET_CACHE):
     """What the page compiled for this file: (.mpy bytes or None, output)."""
     key = _budget_key(Path(path).read_bytes(), args)
-    mpy, output = Path(BUDGET_CACHE) / f"{key}.mpy", Path(BUDGET_CACHE) / f"{key}.out"
+    mpy, output = Path(cache) / f"{key}.mpy", Path(cache) / f"{key}.out"
     return (mpy.read_bytes() if mpy.exists() else None), (output.read_text(encoding="utf-8") if output.exists() else "mpy-cross: not compiled")
 
 
@@ -1074,6 +1074,72 @@ def budget_measure(board_mpy=None):
         "marker": budget.MARKER,
         "settle": budget.SETTLE_LOOPS,
     }
+
+
+# ---- The web version: ui/main_files.py open_in_browser and program_in_browser (phase 7) ----
+# build/web.py runs unchanged; only compile_python is answered from compilations the page made
+# first with mpy-cross in WebAssembly, as for the budget. The page puts the runtime where
+# web_runtime() looks for it, and reads the folder built.
+WEB = "/web"
+WEB_CACHE = "/web/cache"
+WEB_DIST = "/web/dist"
+
+
+def web_runtime_dir():
+    """Where build/web.py takes micropython.mjs and .wasm from: the page writes them there."""
+    from lvgl_mpy_studio.build.web import web_runtime
+
+    return str(web_runtime())
+
+
+def web_prepare():
+    """The files build_web's compile_python will compile: the project generated, as build_web
+    generates it. The page compiles each one into the cache."""
+    from lvgl_mpy_studio.gen.project_gen import generate_project
+
+    shutil.rmtree(WEB, ignore_errors=True)
+    Path(WEB_CACHE).mkdir(parents=True)
+    generate_project(_doc().project, f"{WEB}/check")
+    jobs = [{"path": str(path), "name": path.name, "args": [], "key": _budget_key(path.read_bytes(), [])} for path in sorted(Path(f"{WEB}/check").glob("*.py"))]
+    return {"jobs": jobs, "cache": WEB_CACHE}
+
+
+def web_build():
+    """build_web on the open project, compile_python answered from the cache."""
+    from lvgl_mpy_studio.build import compiler, web
+
+    def compile_python(directory, mpy_cross=None):
+        directory = Path(directory)
+        errors = []
+        for path in sorted(directory.glob("*.py")):
+            mpy, output = _cached(path, [], WEB_CACHE)
+            if mpy is None:
+                errors.extend(compiler.parse_compiler_errors(output, directory))
+            else:
+                path.with_suffix(".mpy").write_bytes(mpy)
+        if errors:
+            raise compiler.CompileError(errors)
+        return True
+
+    saved = web.compile_python
+    web.compile_python = compile_python
+    try:
+        target = web.build_web(copy.deepcopy(_doc().project), WEB_DIST)
+    finally:
+        web.compile_python = saved
+    return {"directory": str(target), "name": target.name, "files": _files_under(target)}
+
+
+def program_web(entry):
+    """program_in_browser: build_program_web on a program the page copied into Python, with the
+    board every program runs as."""
+    from lvgl_mpy_studio.build.program import program_board
+    from lvgl_mpy_studio.build.web import build_program_web
+
+    shutil.rmtree(WEB_DIST, ignore_errors=True)
+    board, width, height = program_board()
+    target = build_program_web(Path(entry), WEB_DIST, width, height, board)
+    return {"directory": str(target), "name": target.name, "files": _files_under(target)}
 
 
 def budget_texts(budget_value, limits):
@@ -1775,6 +1841,10 @@ METHODS = {
     "generate": generate,
     "export_board": export_board,
     "profiles": profiles,
+    "web_runtime_dir": web_runtime_dir,
+    "web_prepare": web_prepare,
+    "web_build": web_build,
+    "program_web": program_web,
     "run_target_plan": run_target_plan,
     "doc_set_run_target": doc_set_run_target,
     "new_project_defaults": new_project_defaults,

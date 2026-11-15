@@ -172,7 +172,8 @@ export class Dialogs extends LitElement {
     }
     button,
     select,
-    input {
+    input,
+    a.button {
       font: inherit;
       color: inherit;
       background: var(--bg);
@@ -180,14 +181,21 @@ export class Dialogs extends LitElement {
       border-radius: 4px;
       padding: 5px 12px;
     }
-    button.primary {
+    /* a link that looks like a button: it opens a new tab, which a button after an await cannot */
+    a.button {
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button.primary,
+    a.button.primary {
       background: var(--accent);
       border-color: var(--accent);
       color: var(--on-accent);
     }
     button:focus-visible,
     select:focus-visible,
-    input:focus-visible {
+    input:focus-visible,
+    a.button:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
     }

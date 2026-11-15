@@ -373,3 +373,24 @@ checkout).
   files the IDE copies there; which version was there before is not known).
 - **Before removing the folder a program ran from, the test restarts the interpreter**: on the
   STM32's FAT the current folder cannot be removed (upstream request 11).
+
+## Phase 7 (2026-11-15)
+
+- **`build/web.py` runs unchanged in Pyodide** (`py/lms_bridge.py` `web_build`, `program_web`):
+  only `compile_python` is answered from compilations the page made first with mpy-cross in
+  WebAssembly, as for the budget, so the game's `.mpy` files carry the file names, not the host's
+  temporary paths (upstream request 8). The runtime is written where `web_runtime()` looks for
+  it, and the bundle carries `runtime/web`, the page's template.
+- **The folder opens in a new tab of the IDE's own site**: the desktop serves `dist/<name>-web` on
+  127.0.0.1 and opens it; here a service worker of its own scope, `preview/`
+  (`public/preview/sw.js`), serves the files the page put in the Cache Storage. One web version
+  at a time, as the desktop serves one. The tab opens from a link in the dialog shown when the
+  build is ready: a tab opened after the build's awaits would be blocked as a pop-up.
+- **The zip holds the folder with its name** (`Snake-web/…`), as the desktop's `dist/` does, and a
+  folder of the PC gets `<name>/`, replaced only when it holds the IDE's marker, as `build_web`
+  refuses to replace another folder.
+- **The reference file lists come from upstream's own `build_web` on the host**
+  (`scripts/web-files.py`), with the native mpy-cross and the web runtime of a desktop checkout,
+  which the submodule does not carry.
+- **Every zip the IDE writes has its dates in local time**, as a zip stores them: the export of a
+  folder had the same time-zone dependence as the upstream bundle.

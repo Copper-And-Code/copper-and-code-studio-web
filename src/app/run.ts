@@ -70,6 +70,26 @@ export interface RunOptions {
   view: RunView;
 }
 
+/**
+ * The folder of a program into Python, where upstream's copy_program and build_program_web read
+ * it; caches, version control and hidden files left out. Returns the program's path there.
+ */
+export async function copyProgramIntoPython(
+  python: PythonBridge,
+  store: FileStore,
+  entry: Location,
+): Promise<string> {
+  const folder = parentPath(entry.path);
+  const folderInPython = pythonPath({ store: entry.store, path: folder || '.' });
+  for (const path of await walkFiles(store, folder)) {
+    const relative = folder ? path.slice(folder.length + 1) : path;
+    if (relative.split('/').some((part) => SKIPPED.has(part) || part.startsWith('.'))) continue;
+    const data = await store.read(path);
+    if (data) await python.writeFile(`${folderInPython}/${relative}`, data);
+  }
+  return `${folderInPython}/${baseName(entry.path)}`;
+}
+
 async function sha12(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)]
@@ -262,15 +282,8 @@ export class RunController {
       return false;
     }
     try {
-      // The folder of the program into Python, where upstream's copy_program reads it.
       const folder = parentPath(entry.path);
-      const folderInPython = pythonPath({ store: entry.store, path: folder || '.' });
-      for (const path of await walkFiles(store, folder)) {
-        const relative = folder ? path.slice(folder.length + 1) : path;
-        if (relative.split('/').some((part) => SKIPPED.has(part) || part.startsWith('.'))) continue;
-        const data = await store.read(path);
-        if (data) await python.writeFile(`${folderInPython}/${relative}`, data);
-      }
+      const entryInPython = await copyProgramIntoPython(python, store, entry);
       // Its flash, as the last run left it.
       const key = await sha12(`${entry.store}:${folder}`);
       const flash = await this.flashStore(key);
@@ -287,7 +300,7 @@ export class RunController {
         height: number;
         entry: string;
         system: string[];
-      }>('sim_program', `${folderInPython}/${baseName(entry.path)}`, pythonFlash);
+      }>('sim_program', entryInPython, pythonFlash);
       const files: SimFile[] = [];
       for (const path of prepared.files) {
         const data = await python.readFile(`${pythonFlash}/${path}`);

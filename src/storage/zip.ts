@@ -2,7 +2,8 @@
 import { unzipSync, zipSync, type Zippable } from 'fflate';
 import { type FileStore, StoreError, joinPath, pathParts, walkFiles } from './store.ts';
 
-const MTIME = new Date('2026-01-01T00:00:00Z');
+// In local time, as a zip stores dates: the same files give the same zip in every time zone.
+const MTIME = new Date(2026, 0, 1);
 
 /** The folder's files in a zip, with paths relative to the folder. */
 export async function exportZip(store: FileStore, folder = ''): Promise<Uint8Array> {
