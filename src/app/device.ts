@@ -42,6 +42,8 @@ export interface DeviceHooks {
   saveProject(): Promise<boolean>;
   /** _show_budget, after the board's free memory was read. */
   boardMemory(): void;
+  /** A line of the Output panel. */
+  output(text: string): void;
   /** QMessageBox.question: Yes is true. */
   ask(title: string, text: string): Promise<boolean>;
   /** QInputDialog.getText: null when cancelled. */
@@ -419,7 +421,13 @@ export class DeviceController {
       return false;
     }
     const chosen = await this.choosePort(board.id, choose);
-    if (!chosen) return false;
+    if (!chosen) {
+      // the browser's chooser closed without a port: say why nothing happens
+      const text = tr('No port chosen: the board is not connected.');
+      this.hooks.output(text);
+      this.view.status(text, 5000);
+      return false;
+    }
     if (this.port) await this.disconnect();
     let port: BoardPort;
     try {

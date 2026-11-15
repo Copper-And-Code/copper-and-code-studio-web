@@ -36,6 +36,9 @@ import { DeviceController, type DeviceView } from './device.ts';
 import { BOARD_STORE, BoardStore, boardPath } from '../board/board-store.ts';
 import { skippedPath, uploadFilesDialog } from './upload-files.ts';
 
+/** A failure the board's queue has already shown (DeviceController.failed). */
+const reported = () => {};
+
 /** What the center shows: a page's canvas, the Code tab, the simulator, or a file tab by id. */
 export type CenterTab = `page:${string}` | 'code' | 'simulator' | `file:${number}`;
 const FILES_FOLDER = 'files/folder';
@@ -647,7 +650,8 @@ export class Studio {
     this.workbenchChanged();
   }
 
-  /** BoardFilesView._menu: what can be done with a file or a folder of the board. */
+  /** BoardFilesView._menu: what can be done with a file or a folder of the board. A failure of
+   * the board is already in the Device Console and in Errors, as _device_failed puts it. */
   boardFilesMenu(entry: { location: Location; kind: 'file' | 'folder' } | null): MenuItem[] {
     const device = this.device;
     if (!device?.connected) return [];
@@ -671,7 +675,7 @@ export class Studio {
         {
           label: tr('Download to the Computer'),
           id: 'board-download',
-          action: () => void this.downloadBoardFile(entry.location.path),
+          action: () => void this.downloadBoardFile(entry.location.path).catch(reported),
         },
         { separator: true },
       );
@@ -680,24 +684,25 @@ export class Studio {
     items.push({
       label: tr('Upload Files Here…'),
       id: 'board-upload-here',
-      action: () => void this.uploadFiles(boardPath(folder)),
+      action: () => void this.uploadFiles(boardPath(folder)).catch(reported),
     });
     items.push({
       label: tr('New Folder…'),
       id: 'board-new-folder',
-      action: () => void this.boardNewFolder(folder),
+      action: () => void this.boardNewFolder(folder).catch(reported),
     });
     if (entry) {
       items.push(
         {
           label: tr('Rename…'),
           id: 'board-rename',
-          action: () => void this.boardRename(entry.location.path),
+          action: () => void this.boardRename(entry.location.path).catch(reported),
         },
         {
           label: tr('Delete…'),
           id: 'board-delete',
-          action: () => void this.boardDelete(entry.location.path, entry.kind === 'folder'),
+          action: () =>
+            void this.boardDelete(entry.location.path, entry.kind === 'folder').catch(reported),
         },
       );
     }
@@ -917,6 +922,7 @@ export class Studio {
         ),
       askText: (title, label, value) => this.dialogs.askText(title, label, value),
       reloadBoardFolder: () => this.refreshBoardFiles(),
+      output: (text) => this.output(`${text}\n`),
       saveConfig: () => this.config?.save() ?? Promise.resolve(),
     });
     const device = this.device;
@@ -1512,8 +1518,9 @@ export class Studio {
         ? (this.runProfiles.find((p) => p.id === board) ?? { id: board, name: board })
         : null;
     const label = current ? this.boardLabel(current) : tr('Simulator');
+    // RunTargetSelector is a toolbar button showing the target; in a menu bar it says what it is
     return {
-      label,
+      label: tr('Run on: {target}', { target: label }),
       title: tr('Run on: {target}', { target: label }),
       onOpen: () => this.loadRunProfiles(),
       items: () => [

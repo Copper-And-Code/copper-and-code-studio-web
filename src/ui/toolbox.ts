@@ -42,8 +42,12 @@ export class Toolbox extends LitElement {
     ul {
       list-style: none;
       margin: 0;
-      padding: 0;
+      padding: 2px;
       overflow: auto;
+      /* a box of its own: what does not fit scrolls inside it, with a clear edge */
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
     }
     .category {
       font-weight: bold;

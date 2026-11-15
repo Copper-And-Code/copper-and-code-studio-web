@@ -339,3 +339,25 @@ cp` without `resume`. The tests count it rather than hide it.
   there is refused, as upstream refuses it without its manifest.
 - **The scripted board can run an app**: its `lvgl` gives a permissive object for every name, so
   that a generated app starts, a live update arrives and Stop stops it, without drawing.
+- **The gate on a real board is split in two**: here, the IDE's board stack runs from Node on a
+  serial port of the PC (`tests/hw/board-gate.test.ts`, only with `LMS_BOARD_PORT` set), because
+  Playwright cannot answer the browser's port chooser; the browser's Web Serial port is tried by
+  the owner in Chrome. The port is opened raw at 115200 with `-hupcl`, so closing it does not
+  drop DTR.
+
+After the owner's review note of 15 November 2026 (`prompts/nota-agente-web.md` of the desktop
+checkout).
+
+- **The left column does not grow with its contents**: the Toolbox and the project tree scroll
+  inside boxes with an edge, the Files panel takes what is left, and the board's row stays at
+  the bottom in sight, also with a project of many widgets.
+- **The site's icon is upstream's** (`packaging/lvgl-mpy-studio.svg`): without one the browser
+  asked for `/favicon.ico` and logged a 404 at every load.
+- **One error line of emscripten is dropped in the runtime's iframe**: SDL sets the swap interval
+  before the main loop exists, at every window (upstream request 10).
+- **The run target's menu reads "Run on: …"**: in a menu bar, a bare "Simulator" next to
+  "Device" looked like a menu of its own.
+- **A port not chosen is said** in the Output and the status bar, so that Start on a board
+  target, cancelled in the browser's chooser, does not end in silence.
+- **The board's e2e tests choose the board as run target themselves**: from upstream's next tag
+  the examples run in the simulator (upstream removed their `runTarget`).

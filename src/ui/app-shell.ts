@@ -134,20 +134,59 @@ export class AppShell extends LitElement {
     [role='tabpanel'][hidden] {
       display: none;
     }
+    /* the column does not grow with its contents: each part scrolls inside its own share, and
+       the board's row stays at the bottom, in sight */
     .left {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
+    .left > div {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* the Toolbox gives way down to a few rows, never to nothing */
+    .left > .toolbox {
+      flex: 0 1 auto;
+      min-height: 130px;
+    }
+    /* the title, the project's details, and its tree, which gets what is left but never less
+       than two rows; contain: size keeps the tree's contents out of the section's own minimum
+       (WebKit counted the whole tree in it, and pushed the board's row out of the window) */
+    .left > .project {
+      flex: 3 1 0;
+      min-height: auto;
+    }
+    .left > .project lms-project-tree {
+      flex: 1 1 auto;
+      min-height: 48px;
+      contain: size;
+      overflow: auto;
+      /* as the Toolbox: a box whose contents scroll, with a clear edge */
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px;
+      background: var(--bg);
+    }
+    .left > .project dl {
+      margin-bottom: 6px;
+    }
+    .left > .files {
+      flex: 2 1 0;
+      min-height: auto;
+    }
     lms-files-panel {
       flex: 1 1 auto;
-      min-height: 120px;
+      min-height: 60px;
     }
     lms-files-panel.board-files {
+      flex: 0 1 auto;
+      max-height: 50%;
+      min-height: 0;
       margin-top: 8px;
       padding-top: 6px;
       border-top: 1px solid var(--border);
-      min-height: 80px;
     }
     .center [role='tablist'] {
       flex-wrap: wrap;
@@ -171,6 +210,8 @@ export class AppShell extends LitElement {
     }
     .toolbox lms-toolbox {
       max-height: 30vh;
+      flex: 0 1 auto;
+      min-height: 0;
     }
     .budget.level-1 {
       color: #b26a00;
@@ -936,11 +977,11 @@ export class AppShell extends LitElement {
               .revision=${this.design}
             ></lms-toolbox>
           </div>
-          <div>
+          <div class="project">
             <h2>${tr('Project')}</h2>
             ${this.renderProject()}
           </div>
-          <div>
+          <div class="files">
             <h2>${tr('Files')}</h2>
             <lms-files-panel
               .store=${this.studio?.filesFolder ? (this.studio.stores.get(this.studio.filesFolder.store) ?? null) : null}

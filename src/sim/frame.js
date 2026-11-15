@@ -22,6 +22,16 @@ const FLASH = '/flash';
 const FLASH_SYNC_MS = 1000;
 const OUTPUT_FLUSH_MS = 16;
 
+// The runtime's SDL sets the swap interval when it creates the window, before a main loop
+// exists, and emscripten logs it as an error each time: harmless, and nothing here can change
+// it (upstream request 10). Only that line is dropped; every other error still shows.
+const NO_MAIN_LOOP = 'emscripten_set_main_loop_timing: Cannot set timing mode';
+const consoleError = console.error.bind(console);
+console.error = (/** @type {unknown[]} */ ...args) => {
+  if (typeof args[0] === 'string' && args[0].startsWith(NO_MAIN_LOOP)) return;
+  consoleError(...args);
+};
+
 let keys = '';
 let running = false;
 /** @type {'project' | 'program' | 'frame' | null} */

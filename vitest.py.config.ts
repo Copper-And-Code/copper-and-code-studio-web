@@ -4,7 +4,8 @@ import { defineConfig } from 'vitest/config';
 // switching (JSPI), which Node 22 has behind a flag.
 export default defineConfig({
   test: {
-    include: ['tests/py/**/*.test.ts'],
+    // tests/hw/ runs only with LMS_BOARD_PORT set, on a real board
+    include: ['tests/py/**/*.test.ts', 'tests/hw/**/*.test.ts'],
     testTimeout: 60_000,
     execArgv: ['--experimental-wasm-jspi'],
   },

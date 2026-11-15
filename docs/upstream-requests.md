@@ -15,6 +15,7 @@ tagged.
 | 7   | The preview after a quick undo                    | proposed                                      |
 | 8   | `.mpy` files without the temporary folder's path  | proposed                                      |
 | 9   | The board's file helpers without Qt               | proposed                                      |
+| 10  | No swap interval before the main loop             | proposed                                      |
 
 ---
 
@@ -192,3 +193,19 @@ which can drift from upstream.
 
 **Test.** The existing tests of the four functions, importing them from the new module without
 PySide6 installed.
+
+## 10. No swap interval before the main loop
+
+**What.** In the web runtime, do not set the swap interval (SDL's `SDL_GL_SetSwapInterval`,
+which reaches emscripten's `_eglSwapInterval`) before `emscripten_set_main_loop`, or set it after
+the main loop exists.
+
+**Why.** Each time the runtime creates its window, emscripten logs
+`emscripten_set_main_loop_timing: Cannot set timing mode for main loop since a main loop does
+not exist!` as an error. It is harmless, but it shows in the browser console for every simulator
+and every preview of the designer, where it looks like a fault. The web IDE drops that one line
+in its iframe (`src/sim/frame.js`).
+
+**Where.** `runtime/web/` (the SDL set-up of the web build), `runtime/build_web.sh`.
+
+**Test.** Start the web runtime in a page and check that the console has no error at start.

@@ -24,6 +24,24 @@ async function menu(page: Page, top: string, ...path: string[]) {
   for (const item of path) await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 
+const ESP32 = 'ESP32-4848S040 (480×480)';
+
+/**
+ * Opens weather and makes its board the run target. Upstream's examples are run in the
+ * simulator from its next tag on; the board items of the Device menu need a board target.
+ */
+async function openOnBoard(page: Page) {
+  await menu(page, 'File', 'Open Example', 'weather');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: weather/project.json');
+  await page.getByRole('button', { name: /^Run on: / }).click();
+  const item = page.getByRole('menuitemcheckbox', {
+    name: new RegExp(`^${ESP32.replace(/[()]/g, '\\$&')}`),
+  });
+  if ((await item.getAttribute('aria-checked')) === 'true') await page.keyboard.press('Escape');
+  else await item.click();
+  await expect(page.getByRole('button', { name: `Run on: ${ESP32} · no port` })).toBeVisible();
+}
+
 /** A USB serial port in the page, wired to a FakeBoard here. */
 async function plugBoard(page: Page, setup: BoardSetup): Promise<FakeBoard> {
   let delivering = Promise.resolve();
@@ -87,8 +105,7 @@ test.describe('board over Web Serial', () => {
   test('connect, information, restart and disconnect', async ({ page }) => {
     const board = await plugBoard(page, { width: 480, height: 480, shell: true });
     await start(page);
-    await menu(page, 'File', 'Open Example', 'weather');
-    await expect(page.getByTestId('project-file')).toHaveText('Examples: weather/project.json');
+    await openOnBoard(page);
     await menu(page, 'Device', 'Connect');
     await expect(page.getByTestId('device-status')).toHaveText('Connected to USB 303a:1001', {
       timeout: 30_000,
@@ -111,7 +128,7 @@ test('Upload Project sends the generated app, compiled, as the desktop does', as
   test.setTimeout(120_000);
   const board = await plugBoard(page, { width: 480, height: 480 });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   await menu(page, 'Device', 'Upload Project');
   // An example is saved into the workspace first, as upload_board saves the project
   const save = page.locator('lms-dialogs dialog[open]');
@@ -149,23 +166,23 @@ test('Upload Project sends the generated app, compiled, as the desktop does', as
   );
 });
 
-test('the run target: the board of the profile, the simulator, one undo step, F5 to the board', async ({
+test('the run target: the simulator, the board of the profile, one undo step, F5 to the board', async ({
   page,
 }) => {
   test.setTimeout(120_000);
   const board = await plugBoard(page, { width: 480, height: 480 });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
-  const target = page.getByRole('button', { name: 'ESP32-4848S040 (480×480) · no port' });
-  await expect(target).toBeVisible();
-  await target.click();
+  await openOnBoard(page);
+  const onBoard = page.getByRole('button', { name: `Run on: ${ESP32} · no port` });
+  await onBoard.click();
   await page.getByRole('menuitemcheckbox', { name: 'Simulator', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Simulator', exact: true })).toBeVisible();
+  const onSimulator = page.getByRole('button', { name: 'Run on: Simulator', exact: true });
+  await expect(onSimulator).toBeVisible();
   await page.getByRole('button', { name: 'Device', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Upload Project', exact: true })).toBeDisabled();
   await page.keyboard.press('Escape');
   await menu(page, 'Edit', 'Undo');
-  await expect(target).toBeVisible();
+  await expect(onBoard).toBeVisible();
   // F5 on a board target: Upload and Run, after saving the example into the workspace
   await page.keyboard.press('F5');
   const save = page.locator('lms-dialogs dialog[open]');
@@ -174,7 +191,7 @@ test('the run target: the board of the profile, the simulator, one undo step, F5
     .poll(() => board.files().some((path) => path.endsWith('/ui.mpy')), { timeout: 60_000 })
     .toBe(true);
   await expect(
-    page.getByRole('button', { name: 'ESP32-4848S040 (480×480) · USB 303a:1001' }),
+    page.getByRole('button', { name: `Run on: ${ESP32} · USB 303a:1001` }),
   ).toBeVisible();
 });
 
@@ -185,7 +202,7 @@ test('the board in the Files panel: list, edit a file and save it, rename, delet
   const board = await plugBoard(page, { width: 480, height: 480 });
   board.putFile('/flash/shell.py', 'print("shell")\n');
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   await expect(page.getByTestId('board-files-folder')).toHaveText('Board: not connected');
   await menu(page, 'Device', 'Connect');
   await expect(page.getByTestId('board-files-folder')).toHaveText('Board on USB 303a:1001', {
@@ -236,7 +253,7 @@ test('Run on the Board: the folder of a program goes to the board, then runs at 
   test.setTimeout(240_000);
   const board = await plugBoard(page, { width: 480, height: 480 });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   const dialog = page.locator('lms-dialogs dialog[open]');
   await page.getByRole('button', { name: 'Open Folder…' }).click();
   await dialog.locator('#place').selectOption('examples');
@@ -264,7 +281,7 @@ test('Upload Files…: files of the PC to a folder of the board, with the power-
   test.setTimeout(120_000);
   const board = await plugBoard(page, { width: 480, height: 480 });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   await menu(page, 'Device', 'Upload Files…');
   const dialog = page.locator('lms-dialogs dialog[open]');
   const chooser = page.waitForEvent('filechooser');
@@ -298,7 +315,7 @@ test('F5 runs the app on the board, a change of the page reaches it live, Shift+
   const fonts = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48];
   await plugBoard(page, { width: 480, height: 480, mpy: null, fonts });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   await page.keyboard.press('F5');
   const save = page.locator('lms-dialogs dialog[open]');
   await save.getByRole('button', { name: 'Save', exact: true }).click();
@@ -323,6 +340,26 @@ test('F5 runs the app on the board, a change of the page reaches it live, Shift+
   await expect(page.getByTestId('device-status')).not.toContainText('app active');
 });
 
+test('the board row of the Files panel stays in sight beside a long project tree', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await plugBoard(page, { width: 1024, height: 600 });
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'eim-01');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: eim-01/project.json');
+  const refresh = page
+    .locator('lms-files-panel.board-files')
+    .getByRole('button', { name: 'Refresh' });
+  await expect(refresh).toBeInViewport({ ratio: 1 });
+  // the Toolbox scrolls inside its own box: its last entry is reached by scrolling, not cut off
+  const keyboard = page
+    .locator('lms-toolbox')
+    .getByRole('option', { name: 'Keyboard', exact: true });
+  await keyboard.scrollIntoViewIfNeeded();
+  await expect(keyboard).toBeInViewport({ ratio: 1 });
+});
+
 test('without Web Serial the Device menu says so, and its board items are off', async ({
   page,
 }) => {
@@ -331,7 +368,7 @@ test('without Web Serial the Device menu says so, and its board items are off', 
     delete (Navigator.prototype as { serial?: unknown }).serial;
   });
   await start(page);
-  await menu(page, 'File', 'Open Example', 'weather');
+  await openOnBoard(page);
   await page.getByRole('button', { name: 'Device', exact: true }).click();
   await expect(
     page.getByRole('menuitem', {
