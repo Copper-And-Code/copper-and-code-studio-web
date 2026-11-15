@@ -4,17 +4,17 @@ Written as the pieces are built.
 
 ## Pieces
 
-| Piece                                                         | Where                                                                  | State                |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------- |
-| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`                                                  | done                 |
-| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`                       | done                 |
-| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                                       | done                 |
-| Workspace: OPFS, a PC folder, zip                             | `src/storage/`                                                         | done                 |
-| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                         | done                 |
-| Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts`         | done                 |
-| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    | done                 |
-| Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` | phase 5, canvas done |
-| Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     | phase 6, in progress |
+| Piece                                                         | Where                                                                  | State                      |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------- |
+| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`                                                  | done                       |
+| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`                       | done                       |
+| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                                       | done                       |
+| Workspace: OPFS, a PC folder, zip                             | `src/storage/`                                                         | done                       |
+| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                         | done                       |
+| Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts`         | done                       |
+| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    | done                       |
+| Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` | phase 5, canvas done       |
+| Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     | phase 6, done but the gate |
 
 ## Python
 
@@ -90,7 +90,11 @@ BoardPort (Web Serial, open) ◄── serial-write / drain ──────  
 - A read with no bytes suspends Python (`run_sync`): the worker keeps receiving bytes and
   answering the other calls of the page.
 - `src/app/device.ts` follows `ui/main_device.py`: one operation at a time, the connection opened
-  when an action needs it, the upload's progress, Stop, Restart, the console.
+  when an action needs it, the upload's progress, Stop, Restart, the console, Live Editing,
+  Run File on Board, Upload Files, Autostart; operations of the Files panel wait behind the
+  others (`_board_task`).
+- `src/board/board-store.ts` is the board as a `FileStore`, for the Files panel's board view and
+  the file tabs.
 
 ## Rules
 

@@ -13,7 +13,14 @@ import { FontConverter, GENERATING } from '../fonts/fonts.ts';
 import { MemoryStore } from '../storage/memory-store.ts';
 import { recentFiles } from '../storage/recent.ts';
 import type { Settings } from '../storage/settings.ts';
-import { type FileStore, type Location, baseName, joinPath, walkFiles } from '../storage/store.ts';
+import {
+  type FileStore,
+  type Location,
+  baseName,
+  joinPath,
+  parentPath,
+  walkFiles,
+} from '../storage/store.ts';
 import { exportZip, importZip, readZip } from '../storage/zip.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 import type { Menu, MenuItem } from '../ui/menu-bar.ts';
@@ -26,6 +33,8 @@ import { arrangeItems } from '../ui/designer-view.ts';
 import { FileTabs } from './file-tabs.ts';
 import { RunController, type RunView } from './run.ts';
 import { DeviceController, type DeviceView } from './device.ts';
+import { BOARD_STORE, BoardStore, boardPath } from '../board/board-store.ts';
+import { skippedPath, uploadFilesDialog } from './upload-files.ts';
 
 /** What the center shows: a page's canvas, the Code tab, the simulator, or a file tab by id. */
 export type CenterTab = `page:${string}` | 'code' | 'simulator' | `file:${number}`;
@@ -109,6 +118,7 @@ export class Studio {
     this.tab = tab;
     this.code.setActive(tab === 'code');
     this.designer?.setActive(this.currentPage());
+    this.device?.scheduleLive(this.currentPage()); // tabs.currentChanged → _schedule_live
     this.workbenchChanged();
   }
 
@@ -330,7 +340,11 @@ export class Studio {
       previewHost,
       (text) => this.output(text),
       (text) => this.appendError(text),
-      () => this.run?.running ?? false,
+      // select_run_target and the resolution: not while a session runs, on the board either
+      () =>
+        (this.run?.running ?? false) ||
+        (this.device?.appActive ?? false) ||
+        (this.device?.busy ?? false),
     );
     this.designer.setActive(this.currentPage());
     void this.designer.refresh();
@@ -539,6 +553,170 @@ export class Studio {
     this.workbenchChanged();
   }
 
+  /** Grows when the board's side of the Files panel must be read again. */
+  boardRevision = 0;
+  /** The entry selected in the board's view, for current_folder. */
+  private boardSelection: { path: string; kind: 'file' | 'folder' } | null = null;
+
+  selectBoardEntry(path: string, kind: 'file' | 'folder'): void {
+    this.boardSelection = { path, kind };
+  }
+
+  /** BoardFilesView.current_folder: the folder selected, or the folder of the file; "/" without. */
+  boardCurrentFolder(): string {
+    const entry = this.boardSelection;
+    if (!entry || !this.device?.connected) return '/';
+    return boardPath(entry.kind === 'folder' ? entry.path : parentPath(entry.path));
+  }
+
+  /** The board's folder of an entry: itself, or the folder of a file (current_folder). */
+  private boardFolder(entry: { location: Location; kind: 'file' | 'folder' } | null): string {
+    if (!entry) return '';
+    return entry.kind === 'folder' ? entry.location.path : parentPath(entry.location.path);
+  }
+
+  /** download_board_file: into the Files panel's folder, as the desktop does; else a download. */
+  private async downloadBoardFile(path: string): Promise<void> {
+    const store = this.stores.get(BOARD_STORE);
+    const data = await store?.read(path);
+    if (!data) return;
+    const name = baseName(path);
+    const folder = this.filesFolder;
+    const target = folder ? this.stores.get(folder.store) : undefined;
+    if (!folder || !target || target.readOnly) {
+      download(name, data);
+      return;
+    }
+    const local = joinPath(folder.path, name);
+    if ((await target.read(local)) !== null) {
+      const yes = await this.dialogs.message(
+        tr('Download to the Computer'),
+        tr('{path} exists. Replace it?', { path: local }),
+        [
+          { label: tr('Yes'), value: true },
+          { label: tr('No'), value: false, primary: true },
+        ],
+        false,
+      );
+      if (!yes) return;
+    }
+    await target.write(local, data);
+    this.status(tr('Downloaded to {path}', { path: local }));
+    this.workbenchChanged();
+  }
+
+  private async boardNewFolder(folder: string): Promise<void> {
+    const name = await this.askName(tr('New Folder…'));
+    if (name === null) return;
+    await this.stores.get(BOARD_STORE)?.makeFolder(joinPath(folder, name));
+    this.boardRevision++;
+    this.workbenchChanged();
+  }
+
+  private async boardRename(path: string): Promise<void> {
+    const old = baseName(path);
+    const name = await this.askName(tr('Rename…'), old);
+    if (name === null || name === old) return;
+    const target = joinPath(parentPath(path), name);
+    await (this.stores.get(BOARD_STORE) as BoardStore | undefined)?.rename(path, target);
+    for (const tab of this.files.tabs) {
+      if (tab.location.store === BOARD_STORE && tab.location.path === path) {
+        tab.location = { store: BOARD_STORE, path: target };
+      }
+    }
+    this.boardRevision++;
+    this.workbenchChanged();
+  }
+
+  private async boardDelete(path: string, folder: boolean): Promise<void> {
+    const remote = boardPath(path);
+    const yes = await this.dialogs.message(
+      tr('Delete…'),
+      folder
+        ? tr('Delete the folder {path} from the board, with everything in it?', { path: remote })
+        : tr('Delete {path} from the board?', { path: remote }),
+      [
+        { label: tr('Yes'), value: true },
+        { label: tr('No'), value: false, primary: true },
+      ],
+      false,
+    );
+    if (!yes) return;
+    await this.stores.get(BOARD_STORE)?.remove(path);
+    this.boardRevision++;
+    this.workbenchChanged();
+  }
+
+  /** BoardFilesView._menu: what can be done with a file or a folder of the board. */
+  boardFilesMenu(entry: { location: Location; kind: 'file' | 'folder' } | null): MenuItem[] {
+    const device = this.device;
+    if (!device?.connected) return [];
+    const items: MenuItem[] = [];
+    if (entry?.kind === 'file') {
+      items.push(
+        {
+          label: tr('Open'),
+          id: 'board-open',
+          action: () => void this.openFile(entry.location),
+        },
+        ...(entry.location.path.endsWith('.py')
+          ? [
+              {
+                label: tr('Run on the Board'),
+                id: 'board-run',
+                action: () => void device.runFileOnBoard(boardPath(entry.location.path)),
+              },
+            ]
+          : []),
+        {
+          label: tr('Download to the Computer'),
+          id: 'board-download',
+          action: () => void this.downloadBoardFile(entry.location.path),
+        },
+        { separator: true },
+      );
+    }
+    const folder = this.boardFolder(entry);
+    items.push({
+      label: tr('Upload Files Here…'),
+      id: 'board-upload-here',
+      action: () => void this.uploadFiles(boardPath(folder)),
+    });
+    items.push({
+      label: tr('New Folder…'),
+      id: 'board-new-folder',
+      action: () => void this.boardNewFolder(folder),
+    });
+    if (entry) {
+      items.push(
+        {
+          label: tr('Rename…'),
+          id: 'board-rename',
+          action: () => void this.boardRename(entry.location.path),
+        },
+        {
+          label: tr('Delete…'),
+          id: 'board-delete',
+          action: () => void this.boardDelete(entry.location.path, entry.kind === 'folder'),
+        },
+      );
+    }
+    items.push(
+      { separator: true },
+      {
+        label: tr('Refresh'),
+        id: 'board-refresh',
+        action: () => this.refreshBoardFiles(),
+      },
+    );
+    return items;
+  }
+
+  refreshBoardFiles(): void {
+    this.boardRevision++;
+    this.workbenchChanged();
+  }
+
   /** The context menu of the Files panel, as FilesPanel._menu. */
   filesMenu(entry: { location: Location; kind: 'file' | 'folder' } | null): MenuItem[] {
     const folder = this.filesFolder;
@@ -553,15 +731,45 @@ export class Studio {
         action: () => void this.openFile(entry.location),
       });
       if (entry.location.path.endsWith('.py')) {
-        items.push({
-          label: tr('Run Program'),
-          id: 'files-run',
-          disabled: !this.run || this.run.running,
-          action: () => void this.run?.runProgram(entry.location),
-        });
+        items.push(
+          {
+            label: tr('Run Program'),
+            id: 'files-run',
+            disabled: !this.run || this.run.running,
+            action: () => void this.run?.runProgram(entry.location),
+          },
+          {
+            label: tr('Run on the Board'),
+            id: 'files-run-board',
+            disabled: !this.device?.available || this.device.busy,
+            action: () => void this.runProgramOnBoard(entry.location),
+          },
+        );
       }
-      items.push({ separator: true });
     }
+    if (entry && this.device?.connected) {
+      const location = entry.location;
+      items.push({
+        label: tr('Upload to {folder} on the Board', { folder: this.boardCurrentFolder() }),
+        id: 'files-upload-board',
+        disabled: this.device.busy,
+        action: () =>
+          void (async () => {
+            const store = this.stores.get(location.store);
+            const items =
+              entry.kind === 'folder'
+                ? await this.folderItems(location)
+                : [
+                    {
+                      name: baseName(location.path),
+                      read: async () => (await store?.read(location.path)) ?? new Uint8Array(),
+                    },
+                  ];
+            await this.device?.uploadFiles(items, this.boardCurrentFolder());
+          })(),
+      });
+    }
+    if (entry) items.push({ separator: true });
     const target = !entry
       ? folder
       : entry.kind === 'folder'
@@ -697,9 +905,32 @@ export class Studio {
       },
       saveProject: () => this.session.save(),
       boardMemory: () => this.scheduleBudget(),
+      ask: (title, text) =>
+        this.dialogs.message(
+          title,
+          text,
+          [
+            { label: tr('Yes'), value: true, primary: true },
+            { label: tr('No'), value: false },
+          ],
+          false,
+        ),
+      askText: (title, label, value) => this.dialogs.askText(title, label, value),
+      reloadBoardFolder: () => this.refreshBoardFiles(),
+      saveConfig: () => this.config?.save() ?? Promise.resolve(),
     });
-    this.device.onChange(() => this.workbenchChanged());
-    return this.device;
+    const device = this.device;
+    let connected = false;
+    device.onChange(() => {
+      if (device.connected !== connected) {
+        connected = device.connected;
+        this.boardRevision++; // the board's view is read again, or emptied
+        this.boardSelection = null;
+      }
+      this.workbenchChanged();
+    });
+    this.addStore(new BoardStore(device));
+    return device;
   }
 
   onStatus(listener: (message: string) => void): () => void {
@@ -1138,6 +1369,7 @@ export class Studio {
           },
         ],
       },
+      ...(this.designer && this.device ? [this.runOnMenu(this.designer, this.device, ready)] : []),
       {
         label: tr('Settings'),
         items: () => [
@@ -1244,10 +1476,105 @@ export class Studio {
     };
   }
 
-  /** ui/main_window.py, the Run menu; the browser's own pages come in phase 7. */
+  /** The board profiles for the run target selector, read when it opens. */
+  private runProfiles: { id: string; name: string }[] = [];
+
+  /** _board_entries: the profiles, and the project's own board if the store lacks it. */
+  private async loadRunProfiles(): Promise<void> {
+    const profiles = await this.python.call<{ id: string; name: string }[]>('profiles');
+    const board = this.session.state?.board;
+    if (board && !profiles.some((p) => p.id === board))
+      profiles.unshift({ id: board, name: board });
+    const changed = JSON.stringify(profiles) !== JSON.stringify(this.runProfiles);
+    this.runProfiles = profiles;
+    if (changed) this.workbenchChanged();
+  }
+
+  /** The label of a board in the selector: its name and port (RunTargetSelector). */
+  private boardLabel(profile: { id: string; name: string }): string {
+    const device = this.device;
+    const port =
+      device?.connected && device.profileId === profile.id
+        ? device.port?.label
+        : this.settings.get<string>(`device/ports/${profile.id}`, '')
+          ? `USB ${this.settings.get<string>(`device/ports/${profile.id}`, '')}`
+          : '';
+    return `${profile.name} · ${port || tr('no port')}`;
+  }
+
+  /** ui/run_target.py RunTargetSelector: where to run, the board's port, the defaults. */
+  private runOnMenu(designer: DesignerController, device: DeviceController, ready: boolean): Menu {
+    const state = this.session.state;
+    if (!this.runProfiles.length && ready) void this.loadRunProfiles();
+    const board = state?.board;
+    const current =
+      board && this.onBoard
+        ? (this.runProfiles.find((p) => p.id === board) ?? { id: board, name: board })
+        : null;
+    const label = current ? this.boardLabel(current) : tr('Simulator');
+    return {
+      label,
+      title: tr('Run on: {target}', { target: label }),
+      onOpen: () => this.loadRunProfiles(),
+      items: () => [
+        {
+          label: tr('Simulator'),
+          id: 'target-simulator',
+          checked: !this.onBoard,
+          disabled: !ready,
+          action: () => void designer.selectRunTarget('simulator'),
+        },
+        { section: tr('Board') },
+        ...this.runProfiles.map((profile): MenuItem => ({
+          label: this.boardLabel(profile),
+          id: `target-${profile.id}`,
+          checked: this.onBoard && this.session.state?.board === profile.id,
+          disabled: !ready,
+          action: () => void designer.selectRunTarget('board', profile.id),
+        })),
+        { separator: true },
+        {
+          label: tr('Change Port…'),
+          id: 'target-port',
+          disabled: !this.onBoard || device.busy || !device.available,
+          action: () => void device.changePort(),
+        },
+        {
+          label: tr('Manage Board Profiles…'),
+          id: 'target-profiles',
+          disabled: !ready,
+          action: () => void this.manageProfiles(),
+        },
+        { separator: true },
+        {
+          label: tr('Use as default for new projects'),
+          id: 'target-default',
+          disabled: !ready,
+          action: () => void this.saveNewProjectDefaults(label),
+        },
+        {
+          label: tr('Remove default'),
+          id: 'target-no-default',
+          disabled: !this.settings.get<string>('defaults/newProject', ''),
+          action: () => {
+            this.settings.remove('defaults/newProject');
+            this.status(tr('Default removed'));
+          },
+        },
+      ],
+    };
+  }
+
+  /** save_new_project_defaults: the setting the desktop keeps, the same JSON. */
+  private async saveNewProjectDefaults(label: string): Promise<void> {
+    const defaults = await this.python.call<unknown>('new_project_defaults');
+    this.settings.set('defaults/newProject', JSON.stringify(defaults));
+    this.status(tr('Default for new projects: {target}', { target: label }));
+  }
+
   /** ui/main_window.py, the Device menu, enabled as _update_device_actions says. */
   private deviceItems(device: DeviceController, ready: boolean): MenuItem[] {
-    const board = ready && Boolean(this.session.state?.board) && device.available;
+    const board = ready && this.onBoard && device.available;
     const busy = device.busy;
     const connected = device.connected;
     const notice: MenuItem[] = device.available
@@ -1283,6 +1610,12 @@ export class Studio {
       },
       { separator: true },
       {
+        label: tr('Live Editing'),
+        id: 'device-live',
+        checked: device.liveOn,
+        action: () => device.toggleLive(!device.liveOn),
+      },
+      {
         label: tr('Upload Project'),
         id: 'device-upload',
         disabled: busy || !board,
@@ -1307,7 +1640,139 @@ export class Studio {
         action: () => device.restart(),
       },
       { separator: true },
+      {
+        label: tr('Upload Files…'),
+        id: 'device-upload-files',
+        disabled: busy || !board,
+        action: () => void this.uploadFiles(),
+      },
+      {
+        label: tr('Run File on Board…'),
+        id: 'device-run-file',
+        disabled: busy || !board,
+        action: () => void device.runFileOnBoard(),
+      },
+      { separator: true },
+      {
+        label: tr('Install Autostart…'),
+        id: 'device-autostart-install',
+        disabled: busy || !connected,
+        action: () => void device.installAutostart(),
+      },
+      {
+        label: tr('Remove Autostart…'),
+        id: 'device-autostart-remove',
+        disabled: busy || !connected,
+        action: () => void device.removeAutostart(),
+      },
+      { separator: true },
     ];
+  }
+
+  /** upload_files: the dialog, then the questions and the upload. */
+  private async uploadFiles(folder?: string): Promise<void> {
+    const device = this.device;
+    if (!device) return;
+    if (folder !== undefined) {
+      // Upload Files Here…: files of the PC to that folder of the board
+      const files = await pickFiles('');
+      if (!files.length) return;
+      const items = files.map((file) => ({
+        name: file.name,
+        read: async () => new Uint8Array(await file.arrayBuffer()),
+      }));
+      await device.uploadFiles(items, folder);
+      return;
+    }
+    const choice = await uploadFilesDialog(this.dialogs, this.settings);
+    if (choice) await device.uploadFiles(choice.items, choice.destination, choice.compile);
+  }
+
+  /** The files of a folder of a place, named from the folder's parent: the folder itself goes. */
+  private async folderItems(
+    folder: Location,
+  ): Promise<{ name: string; read: () => Promise<Uint8Array> }[]> {
+    const store = this.stores.get(folder.store);
+    if (!store) return [];
+    const top = folder.path ? baseName(folder.path) : store.id;
+    const items = [];
+    for (const path of await walkFiles(store, folder.path)) {
+      const name = `${top}/${folder.path ? path.slice(folder.path.length + 1) : path}`;
+      if (skippedPath(name)) continue;
+      items.push({
+        name,
+        read: async () => (await store.read(path)) ?? new Uint8Array(),
+      });
+    }
+    return items;
+  }
+
+  /** run_program_on_board: as Run Program, on the board: its folder is uploaded, then it runs. */
+  async runProgramOnBoard(entry?: Location): Promise<boolean> {
+    const device = this.device;
+    if (!device) return false;
+    if (!entry) {
+      const chosen = await this.dialogs.choose({
+        mode: 'open',
+        title: tr('Run on the Board'),
+        stores: [...this.stores.values()],
+        suggested: this.currentPythonFile() ?? this.run?.lastProgram() ?? null,
+        accept: (name) => name.toLowerCase().endsWith('.py'),
+      });
+      if (!chosen) return false;
+      entry = chosen;
+      this.settings.set('simulator/program', chosen);
+      this.setFilesFolder({ store: chosen.store, path: parentPath(chosen.path) });
+    }
+    const folder = { store: entry.store, path: parentPath(entry.path) };
+    if (!(await this.files.saveFilesIn(folder))) return false;
+    // view.current_folder() if a folder of the board is selected, else the program root
+    const destination =
+      this.boardSelection && device.connected
+        ? this.boardCurrentFolder()
+        : await device.programRoot();
+    const items = await this.folderItems(folder);
+    const top = items[0]?.name.split('/')[0] ?? '';
+    const name = baseName(entry.path);
+    const remote = `${destination.replace(/\/$/, '')}/${top}/${folder.path ? entry.path.slice(folder.path.length + 1) : entry.path}`;
+    this.status(
+      tr('Uploading {folder} to {destination} on the board, then running {name}…', {
+        folder: top,
+        destination,
+        name,
+      }),
+    );
+    return device.uploadFiles(items, destination, false, () => void device.runFileOnBoard(remote));
+  }
+
+  /** MainWindow.run_target: the board only when the project runs on its board profile. */
+  get onBoard(): boolean {
+    return this.session.state?.runTarget === 'board';
+  }
+
+  /** run_project: on the board, Upload and Run; otherwise the simulator. */
+  startProject(): void {
+    if (this.onBoard) void this.device?.upload(true);
+    else if (this.run && !this.run.running && this.session.state) void this.run.runProject();
+  }
+
+  /** stop_simulation: on the board, its Stop. */
+  stopProject(): void {
+    if (this.onBoard) this.device?.stop();
+    else void this.run?.stop();
+  }
+
+  /** _update_device_actions for Start and Stop. */
+  private startStopDisabled(run: RunController): { start: boolean; stop: boolean } {
+    const device = this.device;
+    const busy = device?.busy ?? false;
+    if (this.onBoard) {
+      return {
+        start: busy || run.running || !device?.available,
+        stop: busy || !device?.connected || !device.appActive,
+      };
+    }
+    return { start: busy || run.running, stop: busy || !run.running };
   }
 
   private runMenu(run: RunController, ready: boolean): Menu {
@@ -1318,20 +1783,20 @@ export class Studio {
           label: tr('Start'),
           id: 'run-start',
           shortcut: 'F5',
-          disabled: !ready || run.running,
-          action: () => void run.runProject(),
+          disabled: !ready || this.startStopDisabled(run).start,
+          action: () => this.startProject(),
         },
         {
           label: tr('Stop'),
           id: 'run-stop',
           shortcut: 'Shift+F5',
-          disabled: !run.running,
-          action: () => void run.stop(),
+          disabled: this.startStopDisabled(run).stop,
+          action: () => this.stopProject(),
         },
         {
           label: tr('Restart'),
           id: 'run-restart',
-          disabled: !ready,
+          disabled: !ready || this.onBoard || (this.device?.busy ?? false),
           action: () => void run.restart(),
         },
         { separator: true },
@@ -1340,6 +1805,12 @@ export class Studio {
           id: 'run-program',
           disabled: !ready || run.running,
           action: () => void run.runProgram(),
+        },
+        {
+          label: tr('Run on the Board…'),
+          id: 'run-board-program',
+          disabled: !ready || !this.device?.available || (this.device?.busy ?? false),
+          action: () => void this.runProgramOnBoard(),
         },
         {
           label: tr('Erase Program Flash…'),
@@ -1357,8 +1828,12 @@ export class Studio {
    */
   shortcut(event: KeyboardEvent, inTerminal = false, inEditor = false): boolean {
     if (event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.metaKey && this.run) {
-      if (event.shiftKey) void this.run.stop();
-      else if (!this.run.running && this.session.state) void this.run.runProject();
+      const { start, stop } = this.startStopDisabled(this.run);
+      if (event.shiftKey) {
+        if (!stop) this.stopProject();
+      } else if (!start) {
+        this.startProject();
+      }
       event.preventDefault();
       return true;
     }

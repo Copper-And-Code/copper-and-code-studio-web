@@ -215,6 +215,54 @@ def upload(run=False):
     }
 
 
+def live_send(upload_key, design_key, page_id=None):
+    """MainWindow._send_live: the page of the open project, if only the graphics changed since the
+    upload, and if it changed since the last update. stale: press F5; same: nothing to send."""
+    import copy
+
+    import lms_bridge
+    from lvgl_mpy_studio.gen import live
+
+    project = copy.deepcopy(lms_bridge._doc().project)
+    if live.upload_key(project) != upload_key:
+        return {"status": "stale"}
+    ids = [page.id for page in project.pages]
+    chosen = page_id if page_id in ids else project.currentPageId
+    page = ids.index(chosen) if chosen in ids else 0
+    key = live.design_key(project, page)
+    if key == design_key:
+        return {"status": "same"}
+    _session().live_update(live.live_script(project, page), cancel=_state["cancel"])
+    return {"status": "sent", "designKey": key}
+
+
+def trace_errors(text, sourcemap):
+    """DeviceMixin._device_output: the tracebacks the board printed, mapped to the project's code,
+    the line of the error first (_trace_rows)."""
+    import lms_bridge
+    from lvgl_mpy_studio.build.compiler import traceback_errors
+
+    modules = {module.name for module in lms_bridge._doc().project.modules}
+    return sorted(traceback_errors(text, sourcemap, modules), key=lambda error: not error.get("origin"))
+
+
+def install_autostart():
+    """install_autostart on the open project; the transaction is kept in config_dir."""
+    import copy
+
+    import lms_bridge
+
+    return _session().install_autostart(copy.deepcopy(lms_bridge._doc().project))
+
+
+def remove_autostart():
+    import copy
+
+    import lms_bridge
+
+    return _session().remove_autostart(copy.deepcopy(lms_bridge._doc().project))
+
+
 def stop():
     return _session().stop()
 
@@ -231,6 +279,76 @@ def leave_raw():
     return None
 
 
+# ---- ui/device_files.py: pure functions in a module that imports Qt (upstream request 9) ----
+
+DESTINATIONS = ("/flash", "/sd", "/sd/bin", "/flash/bin", "/")
+SKIPPED = {"__pycache__", ".git", ".hg", ".svn", ".venv"}
+
+
+def run_line(text):
+    """What to type at the board's prompt: a file of the board runs from its folder, as __main__; anything else is code."""
+    text = text.strip()
+    if text.endswith(".py") and "(" not in text and " " not in text:
+        path = text if text.startswith("/") else "/" + text
+        folder, name = path.rsplit("/", 1)
+        return f"import os; os.chdir({folder or '/'!r}); exec(open({name!r}).read(), {{'__name__': '__main__', '__file__': {path!r}}})"
+    return text
+
+
+def protected_targets(names, destination):
+    """The files that would replace what a board runs at power-on: boot.py anywhere, main.py at the top."""
+    found = []
+    for name in names:
+        target = ("/" + destination.strip("/") + "/" + name).replace("//", "/")
+        parts = target.strip("/").split("/")
+        if parts[-1] == "boot.py" or (parts[-1] == "main.py" and len(parts) <= 2):
+            found.append(target)
+    return found
+
+
+def shadowed_modules(names, entries):
+    """Names that would be both a folder and a module (.py or .mpy) in the destination, because of this upload."""
+    folders = {entry["name"] for entry in entries if entry["dir"]}
+    modules = {entry["name"].rsplit(".", 1)[0] for entry in entries if not entry["dir"] and entry["name"].endswith((".py", ".mpy"))}
+    new = set()
+    for name in names:
+        parts = name.strip("/").split("/")
+        if len(parts) > 1:
+            folders.add(parts[0])
+            new.add(parts[0])
+        elif parts[0].endswith((".py", ".mpy")):
+            modules.add(parts[0].rsplit(".", 1)[0])
+            new.add(parts[0].rsplit(".", 1)[0])
+    return sorted(name for name in folders & modules if name in new)
+
+
+def skipped(relative):
+    """folder_items' rule: a part that is a cache, a version-control folder or hidden is left out."""
+    return any(part in SKIPPED or part.startswith(".") for part in relative.split("/"))
+
+
+UPLOAD_DIR = "/board-upload"
+
+
+def upload_files(names, destination, compile_python=False):
+    """DeviceSession.upload_files on the files the page wrote under UPLOAD_DIR, by their names."""
+    from pathlib import Path
+
+    items = [(Path(UPLOAD_DIR) / name, name) for name in names]
+    try:
+        return _session().upload_files(items, destination, compile_python, progress=_progress, cancel=_state["cancel"])
+    finally:
+        import shutil
+
+        shutil.rmtree(UPLOAD_DIR, ignore_errors=True)
+
+
+def program_root():
+    """_board_program_root: the flash of the STM32 boards, else the root."""
+    board = _profile()
+    return "/flash" if str(board.get("config", {}).get("appRoot", "")).startswith("/flash") else "/"
+
+
 METHODS = {
     "project_board": project_board,
     "connect": connect,
@@ -245,9 +363,19 @@ METHODS = {
     "remove_path": remove_path,
     "evaluate": evaluate,
     "upload": upload,
+    "live_send": live_send,
+    "trace_errors": trace_errors,
+    "install_autostart": install_autostart,
+    "remove_autostart": remove_autostart,
     "stop": stop,
     "restart": restart,
     "leave_raw": leave_raw,
+    "run_line": run_line,
+    "protected_targets": protected_targets,
+    "shadowed_modules": shadowed_modules,
+    "upload_files": upload_files,
+    "program_root": program_root,
+    "destinations": lambda: list(DESTINATIONS),
 }
 
 

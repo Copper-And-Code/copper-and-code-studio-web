@@ -15,8 +15,8 @@ export interface BoardSetup {
   /** sys.implementation.version and lvgl.version_info(). */
   micropython?: [number, number, number];
   lvgl?: [number, number, number];
-  /** sys.implementation._mpy */
-  mpy?: number;
+  /** sys.implementation._mpy; null: no bytecode, the app is uploaded as source (it can run here). */
+  mpy?: number | null;
   /** A firmware shell in front of the REPL that takes one Ctrl-C to leave, as some ESP32 boards. */
   shell?: boolean;
   /** Bytes the board takes per raw-paste window (0: no raw-paste, as old firmware). */
@@ -137,9 +137,42 @@ gc.mem_alloc = lambda: 100_000
 micropython = types.ModuleType('micropython')
 micropython.const = lambda value: value
 
+class Anything:
+    """What the fake lvgl gives for every name: it can be called, read, combined and compared,
+    so that a generated app runs on the fake board without drawing anything."""
+    def __init__(self, *args, **kwargs): pass
+    def __call__(self, *args, **kwargs): return Anything()
+    def __getattr__(self, name):
+        if name.startswith('__'): raise AttributeError(name)
+        return Anything()
+    def __iter__(self): return iter(())
+    def __len__(self): return 0
+    def __bool__(self): return True
+    def __int__(self): return 0
+    def __index__(self): return 0
+    def __float__(self): return 0.0
+    def __hash__(self): return 0
+    def __eq__(self, other): return isinstance(other, Anything)
+    def __lt__(self, other): return False
+    __gt__ = __le__ = __ge__ = __lt__
+    def _same(self, *args): return Anything()
+    __or__ = __ror__ = __and__ = __rand__ = __add__ = __radd__ = __sub__ = __rsub__ = _same
+    __mul__ = __rmul__ = __floordiv__ = __truediv__ = __mod__ = __neg__ = __invert__ = __lshift__ = __rshift__ = _same
+    def __getitem__(self, key): return Anything()
+    def __setitem__(self, key, value): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def __mro_entries__(self, bases): return (object,)
+
 lvgl = types.ModuleType('lvgl')
+def _lvgl_name(name):
+    # what the probe looks for must answer as the firmware: only the fonts it has
+    if name.startswith('font_montserrat_') or name.startswith('__'):
+        raise AttributeError(name)
+    return Anything()
+lvgl.__getattr__ = _lvgl_name
 for name in ('obj', 'screen_load', 'EVENT', 'timer_handler', 'binfont_create_from_buffer'):
-    setattr(lvgl, name, object())
+    setattr(lvgl, name, Anything())
 lvgl.version_info = lambda: tuple(SETUP['lvgl'])
 for size in SETUP['fonts']:
     setattr(lvgl, 'font_montserrat_%d' % size, object())

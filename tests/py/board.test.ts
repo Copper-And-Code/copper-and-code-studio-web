@@ -49,6 +49,8 @@ describe('board transport', () => {
   let profiles: Record<string, unknown>;
 
   async function plug(setup: BoardSetup): Promise<FakeBoard> {
+    // as the page does before another connection: DeviceSession forgets the STM32's UART only there
+    if (call) await call('disconnect');
     const board = await FakeBoard.start(setup);
     const link = links.open({ port: PORT }, board);
     board.send = (data) => link.receive(data);
@@ -188,12 +190,106 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
       [...reply.result.files].sort(),
     );
     expect(board.file(`${app}/ui.mpy`)?.[0]).toBe(0x4d);
-    expect(board.softResets).toBe(1);
+    // the reset before the upload, and one for each file: _put runs `mpremote connect PORT fs cp`
+    // without `resume`, so mpremote soft-resets first, as on the desktop
+    expect(board.softResets).toBe(1 + reply.result.files.length);
     const last = progress.at(-1);
     expect(last?.[0]).toBe(last?.[1]);
     // A second upload keeps the first as .previous
     expect((await call('upload')).ok).toBe(true);
     expect(board.files().some((path) => path.startsWith(app + '.previous/'))).toBe(true);
+  }, 120_000);
+
+  it('copies files of the PC, compiled, and asks what upstream asks', async () => {
+    const board = await plug({ width: 480, height: 480 });
+    board.putFile('/flash/util.py', 'x = 1\n');
+    expect((await call('connect', PORT, profiles.esp32_4848s040_480)).ok).toBe(true);
+    py.FS.mkdirTree('/board-upload/util');
+    py.FS.writeFile('/board-upload/util/__init__.py', 'y = 2\n');
+    py.FS.writeFile('/board-upload/main.py', 'import util\n');
+    const names = ['util/__init__.py', 'main.py'];
+    expect((await call('protected_targets', names, '/')).result).toEqual(['/main.py']);
+    expect((await call('protected_targets', names, '/flash')).result).toEqual(['/flash/main.py']);
+    const listing = (await call('list_dir', '/flash')).result;
+    expect((await call('shadowed_modules', names, listing)).result).toEqual(['util']);
+    const reply = await call<{ files: string[]; warnings: string[] }>(
+      'upload_files',
+      names,
+      '/flash',
+      true,
+    );
+    expect(reply.error?.traceback ?? '').toBe('');
+    expect(reply.result.files).toEqual(['/flash/util/__init__.mpy', '/flash/main.py']);
+    expect(board.file('/flash/util/__init__.mpy')?.[0]).toBe(0x4d);
+    expect(new TextDecoder().decode(board.file('/flash/main.py') ?? new Uint8Array())).toBe(
+      'import util\n',
+    );
+    expect((await call('run_line', '/flash/shell.py')).result).toBe(
+      "import os; os.chdir('/flash'); exec(open('shell.py').read(), {'__name__': '__main__', '__file__': '/flash/shell.py'})",
+    );
+  }, 60_000);
+
+  it('runs the app, updates it live, and stops it', async () => {
+    // without bytecode: the fake board runs Python source only
+    const fonts = [
+      8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48,
+    ];
+    const board = await plug({ width: 480, height: 480, mpy: null, fonts });
+    expect((await call('connect', PORT)).ok).toBe(true); // weather, opened by the upload test
+    const run = await call<{
+      active: boolean;
+      uploadKey: string;
+      designKey: string;
+      output: string;
+      sourcemap: { entries: { handler: string; line: number }[] };
+    }>('upload', true);
+    expect(run.error?.output ?? run.error?.traceback ?? '').toBe('');
+    expect(run.result.active).toBe(true);
+    // a traceback of the board, in a handler: the row names the handler, as _device_output does
+    const entry = run.result.sourcemap.entries[0];
+    expect(entry).toBeDefined();
+    const trace = `Traceback (most recent call last):\r\n  File "${'/lms_apps/app/app_events.py'}", line ${entry?.line ?? 0}, in ${entry?.handler}\r\nZeroDivisionError: divide by zero\r\n`;
+    const rows = await call<{ handler?: string; origin: boolean }[]>(
+      'trace_errors',
+      trace,
+      run.result.sourcemap,
+    );
+    expect(rows.result).toMatchObject([{ handler: entry?.handler, origin: true }]);
+    const same = await call('live_send', run.result.uploadKey, run.result.designKey);
+    expect(same.result).toEqual({ status: 'same' });
+    const changed = await call<{ status: string }>('live_send', run.result.uploadKey, 'older');
+    expect(changed.error?.output ?? changed.error?.traceback ?? '').toBe('');
+    expect(changed.result.status).toBe('sent');
+    expect((await call('live_send', 'another code', run.result.designKey)).result).toEqual({
+      status: 'stale',
+    });
+    const stopped = await call<string>('stop');
+    expect(stopped.result).toContain('LVGL_MPY_STUDIO_STOPPED');
+    expect(board.softResets).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('installs the autostart, keeps the main.py it replaces, and puts it back', async () => {
+    const board = await plug({ width: 480, height: 480 });
+    board.putFile('/main.py', 'print("mine")\n');
+    expect((await call('connect', PORT)).ok).toBe(true);
+    expect((await call('upload')).ok).toBe(true);
+    const installed = await call<{ backup: string; appPath: string }>('install_autostart');
+    expect(installed.error?.output ?? installed.error?.traceback ?? '').toBe('');
+    const launcher = new TextDecoder().decode(board.file('/main.py') ?? new Uint8Array());
+    expect(launcher.startsWith('# LMS_AUTOSTART_V2\n')).toBe(true);
+    expect(launcher).toContain(`sys.path.insert(0, '${installed.result.appPath}')`);
+    // the backup is on this side, in config_dir, under the board's hardware id
+    expect(installed.result.backup).toContain('/autostart-backups/a1b2c3d4e5f6/');
+    expect(new TextDecoder().decode(py.FS.readFile(`${installed.result.backup}/main.py`))).toBe(
+      'print("mine")\n',
+    );
+    const removed = await call('remove_autostart');
+    expect(removed.error?.output ?? removed.error?.traceback ?? '').toBe('');
+    expect(new TextDecoder().decode(board.file('/main.py') ?? new Uint8Array())).toBe(
+      'print("mine")\n',
+    );
+    // a main.py that is not the launcher is never touched
+    expect((await call('remove_autostart')).error?.code).toBe('device.autostart.manifest');
   }, 120_000);
 
   it('gives up when the port goes away', async () => {

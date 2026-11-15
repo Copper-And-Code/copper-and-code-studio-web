@@ -14,6 +14,7 @@ tagged.
 | 6   | The browser loaders with a host interface         | proposed                                      |
 | 7   | The preview after a quick undo                    | proposed                                      |
 | 8   | `.mpy` files without the temporary folder's path  | proposed                                      |
+| 9   | The board's file helpers without Qt               | proposed                                      |
 
 ---
 
@@ -175,3 +176,19 @@ simulator would also show `ui.py` instead of a temporary path.
 
 **Test.** `measure_budget` of an example without a board gives the same flash from two different
 temporary folders.
+
+## 9. The board's file helpers without Qt
+
+**What.** Move `folder_items`, `run_line`, `protected_targets`, `shadowed_modules`, `DESTINATIONS`
+and `SKIPPED` from `ui/device_files.py` into a module without Qt, for example
+`device/files.py`; `ui/device_files.py` imports them from there.
+
+**Why.** They are pure functions about the board's files, but their module imports PySide6 for
+`UploadFilesDialog`, so the web IDE cannot import them. It keeps a copy in `py/lms_board.py`,
+which can drift from upstream.
+
+**Where.** `lvgl_mpy_studio/ui/device_files.py`, `lvgl_mpy_studio/ui/main_device.py`,
+`lvgl_mpy_studio/ui/main_editors.py`.
+
+**Test.** The existing tests of the four functions, importing them from the new module without
+PySide6 installed.

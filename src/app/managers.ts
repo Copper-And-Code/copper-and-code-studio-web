@@ -15,7 +15,7 @@ export class ConfigSync {
 
   constructor(
     private readonly python: PythonBridge,
-    private readonly store: FileStore,
+    readonly store: FileStore,
   ) {}
 
   /** At start-up: the kept files back into Python, then the blocks read again. */

@@ -28,6 +28,9 @@ import './device-console.ts';
 import type { UploadProgress } from './upload-progress.ts';
 import './upload-progress.ts';
 import type { DeviceView } from '../app/device.ts';
+import { BOARD_STORE } from '../board/board-store.ts';
+
+const BOARD_ROOT = { store: BOARD_STORE, path: '' };
 import { WIDGET_MIME } from './designer-view.ts';
 import type { TreeKey } from './project-tree.ts';
 
@@ -139,6 +142,12 @@ export class AppShell extends LitElement {
     lms-files-panel {
       flex: 1 1 auto;
       min-height: 120px;
+    }
+    lms-files-panel.board-files {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+      min-height: 80px;
     }
     .center [role='tablist'] {
       flex-wrap: wrap;
@@ -512,6 +521,33 @@ export class AppShell extends LitElement {
     if (ms) this.statusTimer = setTimeout(() => (this.statusMessage = ''), ms);
   }
 
+  /** FilesPanel's BoardFilesView: the files of the connected board, read when connected. */
+  private renderBoardFiles() {
+    const studio = this.studio;
+    const device = studio?.device;
+    if (!studio || !device?.available) return nothing;
+    const connected = device.connected;
+    return html`<lms-files-panel
+      class="board-files"
+      .name=${'board-files'}
+      .store=${connected ? (studio.stores.get(BOARD_STORE) ?? null) : null}
+      .folder=${connected ? BOARD_ROOT : null}
+      .heading=${
+        connected
+          ? tr('Board on {port}', { port: device.port?.label ?? '' })
+          : tr('Board: not connected')
+      }
+      .chooseLabel=${tr('Refresh')}
+      .chooseDisabled=${!connected}
+      .revision=${studio.boardRevision}
+      .onOpen=${(location: Location) => void studio.openFile(location)}
+      .menuFor=${(entry: { location: Location; kind: 'file' | 'folder' } | null) =>
+        studio.boardFilesMenu(entry)}
+      .onChooseFolder=${() => studio.refreshBoardFiles()}
+      .onSelect=${(path: string, kind: 'file' | 'folder') => studio.selectBoardEntry(path, kind)}
+    ></lms-files-panel>`;
+  }
+
   private get deviceConsole(): DeviceConsole {
     const panel = this.renderRoot.querySelector('lms-device-console');
     if (!panel) throw new Error('The shell is not rendered yet');
@@ -533,6 +569,7 @@ export class AppShell extends LitElement {
       status: (text, ms = 3000) => this.showStatus(text, ms),
       connection: (text) => (this.deviceStatus = text),
       raise: () => (this.bottom = 'device'),
+      focusConsole: () => void this.updateComplete.then(() => console.focusTerminal()),
       progress: {
         open: (rate, cancel) => progress.open(rate, cancel),
         report: (sent, total, name, size) => progress.report(sent, total, name, size),
@@ -914,6 +951,7 @@ export class AppShell extends LitElement {
                 this.studio?.filesMenu(entry) ?? []}
               .onChooseFolder=${() => void this.studio?.chooseFilesFolder()}
             ></lms-files-panel>
+            ${this.renderBoardFiles()}
           </div>
         </section>
         <section class="center" aria-label=${tr('Editor')}>

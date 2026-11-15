@@ -342,6 +342,7 @@ export class Dialogs extends LitElement {
   }
 
   choose(options: ChooseOptions): Promise<Location | null> {
+    options = { ...options, stores: options.stores.filter((store) => !store.ownView) };
     return new Promise((resolve) => this.push({ kind: 'choose', options, resolve }));
   }
 

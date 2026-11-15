@@ -314,3 +314,28 @@ Sub-gate 1, the transport and the first operations.
   firmware shell that wants Ctrl-C; the Python it receives runs in a Pyodide of its own with a
   file system in memory, MicroPython's errno numbers and its tracebacks. The e2e tests give the
   page a fake `navigator.serial` whose bytes reach that board in Node.
+
+Sub-gate 2, the rest of the board.
+
+- **The run target selector is a menu of the menu bar**, named after the target, as the desktop's
+  toolbar button is: the web IDE has no toolbar. Its logic (`select_run_target`, the defaults
+  for new projects) is ported to `py/lms_bridge.py`, because `ui/run_target.py` and
+  `ui/main_window.py` are Qt.
+- **The board's files are a store** (`src/board/board-store.ts`): the Files panel and the file
+  tabs use it as they use the workspace, and every operation is upstream's `DeviceSession`,
+  queued as `_board_task` queues it. A board file is not looked at again when the page comes
+  back to the front, and not read before a save: the desktop edits a local copy that only its
+  tab writes. The board is not a place of the file chooser; it has its own side of the panel.
+- **`ui/device_files.py`'s pure functions are copied** into `py/lms_board.py` (`run_line`,
+  `protected_targets`, `shadowed_modules`, `folder_items`' rule): their module imports Qt
+  (upstream request 9).
+- **Download to the Computer writes into the Files panel's folder**, as the desktop does; with a
+  read-only folder or none, the browser downloads the file.
+- **A soft reset before each file copied is upstream's**: `_put` runs `mpremote connect PORT fs
+cp` without `resume`. The tests count it rather than hide it.
+- **Autostart's backups are in the configuration folder** that the IDE keeps in the browser's
+  private storage (phase 5): the transaction is upstream's, unchanged. They are in this browser
+  only; another browser, or the desktop, does not know them, and removing the autostart from
+  there is refused, as upstream refuses it without its manifest.
+- **The scripted board can run an app**: its `lvgl` gives a permissive object for every name, so
+  that a generated app starts, a live update arrives and Stop stops it, without drawing.

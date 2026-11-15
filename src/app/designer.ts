@@ -573,6 +573,39 @@ export class DesignerController {
     return true;
   }
 
+  /**
+   * select_run_target: the simulator, or a board; a board of another profile brings its
+   * resolution, with the question, in the same undo step.
+   */
+  async selectRunTarget(kind: 'simulator' | 'board', profileId?: string): Promise<boolean> {
+    const plan = await this.python.call<{
+      same: boolean;
+      error?: string;
+      size?: Size;
+    }>('run_target_plan', kind, profileId ?? null);
+    if (plan.same) return true;
+    if (plan.error) {
+      this.error(plan.error);
+      return false;
+    }
+    let mode: ResizeMode = 'keep';
+    if (plan.size) {
+      if (this.blocked()) return false;
+      const chosen = await this.resizeMode(plan.size, true, '');
+      if (chosen === null) return false;
+      mode = chosen;
+    }
+    const result = await this.python.call<{ outside: string[]; state: DocState }>(
+      'doc_set_run_target',
+      kind,
+      profileId ?? null,
+      mode,
+    );
+    this.session.adopt(result.state);
+    this.reportOutside(result.outside);
+    return true;
+  }
+
   /** Project → Project Settings…: ProjectSettingsDialog, then the question, one undo step. */
   async projectSettings(): Promise<boolean> {
     if (this.blocked()) return false;

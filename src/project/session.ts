@@ -16,6 +16,8 @@ export interface DocState {
   modified: boolean;
   projectName: string;
   board: string | null;
+  /** MainWindow.run_target: where F5 runs the project. */
+  runTarget: 'simulator' | 'board';
   display: { width: number; height: number };
   pages: { id: string; name: string }[];
   modules: { id: string; name: string }[];

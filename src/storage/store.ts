@@ -10,6 +10,13 @@ export interface FileStore {
   readonly id: string;
   readonly label: string;
   readonly readOnly: boolean;
+  /**
+   * Not looked at for changes made elsewhere: the board, which a read occupies, as the desktop
+   * edits a board file in a local copy that only its own tab writes.
+   */
+  readonly unwatched?: boolean;
+  /** Not a place of the file chooser: the board has its own side of the Files panel. */
+  readonly ownView?: boolean;
   /** The entries of a folder, folders first, then by name. '' is the root. */
   list(folder: string): Promise<Entry[]>;
   /** The file's bytes, or null if there is no such file. */

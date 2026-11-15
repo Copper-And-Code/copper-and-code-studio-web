@@ -179,7 +179,7 @@ export class FileTabs {
     try {
       if (this.store(tab.location).readOnly && !(await this.copyExample(tab))) return false;
       const store = this.store(tab.location);
-      const now = await store.read(tab.location.path);
+      const now = store.unwatched ? null : await store.read(tab.location.path);
       if (now !== null && !sameBytes(now, tab.disk) && !tab.offerReload) {
         // changed elsewhere since it was read: as the desktop's notice, before anything is lost
         tab.notice = tr(
@@ -225,6 +225,7 @@ export class FileTabs {
    */
   async refreshFromStores(): Promise<void> {
     for (const tab of [...this.tabs]) {
+      if (this.store(tab.location).unwatched) continue;
       let now: Uint8Array | null;
       try {
         now = await this.store(tab.location).read(tab.location.path);

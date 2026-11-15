@@ -102,11 +102,63 @@ def doc_state():
         "display": {"width": project.display.width, "height": project.display.height},
         "pages": [{"id": page.id, "name": page.name} for page in project.pages],
         "modules": [{"id": module.id, "name": module.name} for module in project.modules],
+        "runTarget": _run_target(project),
         "canUndo": stack.can_undo(),
         "canRedo": stack.can_redo(),
         "undoText": stack.undo_text(),
         "redoText": stack.redo_text(),
     }
+
+
+def _run_target(project):
+    """MainWindow.run_target: a board only with a board profile, otherwise the simulator."""
+    saved = project.runTarget or {}
+    return "board" if saved.get("kind") == "board" and project.board else "simulator"
+
+
+def run_target_plan(kind, profile_id=None):
+    """select_run_target before the question: the same target changes nothing; a board of
+    another profile brings its resolution, after validate_profile."""
+    from lvgl_mpy_studio.core.boards import ProfileStore, validate_profile
+
+    project = _doc().project
+    current = project.board.get("id") if project.board else None
+    if kind == _run_target(project) and (kind == "simulator" or profile_id == current):
+        return {"same": True}
+    if kind == "board" and profile_id != current:
+        profile = ProfileStore.tolerant().get(profile_id)
+        try:
+            validate_profile(profile)
+        except (TypeError, ValueError) as exc:
+            return {"same": False, "error": str(exc)}
+        return {"same": False, "size": {"width": profile["logicalWidth"], "height": profile["logicalHeight"]}}
+    return {"same": False}
+
+
+def doc_set_run_target(kind, profile_id=None, mode="keep"):
+    """select_run_target's mutate: one undo step, then _report_outside."""
+    from lvgl_mpy_studio.core.boards import ProfileStore, portable_profile
+    from lvgl_mpy_studio.core.i18n import tr
+
+    document = _doc()
+    current = document.project.board.get("id") if document.project.board else None
+    profile = ProfileStore.tolerant().get(profile_id) if kind == "board" and profile_id != current else None
+
+    def mutate(project):
+        project.runTarget = None if kind == "simulator" else {"kind": kind, "language": "micropython"}
+        if profile:
+            project.board = portable_profile(profile)
+            project.resize(profile["logicalWidth"], profile["logicalHeight"], mode)
+
+    document.execute(tr("Change run target"), mutate)
+    outside = document.project.widgets_outside(profile["logicalWidth"], profile["logicalHeight"]) if profile else []
+    return {"outside": outside, "state": doc_state()}
+
+
+def new_project_defaults():
+    """save_new_project_defaults: what the desktop keeps in defaults/newProject."""
+    project = _doc().project
+    return {"board": project.board["id"] if project.board else None, "runTarget": project.runTarget, "width": project.display.width, "height": project.display.height}
 
 
 def profiles():
@@ -1723,6 +1775,9 @@ METHODS = {
     "generate": generate,
     "export_board": export_board,
     "profiles": profiles,
+    "run_target_plan": run_target_plan,
+    "doc_set_run_target": doc_set_run_target,
+    "new_project_defaults": new_project_defaults,
     "doc_state": doc_state,
     "doc_new": doc_new,
     "doc_open": doc_open,

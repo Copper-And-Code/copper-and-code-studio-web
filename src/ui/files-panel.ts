@@ -24,7 +24,18 @@ export class FilesPanel extends LitElement {
     listing: { state: true },
     menu: { state: true },
     selected: { state: true },
+    heading: { attribute: false },
+    chooseLabel: { attribute: false },
+    chooseDisabled: { attribute: false },
   };
+
+  /** What the top line says instead of the folder's name (the board's view: its port). */
+  heading: string | null = null;
+  /** The button of the top line: Open Folder…, or the board's Refresh. */
+  chooseLabel = tr('Open Folder…');
+  chooseDisabled = false;
+  /** The prefix of the test ids: files, or board-files. */
+  name = 'files';
 
   store: FileStore | null = null;
   folder: Location | null = null;
@@ -40,6 +51,8 @@ export class FilesPanel extends LitElement {
   /** The menu of an entry, or of the folder itself (null). */
   menuFor: (entry: (Node & { location: Location }) | null) => MenuItem[] = () => [];
   onChooseFolder: () => void = () => {};
+  /** The entry selected, for the board's current_folder. */
+  onSelect: (path: string, kind: Entry['kind']) => void = () => {};
 
   static override styles = css`
     :host {
@@ -213,7 +226,10 @@ export class FilesPanel extends LitElement {
   private showMenu(event: MouseEvent | KeyboardEvent, node: Node | null): void {
     event.preventDefault();
     event.stopPropagation();
-    if (node) this.selected = node.path;
+    if (node) {
+      this.selected = node.path;
+      this.onSelect(node.path, node.kind);
+    }
     const items = this.menuFor(node ? { ...node, location: this.location(node) } : null);
     const target = event.target as HTMLElement;
     const box = target.getBoundingClientRect();
@@ -270,6 +286,7 @@ export class FilesPanel extends LitElement {
             title=${node.path}
             @click=${() => {
               this.selected = node.path;
+              this.onSelect(node.path, node.kind);
               if (node.kind === 'folder') void this.toggle(node);
             }}
             @dblclick=${() => node.kind === 'file' && this.onOpen(this.location(node))}
@@ -320,14 +337,21 @@ export class FilesPanel extends LitElement {
 
   override render() {
     const folder = this.folder;
-    const label = folder
-      ? `${this.store?.label ?? folder.store}${folder.path ? `: ${folder.path}` : ''}`
-      : tr('No folder: open one, or run a program.');
+    const label =
+      this.heading ??
+      (folder
+        ? `${this.store?.label ?? folder.store}${folder.path ? `: ${folder.path}` : ''}`
+        : tr('No folder: open one, or run a program.'));
     return html`
       <div class="top">
-        <span data-testid="files-folder">${label}</span>
-        <button type="button" class="choose" @click=${() => this.onChooseFolder()}>
-          ${tr('Open Folder…')}
+        <span data-testid="${this.name}-folder">${label}</span>
+        <button
+          type="button"
+          class="choose"
+          ?disabled=${this.chooseDisabled}
+          @click=${() => this.onChooseFolder()}
+        >
+          ${this.chooseLabel}
         </button>
       </div>
       ${
@@ -336,7 +360,11 @@ export class FilesPanel extends LitElement {
               class="tree"
               @contextmenu=${(event: MouseEvent) => this.showMenu(event, null)}
             >
-              <ul role="tree" aria-label=${tr('Files')}>
+              <ul
+                role="tree"
+                aria-label=${this.heading ?? tr('Files')}
+                data-testid="${this.name}-tree"
+              >
                 ${this.renderNodes(folder.path)}
               </ul>
             </div>`
