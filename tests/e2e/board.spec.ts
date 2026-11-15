@@ -20,7 +20,7 @@ async function start(page: Page) {
 }
 
 async function menu(page: Page, top: string, ...path: string[]) {
-  await page.getByRole('button', { name: top, exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: top, exact: true }).click();
   for (const item of path) await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 
@@ -33,13 +33,18 @@ const ESP32 = 'ESP32-4848S040 (480×480)';
 async function openOnBoard(page: Page) {
   await menu(page, 'File', 'Open Example', 'weather');
   await expect(page.getByTestId('project-file')).toHaveText('Examples: weather/project.json');
-  await page.getByRole('button', { name: /^Run on: / }).click();
+  await page
+    .getByRole('menubar')
+    .getByRole('menuitem', { name: /^Run on: / })
+    .click();
   const item = page.getByRole('menuitemcheckbox', {
     name: new RegExp(`^${ESP32.replace(/[()]/g, '\\$&')}`),
   });
   if ((await item.getAttribute('aria-checked')) === 'true') await page.keyboard.press('Escape');
   else await item.click();
-  await expect(page.getByRole('button', { name: `Run on: ${ESP32} · no port` })).toBeVisible();
+  await expect(
+    page.getByRole('menubar').getByRole('menuitem', { name: `Run on: ${ESP32} · no port` }),
+  ).toBeVisible();
 }
 
 /** A USB serial port in the page, wired to a FakeBoard here. */
@@ -173,12 +178,16 @@ test('the run target: the simulator, the board of the profile, one undo step, F5
   const board = await plugBoard(page, { width: 480, height: 480 });
   await start(page);
   await openOnBoard(page);
-  const onBoard = page.getByRole('button', { name: `Run on: ${ESP32} · no port` });
+  const onBoard = page
+    .getByRole('menubar')
+    .getByRole('menuitem', { name: `Run on: ${ESP32} · no port` });
   await onBoard.click();
   await page.getByRole('menuitemcheckbox', { name: 'Simulator', exact: true }).click();
-  const onSimulator = page.getByRole('button', { name: 'Run on: Simulator', exact: true });
+  const onSimulator = page
+    .getByRole('menubar')
+    .getByRole('menuitem', { name: 'Run on: Simulator', exact: true });
   await expect(onSimulator).toBeVisible();
-  await page.getByRole('button', { name: 'Device', exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'Device', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Upload Project', exact: true })).toBeDisabled();
   await page.keyboard.press('Escape');
   await menu(page, 'Edit', 'Undo');
@@ -191,7 +200,7 @@ test('the run target: the simulator, the board of the profile, one undo step, F5
     .poll(() => board.files().some((path) => path.endsWith('/ui.mpy')), { timeout: 60_000 })
     .toBe(true);
   await expect(
-    page.getByRole('button', { name: `Run on: ${ESP32} · USB 303a:1001` }),
+    page.getByRole('menubar').getByRole('menuitem', { name: `Run on: ${ESP32} · USB 303a:1001` }),
   ).toBeVisible();
 });
 
@@ -369,7 +378,7 @@ test('without Web Serial the Device menu says so, and its board items are off', 
   });
   await start(page);
   await openOnBoard(page);
-  await page.getByRole('button', { name: 'Device', exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'Device', exact: true }).click();
   await expect(
     page.getByRole('menuitem', {
       name: 'This browser has no Web Serial: the board works in Chrome or Edge',

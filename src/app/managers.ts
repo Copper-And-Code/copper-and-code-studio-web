@@ -4,7 +4,7 @@
 // ConfigSync keeps a copy of it in the browser's private storage.
 import { html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
-import { tr } from '../i18n/tr.ts';
+import { N_, tr } from '../i18n/tr.ts';
 import type { PythonBridge } from '../py/bridge.ts';
 import { type FileStore, joinPath, walkFiles } from '../storage/store.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
@@ -61,13 +61,14 @@ interface Profile {
   [key: string]: unknown;
 }
 
-const PROFILE_NUMBERS: [keyof Profile, string, number, number][] = [
-  ['revision', 'Revision', 1, 1000000],
-  ['logicalWidth', 'Logical Resolution', 1, 10000],
-  ['logicalHeight', '', 1, 10000],
-  ['physicalWidth', 'Physical Resolution', 1, 10000],
-  ['physicalHeight', '', 1, 10000],
-  ['scale', 'Scale', 1, 16],
+/** [field, label shown (none: beside the one before), what a screen reader says, min, max] */
+const PROFILE_NUMBERS: [keyof Profile, string, string, number, number][] = [
+  ['revision', N_('Revision'), N_('Revision'), 1, 1000000],
+  ['logicalWidth', N_('Logical Resolution'), N_('Logical width'), 1, 10000],
+  ['logicalHeight', '', N_('Logical height'), 1, 10000],
+  ['physicalWidth', N_('Physical Resolution'), N_('Physical width'), 1, 10000],
+  ['physicalHeight', '', N_('Physical height'), 1, 10000],
+  ['scale', N_('Scale'), N_('Scale'), 1, 16],
 ];
 
 /** Project → Manage Board Profiles…: ProfileManagerDialog. True when the catalog changed. */
@@ -149,9 +150,15 @@ export async function manageProfiles(
           <table data-testid="profiles">
             <thead>
               <tr>
-                ${['Name', 'Origin', 'Adapter', 'Logical', 'Physical', 'Revision', 'Status'].map(
-                  (label) => html`<th scope="col">${tr(label)}</th>`,
-                )}
+                ${[
+                  N_('Name'),
+                  N_('Origin'),
+                  N_('Adapter'),
+                  N_('Logical'),
+                  N_('Physical'),
+                  N_('Revision'),
+                  N_('Status'),
+                ].map((label) => html`<th scope="col">${tr(label)}</th>`)}
               </tr>
             </thead>
             <tbody>
@@ -206,14 +213,14 @@ export async function manageProfiles(
                   ${view.adapters.map((adapter) => html`<option value=${adapter}>${adapter}</option>`)}
                 </select>
                 ${PROFILE_NUMBERS.map(
-                  ([field, label, min, max]) => html`
+                  ([field, label, spoken, min, max]) => html`
                     <label for="profile-${String(field)}">${label ? tr(label) : ''}</label>
                     <input
                       id="profile-${String(field)}"
                       type="number"
                       min=${min}
                       max=${max}
-                      aria-label=${tr(String(field))}
+                      aria-label=${tr(spoken)}
                       .value=${live(String(profile[field]))}
                       @change=${(e: Event) => {
                         const value = Math.round(Number((e.target as HTMLInputElement).value));
@@ -391,9 +398,14 @@ export async function manageBlocks(
             <table data-testid="blocks">
               <thead>
                 <tr>
-                  ${['Name', 'Version', 'Origin', 'Author', 'Licence', 'Used by'].map(
-                    (label) => html`<th scope="col">${tr(label)}</th>`,
-                  )}
+                  ${[
+                    N_('Name'),
+                    N_('Version'),
+                    N_('Origin'),
+                    N_('Author'),
+                    N_('Licence'),
+                    N_('Used by'),
+                  ].map((label) => html`<th scope="col">${tr(label)}</th>`)}
                 </tr>
               </thead>
               <tbody>

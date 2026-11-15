@@ -12,8 +12,8 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { python } from '@codemirror/lang-python';
 import {
+  HighlightStyle,
   bracketMatching,
-  defaultHighlightStyle,
   indentOnInput,
   indentUnit,
   syntaxHighlighting,
@@ -36,7 +36,62 @@ import {
   keymap,
   lineNumbers,
 } from '@codemirror/view';
+import { tags } from '@lezer/highlight';
 import { LitElement, css, html } from 'lit';
+
+/**
+ * ui/code/highlighter.py with ui/theme.py's CodeColors: keywords, strings, comments, numbers and
+ * errors in the colours of the desktop, light or dark as the system (src/theme.css).
+ */
+const highlight = HighlightStyle.define([
+  {
+    tag: [
+      tags.keyword,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+      tags.bool,
+      tags.null,
+      tags.self,
+    ],
+    color: 'var(--code-keyword)',
+  },
+  { tag: [tags.string, tags.special(tags.string)], color: 'var(--code-string)' },
+  { tag: [tags.comment, tags.lineComment], color: 'var(--code-comment)', fontStyle: 'italic' },
+  { tag: tags.number, color: 'var(--code-number)' },
+  { tag: tags.invalid, color: 'var(--code-error)' },
+]);
+
+/** The editor's own parts in the IDE's colours, which follow the system's light or dark. */
+const look = EditorView.theme({
+  '&': { color: 'var(--text)', backgroundColor: 'var(--panel)' },
+  '.cm-content': { caretColor: 'var(--text)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text)' },
+  '.cm-gutters': {
+    backgroundColor: 'var(--bg)',
+    color: 'var(--muted)',
+    borderRight: '1px solid var(--border)',
+  },
+  '.cm-activeLine, .cm-activeLineGutter': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+  },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground':
+    { backgroundColor: 'var(--selection)' },
+  '.cm-selectionMatch': { backgroundColor: 'color-mix(in srgb, var(--accent) 18%, transparent)' },
+  '&.cm-focused .cm-matchingBracket': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 25%, transparent)',
+  },
+  '.cm-tooltip': {
+    backgroundColor: 'var(--panel)',
+    color: 'var(--text)',
+    border: '1px solid var(--border)',
+  },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': {
+    backgroundColor: 'var(--accent)',
+    color: 'var(--on-accent)',
+  },
+});
 
 /** What completes the dotted name before the cursor: names, or [label, text to insert]. */
 export type CompletionProvider = (
@@ -154,7 +209,8 @@ export class CodeEditor extends LitElement {
         closeBrackets(),
         highlightActiveLine(),
         highlightSelectionMatches(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(highlight),
+        look,
         python(),
         autocompletion({ override: [(context) => this.complete(context)] }),
         keymap.of([
@@ -166,7 +222,8 @@ export class CodeEditor extends LitElement {
         ]),
         errorLines,
         this.editable.of(EditorView.editable.of(!this.locked)),
-        EditorView.contentAttributes.of({ 'aria-label': this.label }),
+        // in the Tab order also when read-only, so the code can be read from the keyboard
+        EditorView.contentAttributes.of({ 'aria-label': this.label, tabindex: '0' }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !this.loading) this.onChange(update.state.doc.toString());
         }),

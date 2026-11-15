@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from 'lit';
+import { tr } from '../i18n/tr.ts';
 
 export type MenuItem =
   | { separator: true }
@@ -30,24 +31,37 @@ type Entry = Exclude<MenuItem, { separator: true } | { section: string }>;
 const isEntry = (item: MenuItem): item is Entry => !('separator' in item) && !('section' in item);
 const ITEMS = ':scope > .item > [role^="menuitem"]';
 
-/** The menu bar: menus that open on click, with arrow keys, Enter and Escape. */
+/**
+ * The menu bar, an ARIA menubar: menus that open on click, or from the keyboard. One top item is
+ * in the Tab order; Left and Right move between the menus, Down, Enter or Space opens one, Home and
+ * End go to the first and the last; inside a menu, Up and Down, Right into a submenu, Escape back.
+ * F10 brings the focus here from anywhere in the IDE (src/main.ts).
+ */
 export class MenuBar extends LitElement {
   static override properties = {
     menus: { attribute: false },
+    label: {},
     open: { state: true },
     submenu: { state: true },
   };
 
   menus: Menu[] = [];
+  /** The menubar's name for a screen reader. */
+  label = '';
   open = -1;
+  /** The top item in the Tab order: the last one used. */
+  private current = 0;
   submenu: { index: number; items: MenuItem[] } | null = null;
 
   static override styles = css`
     :host {
+      display: block;
+      position: relative;
+    }
+    .bar {
       display: flex;
       flex-wrap: wrap;
       gap: 2px;
-      position: relative;
     }
     .top {
       position: relative;
@@ -155,9 +169,50 @@ export class MenuBar extends LitElement {
 
   private async toggle(index: number): Promise<void> {
     this.submenu = null;
+    this.current = index;
     if (this.open !== index) await this.menus[index]?.onOpen?.();
     this.open = this.open === index ? -1 : index;
     if (this.open >= 0) void this.updateComplete.then(() => this.focusItem(0));
+  }
+
+  private tops(): HTMLButtonElement[] {
+    return [...this.renderRoot.querySelectorAll<HTMLButtonElement>('.top > button')];
+  }
+
+  /** The focus on a top item: the first one, or the one used last. */
+  focusMenuBar(index = this.current): void {
+    const tops = this.tops();
+    const count = tops.length;
+    if (!count) return;
+    this.current = ((index % count) + count) % count;
+    this.requestUpdate();
+    tops[this.current]?.focus();
+  }
+
+  private topKeydown(event: KeyboardEvent, index: number): void {
+    if (this.open >= 0) return; // the open menu's keys
+    switch (event.key) {
+      case 'ArrowRight':
+        this.focusMenuBar(index + 1);
+        break;
+      case 'ArrowLeft':
+        this.focusMenuBar(index - 1);
+        break;
+      case 'Home':
+        this.focusMenuBar(0);
+        break;
+      case 'End':
+        this.focusMenuBar(this.menus.length - 1);
+        break;
+      case 'ArrowDown':
+        this.current = index;
+        void this.toggle(index);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   private focusItem(position: number, menu?: Element | null): void {
@@ -201,7 +256,7 @@ export class MenuBar extends LitElement {
           this.focusItem(0);
         } else {
           this.close();
-          this.renderRoot.querySelectorAll<HTMLButtonElement>('.top > button')[top]?.focus();
+          this.focusMenuBar(top);
         }
         break;
       }
@@ -224,7 +279,7 @@ export class MenuBar extends LitElement {
   }
 
   private renderItems(items: MenuItem[], label: string, sub: boolean): unknown {
-    if (items.length === 0) return html`<div class="empty">(empty)</div>`;
+    if (items.length === 0) return html`<div class="empty">${tr('(empty)')}</div>`;
     return items.map((item, index) =>
       isEntry(item)
         ? html`<div class="item">
@@ -265,15 +320,26 @@ export class MenuBar extends LitElement {
   }
 
   override render() {
+    // the menubar inside the shadow root, so its menu items are its own children for the
+    // accessibility tree
+    return html`<div class="bar" role="menubar" aria-label=${this.label}>
+      ${this.renderMenus()}
+    </div>`;
+  }
+
+  private renderMenus() {
     return this.menus.map(
       (menu, index) =>
         html`<div class="top" @keydown=${this.keydown}>
           <button
             type="button"
+            role="menuitem"
+            tabindex=${index === this.current ? '0' : '-1'}
             aria-haspopup="menu"
             title=${menu.title ?? nothing}
             aria-expanded=${this.open === index ? 'true' : 'false'}
             @click=${() => void this.toggle(index)}
+            @keydown=${(event: KeyboardEvent) => this.topKeydown(event, index)}
           >
             ${menu.label}
           </button>

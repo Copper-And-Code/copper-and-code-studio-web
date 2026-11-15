@@ -2,6 +2,7 @@
 // run starts clean even after a crash or a program stuck in a loop (PLAN.md 4).
 import { framePage } from './frame-page.ts';
 import { ToneFilter, TonePlayer } from './tones.ts';
+import { tr } from '../i18n/tr.ts';
 
 export type SimMode = 'project' | 'program' | 'frame';
 export type SimFile = [path: string, data: Uint8Array];
@@ -123,7 +124,7 @@ export class Simulator {
     if (this.current !== start) return; // stopped meanwhile
     this.runtime = code;
     const iframe = document.createElement('iframe');
-    iframe.title = 'Simulator';
+    iframe.title = tr('Simulator');
     iframe.setAttribute('sandbox', 'allow-scripts');
     iframe.setAttribute('allow', 'autoplay');
     iframe.srcdoc = framePage();

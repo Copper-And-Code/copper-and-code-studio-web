@@ -1,6 +1,7 @@
 // A store on a FileSystemDirectoryHandle: the browser's private file system (OPFS), which works
 // in every engine, or a folder of the PC opened with the File System Access API (Chromium).
 import { type Entry, type FileStore, StoreError, pathParts, sortEntries } from './store.ts';
+import { tr } from '../i18n/tr.ts';
 
 function isNotFound(error: unknown): boolean {
   return (
@@ -14,9 +15,14 @@ export class HandleStore implements FileStore {
 
   constructor(
     readonly id: string,
-    readonly label: string,
+    /** A function for a name in the IDE's language, which can change while it runs. */
+    private readonly name: string | (() => string),
     private readonly root: FileSystemDirectoryHandle,
   ) {}
+
+  get label(): string {
+    return typeof this.name === 'function' ? this.name() : this.name;
+  }
 
   private async folder(parts: string[], create = false): Promise<FileSystemDirectoryHandle> {
     let handle = this.root;
@@ -87,7 +93,7 @@ export async function openWorkspace(): Promise<HandleStore> {
   const root = await navigator.storage.getDirectory();
   return new HandleStore(
     'workspace',
-    'Workspace',
+    () => tr('Workspace'),
     await root.getDirectoryHandle('workspace', { create: true }),
   );
 }

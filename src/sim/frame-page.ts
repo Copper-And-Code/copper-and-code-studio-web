@@ -2,6 +2,7 @@
 // sandboxed without allow-same-origin, so its origin is opaque and it could not load module
 // scripts from the IDE's origin without CORS headers, which static hosting does not always send.
 import frameScript from './frame.js?raw';
+import { language, tr } from '../i18n/tr.ts';
 
 const STYLE = `
   :root { color-scheme: dark; --ratio: 1024 / 600; }
@@ -16,11 +17,11 @@ const STYLE = `
 
 export function framePage(): string {
   return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Simulator</title><style>${STYLE}</style></head>
+<html lang="${language()}">
+<head><meta charset="utf-8"><title>${tr('Simulator')}</title><style>${STYLE}</style></head>
 <body>
 <canvas id="canvas" width="1024" height="600" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
-<textarea id="typing" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="Keyboard"></textarea>
+<textarea id="typing" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="${tr('Keyboard')}"></textarea>
 <script type="module">${frameScript}</script>
 </body>
 </html>`;

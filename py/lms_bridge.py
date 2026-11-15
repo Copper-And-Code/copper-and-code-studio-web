@@ -39,6 +39,13 @@ def info():
     return {"upstreamVersion": __version__, "python": sys.version.split()[0]}
 
 
+def set_language(code):
+    """core/i18n.py set_language: upstream's own messages in the IDE's language."""
+    from lvgl_mpy_studio.core.i18n import set_language as choose
+
+    return choose(code)
+
+
 def generate(project_text):
     """The project's MicroPython code, as upstream's generate_project writes it (CLI: generate)."""
     from lvgl_mpy_studio.gen.project_gen import generate_project
@@ -1838,6 +1845,7 @@ def module_delete(name):
 
 METHODS = {
     "info": info,
+    "set_language": set_language,
     "generate": generate,
     "export_board": export_board,
     "profiles": profiles,

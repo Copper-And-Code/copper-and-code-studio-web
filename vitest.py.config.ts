@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     // tests/hw/ runs only with LMS_BOARD_PORT set, on a real board
     include: ['tests/py/**/*.test.ts', 'tests/hw/**/*.test.ts'],
+    setupFiles: ['tests/unit/setup.ts'],
     testTimeout: 60_000,
     execArgv: ['--experimental-wasm-jspi'],
   },

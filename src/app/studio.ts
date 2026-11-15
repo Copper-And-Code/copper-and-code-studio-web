@@ -1,6 +1,7 @@
 // The IDE's controller: the places where files live, the open project, the menus. The questions
 // and their wording are the desktop's (ui/main_files.py).
-import { tr } from '../i18n/tr.ts';
+import { applyLanguage } from '../i18n/retranslate.ts';
+import { LANGUAGES, language, tr } from '../i18n/tr.ts';
 import type { PythonBridge } from '../py/bridge.ts';
 import { ProjectSession, type Prompts } from '../project/session.ts';
 import { download, pickFiles } from '../storage/download.ts';
@@ -1401,10 +1402,31 @@ export class Studio {
             disabled: !ready,
             action: () => void this.manageBlocks(),
           },
+          {
+            label: tr('Language'),
+            id: 'language',
+            items: () =>
+              Object.entries(LANGUAGES).map(([code, name]) => ({
+                label: name,
+                id: `language-${code}`,
+                checked: language() === code,
+                action: () => void this.changeLanguage(code),
+              })),
+          },
         ],
       },
       ...(this.designer ? [this.viewMenu(this.designer)] : []),
     ];
+  }
+
+  /** Settings → Language: ui/main_window.py change_language, at once and kept. */
+  async changeLanguage(code: string): Promise<void> {
+    const selected = applyLanguage(code);
+    this.settings.set('language', selected);
+    await this.python.call('set_language', selected).catch(() => {});
+    // what Python names in the language (the Toolbox, Properties) is read again
+    this.designer?.blocksChanged();
+    this.workbenchChanged();
   }
 
   /** Cut, Copy, Paste, Duplicate, Delete: on the canvas shown. */
@@ -1419,18 +1441,18 @@ export class Studio {
       action: (d: DesignerController) => Promise<void>,
       disabled: boolean,
     ): MenuItem => ({
-      label: tr(label),
+      label,
       id,
       shortcut,
       disabled,
       action: () => designer && void action(designer),
     });
     return [
-      item('Cut', 'cut', 'Ctrl+X', (d) => d.copy(true), none),
-      item('Copy', 'copy', 'Ctrl+C', (d) => d.copy(false), none),
-      item('Paste', 'paste', 'Ctrl+V', (d) => d.paste(), !designer || !page),
-      item('Duplicate', 'duplicate', 'Ctrl+D', (d) => d.duplicate(), none),
-      item('Delete', 'delete', 'Del', (d) => d.deleteSelected(), none),
+      item(tr('Cut'), 'cut', 'Ctrl+X', (d) => d.copy(true), none),
+      item(tr('Copy'), 'copy', 'Ctrl+C', (d) => d.copy(false), none),
+      item(tr('Paste'), 'paste', 'Ctrl+V', (d) => d.paste(), !designer || !page),
+      item(tr('Duplicate'), 'duplicate', 'Ctrl+D', (d) => d.duplicate(), none),
+      item(tr('Delete'), 'delete', 'Del', (d) => d.deleteSelected(), none),
     ];
   }
 

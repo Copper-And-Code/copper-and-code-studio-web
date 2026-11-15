@@ -83,6 +83,14 @@ export class AppShell extends LitElement {
       height: 100vh;
       height: 100dvh;
     }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     header {
       padding: 4px 8px;
       background: var(--panel);
@@ -644,13 +652,16 @@ export class AppShell extends LitElement {
     switch (state?.stage) {
       case undefined:
       case 'loading-python':
-        return 'Python: starting…';
+        return tr('Python: starting…');
       case 'loading-upstream':
-        return 'Python: loading LVGL MPY Studio…';
+        return tr('Python: loading LVGL MPY Studio…');
       case 'ready':
-        return `Python ${state.info.python} ready in ${(state.info.startMs / 1000).toFixed(1)} s`;
+        return tr('Python {version} ready in {seconds} s', {
+          version: state.info.python,
+          seconds: (state.info.startMs / 1000).toFixed(1),
+        });
       case 'failed':
-        return `Python failed to start: ${state.error.message}`;
+        return tr('Python failed to start: {error}', { error: state.error.message });
     }
   }
 
@@ -985,10 +996,11 @@ export class AppShell extends LitElement {
     const label = upstreamLabel(upstream);
     return html`
       <header>
-        <lms-menu-bar aria-label="Main menu" role="menubar" .menus=${this.menus()}></lms-menu-bar>
+        <h1 class="visually-hidden">LVGL MPY Studio Web</h1>
+        <lms-menu-bar label=${tr('Main menu')} .menus=${this.menus()}></lms-menu-bar>
       </header>
       <main>
-        <section class="left" aria-label="Project tree">
+        <section class="left" aria-label=${tr('Project tree')}>
           <div class="toolbox">
             <h2>${tr('Toolbox')}</h2>
             <lms-toolbox
@@ -1146,25 +1158,26 @@ ${this.outputText}</pre>
       <div class="preview-host" aria-hidden="true"></div>
       <dialog id="about" aria-labelledby="about-title">
         <h1 id="about-title">LVGL MPY Studio Web</h1>
-        <p>The LVGL MPY Studio IDE in the browser.</p>
-        <p>Upstream: <strong data-testid="upstream-tag">${label}</strong></p>
+        <p>${tr('The LVGL MPY Studio IDE in the browser.')}</p>
+        <p>${tr('Upstream:')} <strong data-testid="upstream-tag">${label}</strong></p>
         <p>
           Python:
           <span data-testid="python-version"
             >${
               this.pythonState?.stage === 'ready'
                 ? `${this.pythonState.info.python} (Pyodide ${this.pythonState.info.pyodide})`
-                : 'not ready yet'
+                : tr('not ready yet')
             }</span
           >
         </p>
-        <p>Licence: GPL-3.0-or-later</p>
+        <p>${tr('Licence: {licence}', { licence: 'GPL-3.0-or-later' })}</p>
         <p>
-          Portions of this software are copyright © The FreeType Project (www.freetype.org). All
-          rights reserved.
+          ${tr(
+            'Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.',
+          )}
         </p>
         <form method="dialog">
-          <button type="submit" @click=${this.closeAbout}>Close</button>
+          <button type="submit" @click=${this.closeAbout}>${tr('Close')}</button>
         </form>
       </dialog>
       ${nothing}

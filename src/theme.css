@@ -10,6 +10,13 @@
   --danger: #b42318;
   /* ui/theme.py canvas_color: around the page in the designer */
   --canvas: #d9dce1;
+  /* ui/theme.py CodeColors LIGHT: the code editor's highlighting */
+  --code-keyword: #0033b3;
+  --code-string: #067d17;
+  --code-comment: #6e7781;
+  --code-number: #7a3e9d;
+  --code-module: #00707a;
+  --code-error: #d00000;
   font-family:
     system-ui,
     -apple-system,
@@ -31,6 +38,13 @@
     --selection: #23324d;
     --danger: #f97066;
     --canvas: #202020;
+    /* ui/theme.py CodeColors DARK */
+    --code-keyword: #6cb6ff;
+    --code-string: #8ddb8c;
+    --code-comment: #8b949e;
+    --code-number: #d2a8ff;
+    --code-module: #56d4dd;
+    --code-error: #ff7b72;
   }
 }
 

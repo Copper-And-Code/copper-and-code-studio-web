@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { test as base } from '@playwright/test';
 
 export const test = base.extend({
-  context: async ({ browserName, playwright, baseURL, serviceWorkers, context }, use) => {
+  context: async ({ browserName, playwright, baseURL, serviceWorkers, locale, context }, use) => {
     if (browserName !== 'webkit') {
       await use(context);
       return;
@@ -19,6 +19,7 @@ export const test = base.extend({
       baseURL,
       acceptDownloads: true,
       serviceWorkers,
+      locale,
     });
     try {
       await use(persistent);

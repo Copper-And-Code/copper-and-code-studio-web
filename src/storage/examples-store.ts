@@ -8,10 +8,13 @@ import {
   pathParts,
   sortEntries,
 } from './store.ts';
+import { tr } from '../i18n/tr.ts';
 
 export class ExamplesStore implements FileStore {
   readonly id = 'examples';
-  readonly label = 'Examples';
+  get label(): string {
+    return tr('Examples');
+  }
   readonly readOnly = true;
   private index: Promise<string[]> | undefined;
 

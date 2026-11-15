@@ -438,3 +438,28 @@ checkout).
 - **The preview of a web version stays online-only.** Its worker (`public/preview/sw.js`) is
   registered from the server, and a browser fetches a worker's script past every service worker.
   The zip and Save to a Folder need no worker of their own, but were not tried offline.
+
+## Phase 9 (2026-11-15)
+
+- **Upstream's catalogue, read as it is.** `src/i18n/tr.ts` imports upstream's `it.json` and does
+  what `core/i18n.py` `tr` does: the English of the code is the key, a text already translated is
+  taken back to English, `{name}` is filled after translating. The web's own texts are in
+  `src/i18n/it-web.json`, which never overrides `it.json`; a text that upstream adds is dropped
+  from it (`tests/unit/translations.test.ts`).
+- **`scripts/tr-strings.mjs` finds the texts with the TypeScript parser**: every `tr('…')` and
+  `N_('…')` of `src/`. `N_` marks a text written before the language is known (a table's headings);
+  the few `tr()` of a variable get their texts from those.
+- **The language at once, without a restart**, as the desktop's `apply_language`: every Lit element
+  renders again, and Python's language is set by the first call to the worker, so the Toolbox and
+  Properties come translated from upstream.
+- **Without a saved choice, the browser's language decides.** The desktop starts in English; a web
+  page is expected to follow the browser. The tests pin the browser to `en-US`, and Node's
+  `navigator.language`, which follows the PC, is set to English for the unit and Python tests.
+- **The menu bar is an ARIA menubar**, with the role inside its shadow root so that its items are
+  its children in the accessibility tree. F10 reaches it, as in desktop applications; the desktop's
+  Alt mnemonics are left out because Alt+letter belongs to the browser.
+- **axe-core in the e2e tests** (`@axe-core/playwright`, MPL-2.0, a dev dependency). It found three
+  things, fixed: the menubar's children, a page without a level-one heading (now a hidden one), the
+  code editor's area not reachable when read-only (the code is in the Tab order now).
+- **The code editor's colours are the desktop's** `ui/theme.py` `CodeColors`, as CSS variables for
+  light and dark; CodeMirror's default style had dark blue keywords on the dark background.

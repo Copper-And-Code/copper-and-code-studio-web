@@ -12,7 +12,7 @@ async function start(page: Page) {
 }
 
 async function menu(page: Page, top: string, ...path: string[]) {
-  await page.getByRole('button', { name: top, exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: top, exact: true }).click();
   for (const item of path) await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 

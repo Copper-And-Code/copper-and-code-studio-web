@@ -1,20 +1,26 @@
 # Architecture
 
-Written as the pieces are built.
+The web IDE runs upstream's Python core unchanged in Pyodide and draws the desktop's windows in
+Lit components. What is written here in TypeScript is the UI, the browser's storage, the simulator's
+host, Web Serial and the offline site; `docs/decisions.md` says why each piece is as it is.
 
 ## Pieces
 
-| Piece                                                         | Where                                                                  | State                      |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------- |
-| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`                                                  | done                       |
-| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`                       | done                       |
-| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                                       | done                       |
-| Workspace: OPFS, a PC folder, zip                             | `src/storage/`                                                         | done                       |
-| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                         | done                       |
-| Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts`         | done                       |
-| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    | done                       |
-| Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` | phase 5, canvas done       |
-| Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     | phase 6, done but the gate |
+| Piece                                                         | Where                                                                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Shell: menu bar, panels, Output, status bar, About box        | `src/ui/app-shell.ts`, `src/ui/menu-bar.ts`                            |
+| Build information: which upstream release this build carries  | `scripts/upstream-info.mjs`, `src/build-info.ts`                       |
+| Pyodide in a Web Worker, running upstream's core              | `src/py/`, `py/`                                                       |
+| Workspace: OPFS, a PC folder, the examples, zip               | `src/storage/`                                                         |
+| The open project: new, open, save, outside changes            | `src/project/session.ts`, `py/lms_document.py`                         |
+| Menus, dialogs, the file chooser                              | `src/app/studio.ts`, `src/ui/dialogs.ts`                               |
+| Code editor, Code tab, file tabs                              | `src/ui/code-editor.ts`, `src/app/code.ts`, `src/app/file-tabs.ts`     |
+| Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    |
+| Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` |
+| Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     |
+| Web version of a game                                         | `src/app/web.ts`, `public/preview/sw.js`                               |
+| Offline and installable                                       | `src/pwa/`, `scripts/sw-plugin.mjs`, `public/manifest.webmanifest`     |
+| Languages                                                     | `src/i18n/`, upstream's `translations/it.json`                         |
 
 ## Python
 
@@ -29,8 +35,9 @@ PythonBridge.generate(text) ──call──►  Pyodide 314 + /lib/lms (the ups
   worker checks.
 - `src/py/boot.ts` unpacks the bundle and opens `lms_bridge`; the worker and the Node tests use
   the same code.
-- `py/lms_bridge.py` is the only Python written here: a dispatcher that calls upstream and
-  returns JSON. Today: `info`, `generate`, `export_board`.
+- `py/lms_bridge.py` is a dispatcher that calls upstream and returns JSON; `py/lms_document.py`
+  holds the open project as upstream's `ui/document.py` does, without Qt; `py/lms_board.py` runs
+  upstream's `DeviceSession`, and `py/serial/` puts Web Serial in pyserial's place.
 - The page starts at once and shows Python's progress in the status bar.
 
 ## Files
@@ -127,3 +134,14 @@ new deploy ─► installs beside, waits ─► status bar "Reload" ─► skip-
   browser APIs and adapters.
 - Generated code always comes from upstream's `gen/`, never from TypeScript.
 - The site is served under `/lvgl-mpy-studio-web/`, locally too.
+
+## Languages
+
+```
+src/i18n/tr.ts ── tr('English text') ──► upstream it.json, then src/i18n/it-web.json ──► Italian
+Settings → Language ─► applyLanguage: every Lit element renders again
+                    ─► lms_bridge.set_language: upstream's own tr() in Pyodide
+```
+
+- `scripts/tr-strings.mjs` lists the texts of `src/` with the TypeScript parser;
+  `tests/unit/translations.test.ts` checks each has its Italian.

@@ -44,6 +44,7 @@ serves their licence texts in `runtime/licenses/`, as upstream's web build does.
 | TypeScript                                                       | 6.0.3           | Apache-2.0 |
 | Vitest                                                           | 5.0.5           | MIT        |
 | Playwright (`@playwright/test`)                                  | 1.64.1          | Apache-2.0 |
+| axe-core, `@axe-core/playwright` (accessibility checks)          | 4.14.0, 4.14.0  | MPL-2.0    |
 | ESLint, `@eslint/js`                                             | 10.14.0, 10.0.1 | MIT        |
 | typescript-eslint                                                | 8.72.1          | MIT        |
 | Prettier                                                         | 3.9.10          | MIT        |

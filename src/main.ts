@@ -1,11 +1,16 @@
 import { Studio } from './app/studio.ts';
 import { PythonBridge } from './py/bridge.ts';
+import { language } from './i18n/tr.ts';
 import { registerApp } from './pwa/pwa.ts';
 import { Settings } from './storage/settings.ts';
 import './ui/app-shell.ts';
 
+document.documentElement.lang = language();
+
 // The UI starts at once; Python loads in its worker meanwhile.
 const python = new PythonBridge();
+// the first call, so upstream's own messages are in the IDE's language from the start
+python.call('set_language', language()).catch(() => {});
 const settings = new Settings();
 const shell = document.querySelector('lms-app');
 
@@ -47,6 +52,13 @@ if (shell) {
   window.addEventListener(
     'keydown',
     (event) => {
+      // F10: to the menu bar, as in desktop applications (Shift+F10 is a context menu)
+      if (event.key === 'F10' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        shell.renderRoot.querySelector('lms-menu-bar')?.focusMenuBar();
+        return;
+      }
       const panel = shell.renderRoot.querySelector('lms-sim-panel');
       const terminal = panel?.renderRoot.querySelector('.terminal');
       const path = event.composedPath();

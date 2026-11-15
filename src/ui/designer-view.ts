@@ -83,18 +83,18 @@ export function arrangeItems(controller: DesignerController, page: string | null
   const count = page ? controller.selected(page).length : 0;
   const run = (action: () => Promise<void>) => () => void action();
   const align = (label: string, side: string): MenuItem => ({
-    label: tr(label),
+    label,
     id: `align-${side}`,
     disabled: count < 2,
     action: run(() => controller.align(side, page)),
   });
   return [
-    align('Align Left', 'left'),
-    align('Align Center', 'center'),
-    align('Align Right', 'right'),
-    align('Align Top', 'top'),
-    align('Align Middle', 'middle'),
-    align('Align Bottom', 'bottom'),
+    align(tr('Align Left'), 'left'),
+    align(tr('Align Center'), 'center'),
+    align(tr('Align Right'), 'right'),
+    align(tr('Align Top'), 'top'),
+    align(tr('Align Middle'), 'middle'),
+    align(tr('Align Bottom'), 'bottom'),
     { separator: true },
     {
       label: tr('Distribute Horizontally'),
@@ -692,21 +692,21 @@ export class DesignerView extends LitElement {
       action: () => unknown,
       disabled = false,
     ): MenuItem => ({
-      label: tr(label),
+      label,
       id,
       disabled,
       action: () => void action(),
     });
     return [
-      item('Cut', 'cut', () => controller.copy(true, page), none),
-      item('Copy', 'copy', () => controller.copy(false, page), none),
-      item('Paste', 'paste', () => controller.paste(page)),
-      item('Duplicate', 'duplicate', () => controller.duplicate(page), none),
-      item('Delete', 'delete', () => controller.deleteSelected(page), none),
+      item(tr('Cut'), 'cut', () => controller.copy(true, page), none),
+      item(tr('Copy'), 'copy', () => controller.copy(false, page), none),
+      item(tr('Paste'), 'paste', () => controller.paste(page)),
+      item(tr('Duplicate'), 'duplicate', () => controller.duplicate(page), none),
+      item(tr('Delete'), 'delete', () => controller.deleteSelected(page), none),
       { separator: true },
       ...arrangeItems(controller, page),
       { separator: true },
-      item('Select All', 'select-all', () => controller.selectAll(page)),
+      item(tr('Select All'), 'select-all', () => controller.selectAll(page)),
     ];
   }
 
@@ -815,7 +815,7 @@ export class DesignerView extends LitElement {
         <lms-menu-bar
           class="resolution"
           data-testid="resolution"
-          aria-label=${tr('Project resolution')}
+          label=${tr('Project resolution')}
           .menus=${this.resolutionMenu()}
         ></lms-menu-bar>
       </div>

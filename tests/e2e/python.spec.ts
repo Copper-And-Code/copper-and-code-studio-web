@@ -10,7 +10,7 @@ test('Python starts in its worker and the About box names it', async ({ page }) 
   await expect(page.getByTestId('python-status')).toHaveText(/^Python 3\.\d+\.\d+ ready in /, {
     timeout: 60_000,
   });
-  await page.getByRole('button', { name: 'Help' }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'Help', exact: true }).click();
   await page.getByRole('menuitem', { name: 'About LVGL MPY Studio' }).click();
   await expect(page.getByTestId('python-version')).toHaveText(/^3\.\d+\.\d+ \(Pyodide [\d.]+\)$/);
 });

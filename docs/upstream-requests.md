@@ -17,6 +17,7 @@ tagged.
 | 9   | The board's file helpers without Qt               | proposed                       |
 | 10  | No swap interval before the main loop             | proposed                       |
 | 11  | Removing the folder a program ran from            | proposed                       |
+| 12  | The web IDE's texts in `it.json`                  | proposed                       |
 
 ---
 
@@ -226,3 +227,20 @@ files are removed: Delete… on that folder then leaves it empty and reports an 
 
 **Test.** With a fake board whose `os.rmdir` refuses the current folder: run a file of a folder,
 stop, remove the folder; it is gone.
+
+## 12. The web IDE's texts in `it.json`
+
+**What.** Add to `lvgl_mpy_studio/translations/it.json` the 89 texts of
+`src/i18n/it-web.json` of this repository, with their Italian as written there.
+
+**Why.** The web IDE translates with upstream's own catalogue, by the same English keys
+(`src/i18n/tr.ts` follows `core/i18n.py` `tr`). The texts that exist only on the web (the
+workspace, import and export, Web Serial, the web version's dialog, the offline update) and a
+few that the desktop shows too but `it.json` does not have (`Toolbox`, `Output`, `Yes`, `No`, `OK`)
+are kept in `src/i18n/it-web.json` until upstream has them. Once a text is in `it.json`, the web
+IDE drops it from its own file (`tests/unit/translations.test.ts` refuses a text in both).
+
+**Where.** `lvgl_mpy_studio/translations/it.json`.
+
+**Test.** Upstream has no test of the catalogue's keys against its code (checked at `v0.7.1`), so
+extra keys break nothing; the web IDE's `tests/unit/translations.test.ts` checks the rest.

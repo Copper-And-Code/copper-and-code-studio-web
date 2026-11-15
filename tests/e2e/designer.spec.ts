@@ -26,7 +26,7 @@ async function start(page: Page) {
 }
 
 async function menu(page: Page, top: string, ...path: string[]) {
-  await page.getByRole('button', { name: top, exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: top, exact: true }).click();
   for (const item of path) await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 
@@ -104,15 +104,15 @@ test('zoom, Fit to Window, the grid, and the preview turned off', async ({ page 
   await menu(page, 'View', 'Fit to Window');
   await expect(zoom).not.toHaveText('51%');
   // the grid: lines every 8 pixels over the page
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitemcheckbox', { name: 'Grid' }).click();
   await expect(canvas.locator('line')).toHaveCount(2 * Math.ceil(480 / 8 - 1));
   // without the preview, the widgets are painted as the desktop sketches them
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitemcheckbox', { name: 'Real LVGL Preview' }).click();
   await expect(shownPanel(page).getByTestId('preview')).toHaveCount(0);
   await expect(canvas.locator('foreignObject').first()).toBeVisible();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
+  await page.getByRole('menubar').getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitemcheckbox', { name: 'Real LVGL Preview' }).click();
   await shownFrame(page);
 });
@@ -126,7 +126,7 @@ test('a new resolution: the question, the widgets adapted, one undo step, the fr
   await shownFrame(page);
   const resolution = shownPanel(page).getByTestId('resolution');
   await expect(resolution).toContainText('480×480');
-  await resolution.getByRole('button', { name: '480×480' }).click();
+  await resolution.getByRole('menuitem', { name: '480×480' }).click();
   await resolution.getByRole('menuitemcheckbox', { name: '240×240', exact: true }).click();
   const d = dialog(page);
   await expect(d.getByRole('heading', { name: 'Change Resolution' })).toBeVisible();
@@ -143,7 +143,7 @@ test('a new resolution: the question, the widgets adapted, one undo step, the fr
   expect(differentPixels(expected.rgb, back)).toBe(0);
 
   // Custom…: the size typed, Cancel in the question changes nothing
-  await resolution.getByRole('button', { name: '480×480' }).click();
+  await resolution.getByRole('menuitem', { name: '480×480' }).click();
   await resolution.getByRole('menuitem', { name: 'Custom…' }).click();
   await expect(d.getByRole('heading', { name: 'Custom Resolution' })).toBeVisible();
   await d.getByLabel('Width').fill('320');
@@ -247,10 +247,10 @@ const MODES = { adapt: /^Adapt/, stretch: /^Stretch/, keep: /^Leave them/ };
 /** The resolution chosen as a person would: Rotate, a common size, or Custom…. */
 async function chooseResolution(page: Page, width: number, height: number) {
   const resolution = shownPanel(page).getByTestId('resolution');
-  const current = (await resolution.getByRole('button').first().textContent())?.trim() ?? '';
+  const current = (await resolution.getByRole('menuitem').first().textContent())?.trim() ?? '';
   const [oldWidth, oldHeight] = current.split('×').map(Number);
   const size = `${width}×${height}`;
-  await resolution.getByRole('button', { name: current }).click();
+  await resolution.getByRole('menuitem', { name: current }).click();
   if (oldWidth === height && oldHeight === width) {
     await resolution.getByRole('menuitem', { name: `Rotate (${size})` }).click();
   } else if (COMMON.includes(size)) {
@@ -524,7 +524,9 @@ test('the Properties panel: categories, the editors, a value refused, a name tak
 
   // a number goes to the project and to the canvas, as one undo step
   await setProperty(page, 'y', '200');
-  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('menubar').getByRole('menuitem', { name: 'Edit', exact: true }),
+  ).toBeVisible();
   expect(await page.evaluate(() => window.lmsStudio.studio?.session.state?.undoText)).toBe(
     'Change y',
   );
