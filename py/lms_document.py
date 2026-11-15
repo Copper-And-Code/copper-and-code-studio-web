@@ -6,7 +6,7 @@ This file follows them line by line, with QUndoStack replaced by the few rules o
 use. When upstream moves this logic into a Qt-free module, the glue imports it from there and
 this file is deleted (docs/decisions.md, "Phase 2").
 
-Upstream v0.7.0 is the reference; any difference from it is a bug here.
+Upstream v0.7.1 is the reference; any difference from it is a bug here.
 """
 
 import copy

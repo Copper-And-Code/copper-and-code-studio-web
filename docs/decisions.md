@@ -155,7 +155,7 @@ Sub-gate 1, the canvas.
   frame of the wrong size counts as no frame. `ui/designer/preview.py`'s `PreviewRenderer` is
   reimplemented in `src/app/preview.ts`, because it is a Qt object with a thread: the same
   60 ms delay, only the last request kept, a page drawn again only when its `design_key`
-  changes. All 20 pages of the 9 examples match the native runtime with 0 different pixels
+  changes. All 20 pages of the 8 examples match the native runtime with 0 different pixels
   (`scripts/previews.py`, `tests/e2e/designer.spec.ts`), on 3 engines.
 - **The previews run in their own iframe**, not in the Simulator tab's, so a preview never stops
   a running program, as on the desktop, where each preview is a process of its own.
@@ -394,3 +394,19 @@ checkout).
   which the submodule does not carry.
 - **Every zip the IDE writes has its dates in local time**, as a zip stores them: the export of a
   folder had the same time-zone dependence as the upstream bundle.
+
+## Upstream v0.7.1 (2026-11-15)
+
+- **The submodule moves to `v0.7.1`** (`89a105f`), at upstream's note. The two runtime assets of
+  the release are the `v0.7.0` zips under new names, byte for byte: `runtime.lock.json` changes
+  only `tag`, `asset` and `url`, and `pnpm assets` downloaded them with the same sha256 and wrote
+  no file.
+- **The references made on the host were made again** at `v0.7.1`: goldens, budgets, frames,
+  previews, fonts, web file lists, designer workflows and the `mpy-cross` outputs. What changed
+  is upstream's: the new `sysmon` example (goldens, budget, previews, web version), `eim-01`
+  without em dashes (its
+  Overview and Trends previews, its budget and `.mpy`), and `gen/output/c_templates.py`. The font
+  references changed only in the version they name.
+- **`eim-01`, `eim-01-480` and `weather` start in the simulator**: they no longer carry a
+  `runTarget`, so Start opens no port chooser for them, and the 4 designer workflows on `weather`
+  save it without one. The board tests choose their run target.

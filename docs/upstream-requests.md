@@ -4,19 +4,19 @@ Changes this project needs in the desktop repository. The owner decides each one
 made upstream, on a branch there, and this repository moves the submodule only once it is
 tagged.
 
-| #   | Request                                           | State                                         |
-| --- | ------------------------------------------------- | --------------------------------------------- |
-| 1   | Web runtime as a release asset                    | done for `v0.7.0` (asset uploaded 2026-11-14) |
-| 2   | `mpy-cross` in WebAssembly as a release asset     | done for `v0.7.0` (asset uploaded 2026-11-14) |
-| 3   | A CI check that the Qt-free packages stay Qt-free | proposed                                      |
-| 4   | Test files that load without Qt                   | proposed                                      |
-| 5   | The project document without Qt                   | proposed                                      |
-| 6   | The browser loaders with a host interface         | proposed                                      |
-| 7   | The preview after a quick undo                    | proposed                                      |
-| 8   | `.mpy` files without the temporary folder's path  | proposed                                      |
-| 9   | The board's file helpers without Qt               | proposed                                      |
-| 10  | No swap interval before the main loop             | proposed                                      |
-| 11  | Removing the folder a program ran from            | proposed                                      |
+| #   | Request                                           | State                          |
+| --- | ------------------------------------------------- | ------------------------------ |
+| 1   | Web runtime as a release asset                    | done for `v0.7.0` and `v0.7.1` |
+| 2   | `mpy-cross` in WebAssembly as a release asset     | done for `v0.7.0` and `v0.7.1` |
+| 3   | A CI check that the Qt-free packages stay Qt-free | proposed                       |
+| 4   | Test files that load without Qt                   | proposed                       |
+| 5   | The project document without Qt                   | proposed                       |
+| 6   | The browser loaders with a host interface         | proposed                       |
+| 7   | The preview after a quick undo                    | proposed                       |
+| 8   | `.mpy` files without the temporary folder's path  | proposed                       |
+| 9   | The board's file helpers without Qt               | proposed                       |
+| 10  | No swap interval before the main loop             | proposed                       |
+| 11  | Removing the folder a program ran from            | proposed                       |
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "upstreamVersion": "0.7.0",
+  "upstreamVersion": "0.7.1",
   "frames": {
     "breakout": {
       "page": "main",

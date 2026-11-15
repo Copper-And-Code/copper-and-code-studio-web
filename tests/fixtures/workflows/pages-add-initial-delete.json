@@ -773,10 +773,6 @@
       "audio": true
     }
   },
-  "runTarget": {
-    "kind": "board",
-    "language": "micropython"
-  },
   "modules": [
     {
       "id": "16961e21ed154c1abc217ebfdccd96ea",

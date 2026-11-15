@@ -1,5 +1,5 @@
 {
-  "upstreamVersion": "0.7.0",
+  "upstreamVersion": "0.7.1",
   "projects": {
     "breakout": {
       "width": 1024,
@@ -102,6 +102,16 @@
         {
           "page": "main",
           "file": "snake/main.png"
+        }
+      ]
+    },
+    "sysmon": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "main",
+          "file": "sysmon/main.png"
         }
       ]
     },

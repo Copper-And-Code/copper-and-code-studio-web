@@ -157,6 +157,28 @@
     ],
     "folder": "Snake-web"
   },
+  "sysmon": {
+    "files": [
+      ".htaccess",
+      ".lvgl-mpy-studio-web",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/sysinfo.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "System-Monitor-web"
+  },
   "tictactoe": {
     "files": [
       ".htaccess",

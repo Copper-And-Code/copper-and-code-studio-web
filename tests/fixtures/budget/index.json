@@ -1,5 +1,5 @@
 {
-  "upstreamVersion": "0.7.0",
+  "upstreamVersion": "0.7.1",
   "budgets": {
     "breakout": {
       "flash": 27968,
@@ -7,9 +7,9 @@
       "flashByName": 27968
     },
     "eim-01": {
-      "flash": 100862,
-      "ram": 259200,
-      "flashByName": 100862
+      "flash": 100856,
+      "ram": 259136,
+      "flashByName": 100856
     },
     "eim-01-480": {
       "flash": 101249,
@@ -30,6 +30,11 @@
       "flash": 28901,
       "ram": 14688,
       "flashByName": 28901
+    },
+    "sysmon": {
+      "flash": 13344,
+      "ram": 24544,
+      "flashByName": 13344
     },
     "tictactoe": {
       "flash": 17713,
