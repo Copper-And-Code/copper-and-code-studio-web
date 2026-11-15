@@ -52,7 +52,7 @@ printing.
 | Lint, typecheck, unit tests                          | done  | `pnpm lint`, `pnpm typecheck`, `pnpm test` (19 tests)                                                  |
 | Python in a Web Worker, ready before the UI needs it | done  | `tests/e2e/python.spec.ts`: ready in 2.8–3.1 s with a warm cache, on 3 engines locally                 |
 | CI (`ci.yml`)                                        | done  | first run green on 2026-11-14 (run 43570952529): 4 unit tests, 3 of 3 e2e                              |
-| Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed phase 7 on 2026-11-15 (run 43727571448)                     |
+| Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed phase 8 on 2026-11-15 (run 43744105468)                     |
 | WebAssembly runtime from upstream's release          | done  | `runtime.lock.json`; `scripts/fetch-runtime.mjs` downloads the asset of `v0.7.1` and checks its sha256 |
 
 Playwright's WebKit has no private file system (OPFS) in its default throw-away profile; with a
