@@ -361,3 +361,15 @@ checkout).
   target, cancelled in the browser's chooser, does not end in silence.
 - **The board's e2e tests choose the board as run target themselves**: from upstream's next tag
   the examples run in the simulator (upstream removed their `runTarget`).
+- **The upstream bundle is named after its contents too** (`lms-upstream-<tag>-<sha256>.zip`):
+  the py/ glue and the wheels change between two releases of upstream, and a browser that kept
+  the zip of an earlier deploy under the same name failed the worker's sha256 check. The zip's
+  dates are written in local time, as a zip stores them, so the CI and a PC in another time zone
+  build the same bytes.
+- **The board test writes only into a folder of its own** (`lms-gate-test`) and stops before
+  writing if the board already has it. Its first run on the STM32H7_CORE used `/flash/shell`,
+  which held the owner's copy of the shell example: the upload replaced its files and the
+  removal deleted them. The eight files of the example were written back the same day (the same
+  files the IDE copies there; which version was there before is not known).
+- **Before removing the folder a program ran from, the test restarts the interpreter**: on the
+  STM32's FAT the current folder cannot be removed (upstream request 11).

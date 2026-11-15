@@ -3,7 +3,8 @@
 // (PLAN.md 3.2). The zip keeps upstream's layout, so upstream code that finds files relative to
 // its own path (runtime/display_driver.py, gen/widgets.json...) works unchanged.
 //
-// Output: public/python/lms-upstream-<tag>.zip and public/python/bundle.json, which names it.
+// Output: public/python/lms-upstream-<tag>-<sha256 prefix>.zip and public/python/bundle.json,
+// which names it. The name changes with the contents, so a browser never keeps an older zip.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -42,7 +43,9 @@ const SOURCES = [
 
 const SKIP = new Set(['__pycache__', '.pytest_cache']);
 // A fixed date keeps the zip byte-identical from one build to the next.
-const MTIME = new Date('2026-01-01T00:00:00Z');
+// In local time: a zip stores the DOS date and time as the clock shows them, so a date in UTC gave
+// one zip in the CI (UTC) and another on a PC in Italy.
+const MTIME = new Date(2026, 0, 1);
 
 function walk(path, found = []) {
   const stat = statSync(path);
@@ -69,8 +72,12 @@ export function bundleFiles() {
   return files;
 }
 
-export function bundleName(info = upstreamInfo()) {
-  return `lms-upstream-${info.tag ?? `${info.version}-${info.commit}`}.zip`;
+/** The zip's name: the upstream release, and the start of the zip's sha256. The py/ glue and
+ * the wheels change between two releases of upstream; a name that changes with them keeps a
+ * browser from using a cached zip whose sha256 is no longer the index's. */
+export function bundleName(info = upstreamInfo(), sha256 = '') {
+  const release = info.tag ?? `${info.version}-${info.commit}`;
+  return `lms-upstream-${release}${sha256 ? `-${sha256.slice(0, 12)}` : ''}.zip`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -90,8 +97,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       level: 9,
     },
   );
-  const name = bundleName(info);
   const sha256 = createHash('sha256').update(zip).digest('hex');
+  const name = bundleName(info, sha256);
   const index = JSON.stringify({ file: name, sha256, upstream: info }, null, 2) + '\n';
   syncDir(
     OUT,

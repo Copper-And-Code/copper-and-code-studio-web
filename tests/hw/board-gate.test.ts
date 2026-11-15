@@ -5,20 +5,17 @@
 //   LMS_BOARD_PORT=/dev/ttyUSB0 LMS_BOARD_PROFILE=esp32_4848s040_480 \
 //     npx vitest run -c vitest.py.config.ts tests/hw/
 //
-// What it does to the board: Ctrl-C (interrupts what runs), writes the folder /shell (the shell
-// example), runs it, edits /shell/README.md, then removes /shell. main.py and boot.py are not
-// touched.
-import { execFileSync } from 'node:child_process';
-import {
-  closeSync,
-  constants,
-  createReadStream,
-  openSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeSync,
-} from 'node:fs';
+// The port is reached through tests/hw/serial-bridge.py (pyserial; LMS_BOARD_PYTHON names the
+// Python, python3 by default), which sets DTR and RTS as the page does: RTS low for the STM32's
+// UART adapter, as upstream's UartTransport.
+//
+// What it does to the board: Ctrl-C (interrupts what runs), writes the shell example into the
+// folder lms-gate-test of the board's program folder (_board_program_root: /flash on the STM32,
+// / else), runs it, edits its README.md, restarts the interpreter, then removes the folder. It
+// stops before writing if lms-gate-test is already there: nothing of the owner's is replaced or
+// removed. main.py and boot.py are not touched.
+import { type ChildProcess, spawn } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { PyodideInterface } from 'pyodide';
@@ -31,6 +28,9 @@ import { ROOT, startPyodide } from '../py/pyodide-node.mjs';
 const DEVICE = process.env.LMS_BOARD_PORT ?? '';
 const PROFILE = process.env.LMS_BOARD_PROFILE ?? 'esp32_4848s040_480';
 const PORT = 'webserial:hw';
+/** A folder of this test's own: never one the board already has (the gate wrote into /flash/shell
+ * of the STM32 once, which held the owner's copy of the shell, and removed it). */
+const FOLDER = 'lms-gate-test';
 
 interface Reply<T> {
   ok: boolean;
@@ -50,9 +50,17 @@ function files(folder: string, found: string[] = []): string[] {
 describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   let py: PyodideInterface;
   let link: SerialLink;
-  let fd = -1;
+  let bridge: ChildProcess | null = null;
+  /** Set once the listing showed no FOLDER: nothing is written or removed before. */
+  let folderFree = false;
+  const requireFreeFolder = () => {
+    if (!folderFree)
+      throw new Error(`${FOLDER} was not seen free on the board: nothing is written`);
+  };
+  /** The board's program folder, '' for the root. */
+  let root = '';
   let call: <T>(method: string, ...args: unknown[]) => Promise<Reply<T>>;
-  let profile: unknown;
+  let profile: { adapter: string; config?: { appRoot?: string } };
   const log: string[] = [];
 
   /** What the console received since `from`, as text. */
@@ -75,9 +83,6 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   }
 
   beforeAll(async () => {
-    // raw 115200; -hupcl: closing the port does not drop DTR, which could reset the board
-    execFileSync('stty', ['-F', DEVICE, '115200', 'raw', '-echo', '-hupcl']);
-    fd = openSync(DEVICE, constants.O_RDWR | constants.O_NOCTTY);
     py = await startPyodide();
     const factory = (
       (await import(pathToFileURL(join(ROOT, 'public/mpy-cross/mpy-cross.mjs')).href)) as {
@@ -96,16 +101,28 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
       file: string;
     };
     installUpstream(py, new Uint8Array(readFileSync(join(ROOT, 'public/python', bundle.file))));
+    profile = JSON.parse(
+      py.runPython(
+        `import json\nfrom lvgl_mpy_studio.core.boards import ProfileStore, portable_profile\njson.dumps(portable_profile(ProfileStore().get(${JSON.stringify(PROFILE)})))`,
+      ) as string,
+    ) as { adapter: string; config?: { appRoot?: string } };
+    // _board_program_root
+    root = String(profile.config?.appRoot ?? '').startsWith('/flash') ? '/flash' : '';
+    const rts = profile.adapter === 'stm32h7_uart' ? '0' : '1';
+    bridge = spawn(
+      process.env.LMS_BOARD_PYTHON ?? 'python3',
+      [join(ROOT, 'tests/hw/serial-bridge.py'), DEVICE, '1', rts],
+      { stdio: ['pipe', 'pipe', 'inherit'] },
+    );
+    const wire = bridge;
     link = links.open(
       { port: PORT },
       {
-        write: (data) => void writeSync(fd, data),
+        write: (data) => void wire.stdin?.write(data),
         drain: async () => {},
       },
     );
-    const stream = createReadStream('', { fd, autoClose: false, highWaterMark: 4096 });
-    stream.on('data', (chunk) => link.receive(new Uint8Array(chunk as Buffer)));
-    stream.on('error', () => {});
+    wire.stdout?.on('data', (chunk: Buffer) => link.receive(new Uint8Array(chunk)));
     const board = py.pyimport('lms_board').call as {
       callPromising(...args: unknown[]): Promise<string>;
     };
@@ -116,16 +133,12 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
       );
       return reply;
     };
-    profile = JSON.parse(
-      py.runPython(
-        `import json\nfrom lvgl_mpy_studio.core.boards import ProfileStore, portable_profile\njson.dumps(portable_profile(ProfileStore().get(${JSON.stringify(PROFILE)})))`,
-      ) as string,
-    );
   }, 120_000);
 
   afterAll(() => {
     console.log(log.join('\n'));
-    if (fd >= 0) closeSync(fd);
+    bridge?.stdin?.end();
+    bridge?.kill();
   });
 
   it('connects and reads the firmware', async () => {
@@ -136,29 +149,33 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   }, 120_000);
 
   it('lists the files of the board', async () => {
-    const reply = await call<{ name: string; dir: boolean }[]>('list_dir', '/');
+    const reply = await call<{ name: string; dir: boolean }[]>('list_dir', root || '/');
     expect(reply.ok).toBe(true);
+    // the scenario writes and removes FOLDER: stop here if the board already has one
+    expect(reply.result.map((e) => e.name)).not.toContain(FOLDER);
+    folderFree = true;
     console.log(reply.result.map((e) => e.name + (e.dir ? '/' : '')).join('  '));
   }, 60_000);
 
   it('uploads the shell example and runs it', async () => {
+    requireFreeFolder();
     const folder = join(ROOT, 'upstream/examples/shell');
     const names: string[] = [];
     for (const path of files(folder)) {
-      const name = `shell/${relative(folder, path).split(sep).join('/')}`;
+      const name = `${FOLDER}/${relative(folder, path).split(sep).join('/')}`;
       py.FS.mkdirTree(`/board-upload/${name.slice(0, name.lastIndexOf('/'))}`);
       py.FS.writeFile(`/board-upload/${name}`, readFileSync(path));
       names.push(name);
     }
     const started = Date.now();
-    const reply = await call<{ files: string[] }>('upload_files', names, '/');
+    const reply = await call<{ files: string[] }>('upload_files', names, root || '/');
     expect(reply.error?.output ?? reply.error?.traceback ?? '').toBe('');
     console.log(
       `${reply.result.files.length} files in ${((Date.now() - started) / 1000).toFixed(0)} s`,
     );
     // as Run File on Board: the normal prompt, then the line typed at it, through the console
     await call('leave_raw');
-    const line = (await call<string>('run_line', '/shell/shell.py')).result;
+    const line = (await call<string>('run_line', `${root}/${FOLDER}/shell.py`)).result;
     link.clear();
     const from = consoleText.length;
     type(`\x03${line}\r`);
@@ -166,6 +183,7 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   }, 600_000);
 
   it('Ctrl-C five times in sleep 5: the prompt each time, no traceback', async () => {
+    requireFreeFolder();
     for (let i = 0; i < 5; i++) {
       type('sleep 5\r');
       // the line editor draws the prompt again at every key: the command starts after Enter
@@ -193,21 +211,32 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   }, 120_000);
 
   it('edits a file of the board and saves it', async () => {
-    const read = await call<{ data: string }>('read_file', '/shell/README.md');
+    requireFreeFolder();
+    const read = await call<{ data: string }>('read_file', `${root}/${FOLDER}/README.md`);
     expect(read.ok).toBe(true);
     const text = Buffer.from(read.result.data, 'base64').toString('utf8');
     const edited = `${text}\nEdited by the web IDE's board test.\n`;
     expect(
-      (await call('write_file', '/shell/README.md', Buffer.from(edited).toString('base64'))).ok,
+      (
+        await call(
+          'write_file',
+          `${root}/${FOLDER}/README.md`,
+          Buffer.from(edited).toString('base64'),
+        )
+      ).ok,
     ).toBe(true);
-    const again = await call<{ data: string }>('read_file', '/shell/README.md');
+    const again = await call<{ data: string }>('read_file', `${root}/${FOLDER}/README.md`);
     expect(Buffer.from(again.result.data, 'base64').toString('utf8')).toBe(edited);
   }, 120_000);
 
   it('removes the folder it uploaded', async () => {
-    expect((await call('remove_path', '/shell')).ok).toBe(true);
-    const listing = await call<{ name: string }[]>('list_dir', '/');
-    expect(listing.result.map((e) => e.name)).not.toContain('shell');
+    requireFreeFolder();
+    // the shell left the folder as the current one: on FAT (the STM32's /flash) it cannot be
+    // removed then (EACCES), so the interpreter is restarted first (upstream request 11)
+    expect((await call('restart')).ok).toBe(true);
+    expect((await call('remove_path', `${root}/${FOLDER}`)).ok).toBe(true);
+    const listing = await call<{ name: string }[]>('list_dir', root || '/');
+    expect(listing.result.map((e) => e.name)).not.toContain(FOLDER);
     expect((await call('disconnect')).ok).toBe(true);
   }, 120_000);
 });

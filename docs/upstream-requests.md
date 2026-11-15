@@ -16,6 +16,7 @@ tagged.
 | 8   | `.mpy` files without the temporary folder's path  | proposed                                      |
 | 9   | The board's file helpers without Qt               | proposed                                      |
 | 10  | No swap interval before the main loop             | proposed                                      |
+| 11  | Removing the folder a program ran from            | proposed                                      |
 
 ---
 
@@ -209,3 +210,19 @@ in its iframe (`src/sim/frame.js`).
 **Where.** `runtime/web/` (the SDL set-up of the web build), `runtime/build_web.sh`.
 
 **Test.** Start the web runtime in a page and check that the console has no error at start.
+
+## 11. Removing the folder a program ran from
+
+**What.** In `device/service.py` `remove_path`, before removing, change the board's current
+folder to `/` when it is the path being removed or inside it (`os.getcwd()`).
+
+**Why.** Run File on Board and Run on the Board start a program with `os.chdir` into its folder
+(`ui/device_files.py` `run_line`), and the folder stays the current one after Stop. On the FAT of
+the STM32H7_CORE's `/flash`, `os.rmdir` of the current folder fails with `EACCES` after all its
+files are removed: Delete… on that folder then leaves it empty and reports an error. Seen on
+2026-11-15 by the web IDE's board test; the desktop runs the same script.
+
+**Where.** `lvgl_mpy_studio/device/service.py`, `DeviceSession.remove_path`.
+
+**Test.** With a fake board whose `os.rmdir` refuses the current folder: run a file of a folder,
+stop, remove the folder; it is gone.

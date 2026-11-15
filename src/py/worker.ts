@@ -24,8 +24,8 @@ async function hex(buffer: ArrayBuffer): Promise<string> {
 }
 
 async function fetchBundle(): Promise<Uint8Array> {
-  // The index is checked every time, so a new deploy is seen; the zip is named after the
-  // upstream tag, so it can stay cached.
+  // The index is checked every time, so a new deploy is seen; the zip's name changes with its
+  // contents (scripts/bundle-upstream.mjs), so it can stay cached.
   const index = (await (
     await fetch(new URL('python/bundle.json', site), { cache: 'no-cache' })
   ).json()) as BundleIndex;
