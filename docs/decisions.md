@@ -270,3 +270,47 @@ Sub-gate 6, images and fonts.
   the pixels are the same, and so is the frame the runtime draws.
 - **The workflow references of pictures and fonts come from upstream's own `PropertiesPanel`** on
   the host, the file's path typed into the property as its … button does.
+
+## Phase 6 (2026-11-15)
+
+Sub-gate 1, the transport and the first operations.
+
+- **Upstream's `DeviceSession` runs unchanged in Pyodide** (`py/lms_board.py`), with its own
+  `runner` hook: mpremote 1.29.0, the release upstream pins, runs in-process instead of as a
+  process. The scripts, checks, upload staging, `.previous` backup and error codes are
+  upstream's; nothing of `device/service.py` is ported to TypeScript.
+- **pyserial is replaced by `py/serial/`**, pyserial's interface over the page's port. mpremote,
+  `UartTransport` (the STM32's protocol) and `break_in` use it as they are. mpremote and
+  platformdirs go into the upstream bundle from `scripts/python-deps.mjs`: mpremote from PyPI,
+  checked against its sha256 and against upstream's pin; platformdirs from the Pyodide package.
+- **Python waits for the board with JSPI** (`pyodide.ffi.run_sync`): each board call is made with
+  `callPromising`, and a read that has no bytes yet suspends Python, so the worker keeps
+  receiving the port's bytes and answering the designer meanwhile (a test checks a call of the
+  designer during a board call). JSPI is in every browser with Web Serial; Node 22 needs
+  `--experimental-wasm-jspi` (`vitest.py.config.ts`). `time.sleep` waits the same way inside a
+  board call.
+- **The page holds the port open for the whole connection** (`src/board/web-serial.ts`). The
+  desktop opens and closes it at every mpremote command; here mpremote's open and close are
+  those of the connection only, and the lines DTR and RTS are left as opening the port sets
+  them (as pyserial leaves them for mpremote), so no command can reset the board by toggling them
+  (PLAN.md 6.6). The STM32's adapter gets RTS low, as `UartTransport` sets it.
+- **115200 baud for every board.** PLAN.md asks for the rate of the board profile; the profiles
+  have none, and upstream uses 115200 for mpremote and for `UartTransport`.
+- **While an operation runs, the port's bytes go to the worker; otherwise to the Device
+  Console**, as on the desktop, where the console follows the board whenever the IDE is not
+  using it. `start_console`'s reader thread, which Pyodide cannot start, is the page's read loop.
+- **mpy-cross in WebAssembly compiles the upload's bytecode in the Python worker**:
+  `board_gen._bytecode_file` is answered with the same options (`-s name`). Its loading is shared
+  with the mpy-cross worker (`src/mpy/compile.ts`).
+- **The upload builds in a temporary folder**: the desktop writes `build/board/<profile>` into the
+  project's folder. The files sent are the same.
+- **A port is known again by its USB vendor and product ids** (`device/ports/<profile>`): Web
+  Serial gives no path such as `/dev/ttyACM0`, and asks the user to choose a port the first time.
+- **The board needs Web Serial and JSPI, tested as features**, not by the browser's name: the
+  Firefox that Playwright runs has `navigator.serial` on localhost. Without them the Device menu
+  says so in a disabled first item, and its board items are disabled.
+- **The scripted board of the tests** (`tests/py/fake-board.ts`) answers as MicroPython's
+  `pyexec.c` does: the friendly prompt, the raw REPL, raw-paste with its windows, soft reset, a
+  firmware shell that wants Ctrl-C; the Python it receives runs in a Pyodide of its own with a
+  file system in memory, MicroPython's errno numbers and its tracebacks. The e2e tests give the
+  page a fake `navigator.serial` whose bytes reach that board in Node.

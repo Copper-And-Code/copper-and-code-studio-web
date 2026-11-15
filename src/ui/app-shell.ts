@@ -23,11 +23,16 @@ import './designer-view.ts';
 import './project-tree.ts';
 import './properties-panel.ts';
 import './toolbox.ts';
+import type { DeviceConsole } from './device-console.ts';
+import './device-console.ts';
+import type { UploadProgress } from './upload-progress.ts';
+import './upload-progress.ts';
+import type { DeviceView } from '../app/device.ts';
 import { WIDGET_MIME } from './designer-view.ts';
 import type { TreeKey } from './project-tree.ts';
 
 const OUTPUT_LIMIT = 100_000;
-type BottomTab = 'output' | 'errors' | 'components';
+type BottomTab = 'output' | 'errors' | 'components' | 'device';
 
 /** The IDE window: menu bar, the three working areas, the status bar, the dialogs. */
 export class AppShell extends LitElement {
@@ -43,6 +48,7 @@ export class AppShell extends LitElement {
     bottom: { state: true },
     workbench: { state: true },
     design: { state: true },
+    deviceStatus: { state: true },
   };
 
   python: PythonBridge | undefined;
@@ -56,6 +62,8 @@ export class AppShell extends LitElement {
   design = 0;
   running = false;
   bottom: BottomTab = 'output';
+  /** The board's connection, in the status bar (device_status). */
+  deviceStatus = '';
   /** Counts the changes of the studio's tabs, files and errors, to render them again. */
   workbench = 0;
   private errorCount = 0;
@@ -271,6 +279,11 @@ export class AppShell extends LitElement {
     .output [role='tabpanel'] {
       overflow: auto;
     }
+    .output lms-device-console {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding-top: 4px;
+    }
     .output pre {
       flex: 1 1 auto;
       margin: 0;
@@ -477,6 +490,11 @@ export class AppShell extends LitElement {
             this.simPanel.onType = (data) => run.type(data);
             this.requestUpdate();
           }
+          if (!studio.device) {
+            const device = studio.attachDevice(this.deviceView());
+            this.deviceConsole.onKeys = (data) => device.write(data);
+            this.deviceConsole.onCancel = () => device.cancel();
+          }
         });
       }
     }
@@ -488,10 +506,40 @@ export class AppShell extends LitElement {
     this.unsubscribe = [];
   }
 
-  private showStatus(message: string): void {
+  private showStatus(message: string, ms = 3000): void {
     this.statusMessage = message;
     clearTimeout(this.statusTimer);
-    this.statusTimer = setTimeout(() => (this.statusMessage = ''), 3000);
+    if (ms) this.statusTimer = setTimeout(() => (this.statusMessage = ''), ms);
+  }
+
+  private get deviceConsole(): DeviceConsole {
+    const panel = this.renderRoot.querySelector('lms-device-console');
+    if (!panel) throw new Error('The shell is not rendered yet');
+    return panel;
+  }
+
+  /** The Device Console, the upload's window and the status bar, as the board sees them. */
+  private deviceView(): DeviceView {
+    const console = this.deviceConsole;
+    const progress = this.renderRoot.querySelector('lms-upload-progress') as UploadProgress;
+    return {
+      append: (text) => console.write(text),
+      message: (text) => console.message(text),
+      setReady: (ready, reason) => {
+        console.ready = ready;
+        console.reason = reason;
+      },
+      setBusy: (busy) => (console.busy = busy),
+      status: (text, ms = 3000) => this.showStatus(text, ms),
+      connection: (text) => (this.deviceStatus = text),
+      raise: () => (this.bottom = 'device'),
+      progress: {
+        open: (rate, cancel) => progress.open(rate, cancel),
+        report: (sent, total, name, size) => progress.report(sent, total, name, size),
+        rate: () => progress.rate(),
+        finish: () => progress.finish(),
+      },
+    };
   }
 
   private pythonStatus(): string {
@@ -908,7 +956,7 @@ export class AppShell extends LitElement {
       </main>
       <section class="output" aria-label=${tr('Output and Errors')}>
         <div role="tablist" class="bottom-tabs">
-          ${(['output', 'errors', 'components'] as const).map(
+          ${(['output', 'errors', 'components', 'device'] as const).map(
             (tab) =>
               html`<button
                 type="button"
@@ -925,7 +973,9 @@ export class AppShell extends LitElement {
                     ? tr('Output')
                     : tab === 'components'
                       ? tr('Components')
-                      : `${tr('Errors')}${this.studio?.errors.length ? ` (${this.studio.errors.length})` : ''}`
+                      : tab === 'device'
+                        ? tr('Device Console')
+                        : `${tr('Errors')}${this.studio?.errors.length ? ` (${this.studio.errors.length})` : ''}`
                 }
               </button>`,
           )}
@@ -957,6 +1007,12 @@ ${this.outputText}</pre>
         >
           ${this.renderComponents()}
         </div>
+        <lms-device-console
+          role="tabpanel"
+          id="bottom-panel-device"
+          aria-labelledby="bottom-device"
+          ?hidden=${this.bottom !== 'device'}
+        ></lms-device-console>
       </section>
       <footer>
         <span>${this.statusMessage || `LVGL MPY Studio ${label}`}</span>
@@ -970,8 +1026,14 @@ ${this.outputText}</pre>
               >`
             : nothing
         }
+        ${
+          this.deviceStatus
+            ? html`<span data-testid="device-status">${this.deviceStatus}</span>`
+            : nothing
+        }
         <span data-testid="python-status" role="status">${this.pythonStatus()}</span>
       </footer>
+      <lms-upload-progress></lms-upload-progress>
       <lms-dialogs></lms-dialogs>
       <div class="preview-host" aria-hidden="true"></div>
       <dialog id="about" aria-labelledby="about-title">

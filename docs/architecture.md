@@ -14,7 +14,7 @@ Written as the pieces are built.
 | Menus, dialogs, the file chooser                              | `src/ui/menu-bar.ts`, `src/ui/dialogs.ts`, `src/app/studio.ts`         | done                 |
 | Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    | done                 |
 | Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` | phase 5, canvas done |
-| Board: Web Serial, raw REPL                                   | `src/board/`                                                           | phase 6              |
+| Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     | phase 6, in progress |
 
 ## Python
 
@@ -74,6 +74,23 @@ lms-designer-view ◄── RGB565 frame ─────────────
   Simulator tab's.
 - `src/ui/designer-view.ts` draws the page as `ui/designer/scene.py`: the frame when it has the
   project's size, otherwise each widget painted as `WidgetItem.paint`.
+
+## Board
+
+```
+Device menu ─► DeviceController (queue) ── board(method) ──►  worker: lms_board.call, with JSPI
+                                                              DeviceSession (upstream, unchanged)
+                                                              └ runner: mpremote main() in-process
+                                                                └ serial (py/serial/) ─ lms_serial
+BoardPort (Web Serial, open) ◄── serial-write / drain ──────  SerialLink (src/board/link.ts)
+          ──── bytes, while an operation runs ─────────────►
+          ──── bytes, otherwise ──► Device Console
+```
+
+- A read with no bytes suspends Python (`run_sync`): the worker keeps receiving bytes and
+  answering the other calls of the page.
+- `src/app/device.ts` follows `ui/main_device.py`: one operation at a time, the connection opened
+  when an action needs it, the upload's progress, Stop, Restart, the console.
 
 ## Rules
 

@@ -4,6 +4,8 @@ import type {
   GeneratedProject,
   PythonError,
   PythonInfo,
+  SerialFromWorker,
+  SerialToWorker,
   WorkerMessage,
   WorkerRequest,
 } from './protocol.ts';
@@ -25,12 +27,15 @@ export class PythonCallError extends Error {
   readonly type: string;
   readonly traceback: string | undefined;
   readonly deleted: boolean | undefined;
+  /** A DeviceError of the board: its code, output, text, errors and warnings. */
+  readonly device: PythonError | undefined;
   constructor(error: PythonError) {
-    super(error.message);
+    super(error.text ?? error.message);
     this.name = 'PythonCallError';
     this.type = error.type;
     this.traceback = error.traceback;
     this.deleted = error.deleted;
+    this.device = error.code ? error : undefined;
   }
 }
 
@@ -45,6 +50,7 @@ export class PythonBridge {
   readonly ready: Promise<PythonInfo>;
   state: PythonState = { stage: 'loading-python' };
   private readonly listeners = new Set<(state: PythonState) => void>();
+  private readonly serialListeners = new Set<(message: SerialFromWorker) => void>();
   private readonly pending = new Map<
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
@@ -72,6 +78,11 @@ export class PythonBridge {
           this.setState({ stage: 'failed', error: data.error });
           rejectReady(new PythonCallError(data.error));
           break;
+        case 'serial-write':
+        case 'serial-drain':
+        case 'board-progress':
+          for (const listener of this.serialListeners) listener(data);
+          break;
         case 'reply': {
           const waiting = this.pending.get(data.id);
           if (!waiting) return;
@@ -95,6 +106,24 @@ export class PythonBridge {
     if (before)
       return before(method).then(() => this.send<T>((id) => ({ kind: 'call', id, method, args })));
     return this.send<T>((id) => ({ kind: 'call', id, method, args }));
+  }
+
+  /** An operation of upstream's DeviceSession on the connected board (py/lms_board.py). */
+  board<T>(method: string, ...args: unknown[]): Promise<T> {
+    const before = this.before;
+    const send = () => this.send<T>((id) => ({ kind: 'board', id, method, args }));
+    return before ? before(method).then(send) : send();
+  }
+
+  /** The port's bytes and events, to the worker. */
+  serial(message: SerialToWorker, transfer: Transferable[] = []): void {
+    this.worker.postMessage(message, transfer);
+  }
+
+  /** What a board operation writes to the port, and its progress. */
+  onSerial(listener: (message: SerialFromWorker) => void): () => void {
+    this.serialListeners.add(listener);
+    return () => this.serialListeners.delete(listener);
   }
 
   /** Awaited before each call: the fonts are converted before a call that generates code. */

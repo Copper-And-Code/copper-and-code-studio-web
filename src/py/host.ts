@@ -2,12 +2,12 @@
 // browser worker and the Node tests, which run it in-process.
 import type { PyodideInterface } from 'pyodide';
 import type { PythonCall } from './boot.ts';
-import type { BridgeReply, WorkerRequest } from './protocol.ts';
+import type { BridgeReply, CallRequest, FsRequest } from './protocol.ts';
 
 export function handleRequest(
   py: PyodideInterface,
   call: PythonCall,
-  request: WorkerRequest,
+  request: CallRequest | FsRequest,
 ): BridgeReply {
   if (request.kind === 'call') return call(request.method, request.args);
   try {

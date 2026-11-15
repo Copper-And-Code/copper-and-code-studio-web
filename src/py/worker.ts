@@ -2,6 +2,8 @@
 // The Python worker: Pyodide with upstream's packages, so the page never freezes while
 // upstream works. Calls wait until Python is ready and are answered one at a time.
 import type { PyodideInterface } from 'pyodide';
+import { WorkerBoard } from '../board/worker-board.ts';
+import { mpyCrossFrom } from '../mpy/compile.ts';
 import { installUpstream, type PythonCall } from './boot.ts';
 import { handleRequest } from './host.ts';
 import type { PythonInfo, WorkerMessage, WorkerRequest } from './protocol.ts';
@@ -34,7 +36,7 @@ async function fetchBundle(): Promise<Uint8Array> {
   return new Uint8Array(buffer);
 }
 
-async function start(): Promise<{ py: PyodideInterface; call: PythonCall }> {
+async function start(): Promise<{ py: PyodideInterface; call: PythonCall; board: WorkerBoard }> {
   const t0 = performance.now();
   post({ kind: 'status', stage: 'loading-python' });
   const indexURL = new URL('pyodide/', site).href;
@@ -43,6 +45,11 @@ async function start(): Promise<{ py: PyodideInterface; call: PythonCall }> {
     loadPyodide: (options: { indexURL: string }) => Promise<PyodideInterface>;
   };
   const py = await loadPyodide({ indexURL });
+  const board = new WorkerBoard(
+    py,
+    (message, transfer = []) => self.postMessage(message, transfer),
+    mpyCrossFrom(new URL('mpy-cross/', site)),
+  );
   post({ kind: 'status', stage: 'loading-upstream' });
   const call = installUpstream(py, await bundle);
   const reply = call('info', []);
@@ -53,7 +60,7 @@ async function start(): Promise<{ py: PyodideInterface; call: PythonCall }> {
     startMs: Math.round(performance.now() - t0),
   };
   post({ kind: 'ready', info });
-  return { py, call };
+  return { py, call, board };
 }
 
 const ready = start();
@@ -65,8 +72,13 @@ ready.catch((error: unknown) => {
 self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   ready.then(
-    ({ py, call }) => {
-      const reply = handleRequest(py, call, request);
+    async ({ py, call, board }) => {
+      if (request.kind === 'serial') {
+        board.serial(request);
+        return;
+      }
+      const reply =
+        request.kind === 'board' ? await board.request(request) : handleRequest(py, call, request);
       // A file read goes back as a transferred buffer, not copied.
       const transfer =
         reply.ok && reply.result instanceof Uint8Array ? [reply.result.buffer as ArrayBuffer] : [];
@@ -76,6 +88,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
       );
     },
     (error: unknown) =>
+      request.kind !== 'serial' &&
       post({
         kind: 'reply',
         id: request.id,

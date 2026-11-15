@@ -1,13 +1,17 @@
 // Pyodide under Node for the tests: the same pinned release the site serves.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadPyodide } from 'pyodide';
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
+// Given, not guessed: under Playwright's source maps Pyodide would look for itself in src/js/.
+const INDEX_URL = dirname(createRequire(import.meta.url).resolve('pyodide/package.json')) + '/';
+
 export async function startPyodide() {
-  return loadPyodide({ stdout: () => {}, stderr: () => {} });
+  return loadPyodide({ indexURL: INDEX_URL, stdout: () => {}, stderr: () => {} });
 }
 
 /** Copies a folder of the PC into Pyodide's in-memory file system. Nothing is written back. */

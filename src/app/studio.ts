@@ -25,6 +25,7 @@ import { DesignerController } from './designer.ts';
 import { arrangeItems } from '../ui/designer-view.ts';
 import { FileTabs } from './file-tabs.ts';
 import { RunController, type RunView } from './run.ts';
+import { DeviceController, type DeviceView } from './device.ts';
 
 /** What the center shows: a page's canvas, the Code tab, the simulator, or a file tab by id. */
 export type CenterTab = `page:${string}` | 'code' | 'simulator' | `file:${number}`;
@@ -37,6 +38,8 @@ export class Studio {
   readonly session: ProjectSession;
   /** Running in the simulator: set when the shell has its Simulator tab. */
   run: RunController | null = null;
+  /** The board: set when the shell has its Device Console. */
+  device: DeviceController | null = null;
   /** Set when the browser's private storage could not be opened: files live until a reload. */
   workspaceProblem: string | null = null;
   private readonly statusListeners = new Set<(message: string) => void>();
@@ -684,6 +687,21 @@ export class Studio {
     return this.run;
   }
 
+  /** The Device Console and the upload's progress of the shell. */
+  attachDevice(view: DeviceView): DeviceController {
+    this.device = new DeviceController(this.python, this.session, this.settings, view, {
+      appendError: (text) => this.appendError(text),
+      addErrors: (rows) => this.setErrors([...this.errors, ...rows]),
+      showWarnings: (warnings) => {
+        for (const warning of warnings) this.output(`${tr('Warning: {warning}', { warning })}\n`);
+      },
+      saveProject: () => this.session.save(),
+      boardMemory: () => this.scheduleBudget(),
+    });
+    this.device.onChange(() => this.workbenchChanged());
+    return this.device;
+  }
+
   onStatus(listener: (message: string) => void): () => void {
     this.statusListeners.add(listener);
     return () => this.statusListeners.delete(listener);
@@ -1111,6 +1129,7 @@ export class Studio {
       {
         label: tr('Device'),
         items: () => [
+          ...(this.device ? this.deviceItems(this.device, ready) : []),
           {
             label: tr('Manage Board Profiles…'),
             id: 'profiles',
@@ -1226,6 +1245,71 @@ export class Studio {
   }
 
   /** ui/main_window.py, the Run menu; the browser's own pages come in phase 7. */
+  /** ui/main_window.py, the Device menu, enabled as _update_device_actions says. */
+  private deviceItems(device: DeviceController, ready: boolean): MenuItem[] {
+    const board = ready && Boolean(this.session.state?.board) && device.available;
+    const busy = device.busy;
+    const connected = device.connected;
+    const notice: MenuItem[] = device.available
+      ? []
+      : [
+          {
+            label: tr('This browser has no Web Serial: the board works in Chrome or Edge'),
+            id: 'device-unavailable',
+            disabled: true,
+            action: () => {},
+          },
+          { separator: true },
+        ];
+    return [
+      ...notice,
+      {
+        label: tr('Change Port…'),
+        id: 'device-port',
+        disabled: busy || !board,
+        action: () => void device.changePort(),
+      },
+      {
+        label: connected ? tr('Disconnect') : tr('Connect'),
+        id: 'device-connect',
+        disabled: busy || !(connected || board),
+        action: () => void device.connectDisconnect(),
+      },
+      {
+        label: tr('Device Information'),
+        id: 'device-info',
+        disabled: busy || !connected,
+        action: () => device.showInfo(),
+      },
+      { separator: true },
+      {
+        label: tr('Upload Project'),
+        id: 'device-upload',
+        disabled: busy || !board,
+        action: () => void device.upload(false),
+      },
+      {
+        label: tr('Upload and Run'),
+        id: 'device-upload-run',
+        disabled: busy || !board,
+        action: () => void device.upload(true),
+      },
+      {
+        label: tr('Stop'),
+        id: 'device-stop',
+        disabled: busy || !connected || !device.appActive,
+        action: () => device.stop(),
+      },
+      {
+        label: tr('Restart Interpreter'),
+        id: 'device-restart',
+        disabled: busy || !connected,
+        action: () => device.restart(),
+      },
+      { separator: true },
+    ];
+  }
+
   private runMenu(run: RunController, ready: boolean): Menu {
     return {
       label: tr('Run'),

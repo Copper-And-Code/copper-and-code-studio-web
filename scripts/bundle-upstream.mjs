@@ -1,4 +1,5 @@
-// Packs upstream's Qt-free Python packages, its data and the py/ glue into one zip for Pyodide
+// Packs upstream's Qt-free Python packages, its data, the py/ glue and the pure-Python packages
+// of scripts/python-deps.mjs into one zip for Pyodide
 // (PLAN.md 3.2). The zip keeps upstream's layout, so upstream code that finds files relative to
 // its own path (runtime/display_driver.py, gen/widgets.json...) works unchanged.
 //
@@ -8,6 +9,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zipSync } from 'fflate';
+import { wheelFiles } from './python-deps.mjs';
 import { syncDir } from './sync-dir.mjs';
 import { upstreamInfo } from './upstream-info.mjs';
 
@@ -24,6 +26,7 @@ const SOURCES = [
       'lvgl_mpy_studio/__init__.py',
       'lvgl_mpy_studio/platform.py',
       'lvgl_mpy_studio/core',
+      'lvgl_mpy_studio/device',
       'lvgl_mpy_studio/gen',
       'lvgl_mpy_studio/build',
       'lvgl_mpy_studio/sim',
@@ -73,6 +76,10 @@ export function bundleName(info = upstreamInfo()) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const info = upstreamInfo();
   const files = bundleFiles();
+  for (const [name, data] of Object.entries(await wheelFiles())) {
+    if (files[name]) throw new Error(`bundle-upstream: ${name} is both upstream's and a wheel's`);
+    files[name] = [data, { mtime: MTIME }];
+  }
   const zip = zipSync(
     Object.fromEntries(
       Object.keys(files)

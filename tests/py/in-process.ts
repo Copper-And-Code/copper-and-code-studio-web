@@ -25,6 +25,7 @@ export async function inProcessBridge(): Promise<PythonBridge> {
     postMessage(request) {
       // structuredClone, as postMessage does: the caller's buffers are never shared.
       const copy = structuredClone(request);
+      if (copy.kind !== 'call' && copy.kind !== 'fs') throw new Error(`in-process: ${copy.kind}`);
       queueMicrotask(() => emit({ kind: 'reply', id: copy.id, ...handleRequest(py, call, copy) }));
     },
     addEventListener(_type, listener) {

@@ -6,7 +6,9 @@ imports every module of the bundle in Pyodide.
 ## Imports
 
 Every module of `lvgl_mpy_studio/{core,gen,build,sim,blocks}` and `platform.py` imports in
-Pyodide, and none of them loads PySide6, qtawesome, pyserial or mpremote. `subprocess`, `socket`
+Pyodide, and none of them loads PySide6, qtawesome, pyserial or mpremote. `device/`, in the
+bundle since phase 6, imports `serial`: the bundle's `py/serial/`, which gives pyserial's
+interface over the page's port; mpremote is loaded only when a board command runs. `subprocess`, `socket`
 and `threading` exist in Pyodide and import fine; what fails is **using** them: starting a
 process raises `OSError: [Errno 138] emscripten does not support processes`, starting a thread
 raises `RuntimeError: can't start new thread`.
@@ -25,6 +27,8 @@ the C build.
 | `build/preview.py` `render_with_log`, `build/visual.py`  | the simulator runtime, through `platform.run_background` | the design-only renderer in the simulator iframe; the PNG and geometry come back to Python in upstream's shape                                                                  | 5     |
 | `build/budget.py` `_measure_ram`                         | the simulator runtime                                    | the same iframe, measuring                                                                                                                                                      | 5     |
 | `sim/session.py`                                         | the runtime, a TCP socket, two threads                   | the iframe host; `sim/protocol.py` and `sim/script.py` are used as they are                                                                                                     | 3     |
+| `device/service.py` `_run_process`, `start_console`      | mpremote as a process; a thread reading the console      | mpremote 1.29.0 in-process (`py/lms_board.py`, the session's `runner`), on the Web Serial port through `py/serial/` and JSPI; the console is read by the page (`src/board/`)    | 6     |
+| `device/uart.py`, `device/service.py` `break_in`         | pyserial on a port of the PC                             | unchanged, on `py/serial/`                                                                                                                                                      | 6     |
 | `build/web.py` `serve`                                   | an HTTP server in a thread                               | not needed: the site is the server. `build_web` itself is pure and runs as is                                                                                                   | 7     |
 | `build/release.py`, `build/c_compiler.py`                | the C compiler, the release build                        | left out by the owner's decision                                                                                                                                                | —     |
 | `platform.run_background`                                | any process                                              | reached only through the rows above                                                                                                                                             | —     |

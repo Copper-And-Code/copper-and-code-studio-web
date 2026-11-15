@@ -18,7 +18,10 @@ class FakeWorker implements WorkerLike {
   }
 }
 
-const idAt = (worker: FakeWorker, index: number) => worker.sent.at(index)?.id ?? -1;
+const idAt = (worker: FakeWorker, index: number) => {
+  const message = worker.sent.at(index);
+  return message && 'id' in message ? message.id : -1;
+};
 
 const info = { upstreamVersion: '0.7.0', python: '3.14.2', pyodide: '314.0.7', startMs: 1200 };
 
@@ -39,7 +42,9 @@ describe('PythonBridge', () => {
     const bridge = new PythonBridge(worker);
     const first = bridge.generate('{"a": 1}');
     const second = bridge.exportBoard('{"b": 2}', 'esp32_4848s040_480');
-    expect(worker.sent.map((m) => (m.kind === 'call' ? [m.method, m.args] : m.op))).toEqual([
+    expect(
+      worker.sent.map((m) => (m.kind === 'call' ? [m.method, m.args] : 'op' in m ? m.op : m.kind)),
+    ).toEqual([
       ['generate', ['{"a": 1}']],
       ['export_board', ['{"b": 2}', 'esp32_4848s040_480']],
     ]);
