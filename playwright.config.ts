@@ -13,6 +13,10 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}/lvgl-mpy-studio-web/`,
     trace: 'retain-on-failure',
+    // The site's service worker caches the whole site (23 MB) for offline use: in every new
+    // context of every test it would download it again. Only the tests about it allow it
+    // (pwa.spec.ts, and web.spec.ts for the web versions' own worker).
+    serviceWorkers: 'block',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

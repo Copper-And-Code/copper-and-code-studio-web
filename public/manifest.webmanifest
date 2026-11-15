@@ -1,0 +1,21 @@
+{
+  "name": "LVGL MPY Studio Web",
+  "short_name": "LVGL Studio",
+  "description": "The LVGL MPY Studio IDE in the browser: design LVGL pages, write MicroPython, run it in the simulator or on a board.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#17324d",
+  "theme_color": "#17324d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

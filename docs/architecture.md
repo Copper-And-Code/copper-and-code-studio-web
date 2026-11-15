@@ -108,6 +108,19 @@ Run → Open in Browser ─► WebPublisher ── web_prepare ──► Pyodide
 
 - `src/app/web.ts` follows `ui/main_files.py` `open_in_browser` and `program_in_browser`.
 
+## Offline
+
+```
+vite build ─► dist/ ─► scripts/sw-plugin.mjs: every file + sha256 ─► dist/sw.js (src/pwa/sw.js)
+page ── register, once Python is ready ──► sw.js: install = cache lms-app-<version>
+                                              (a file with the same sha256 copied from the
+                                               old cache, the others downloaded and checked)
+     ◄── every GET of the site from the cache ──  (preview/ left to its own worker)
+new deploy ─► installs beside, waits ─► status bar "Reload" ─► skip-waiting ─► reload
+```
+
+- `src/pwa/pwa.ts` registers the worker and offers the update; only in the built site.
+
 ## Rules
 
 - Python logic comes from `upstream/`, unchanged, running in Pyodide. The TypeScript side is UI,

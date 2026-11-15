@@ -52,6 +52,7 @@ export class AppShell extends LitElement {
     workbench: { state: true },
     design: { state: true },
     deviceStatus: { state: true },
+    applyUpdate: { state: true },
   };
 
   python: PythonBridge | undefined;
@@ -67,6 +68,8 @@ export class AppShell extends LitElement {
   bottom: BottomTab = 'output';
   /** The board's connection, in the status bar (device_status). */
   deviceStatus = '';
+  /** A new version of the IDE is cached: reloads into it (src/pwa/pwa.ts). */
+  applyUpdate: (() => void) | null = null;
   /** Counts the changes of the studio's tabs, files and errors, to render them again. */
   workbench = 0;
   private errorCount = 0;
@@ -212,6 +215,14 @@ export class AppShell extends LitElement {
       max-height: 30vh;
       flex: 0 1 auto;
       min-height: 0;
+    }
+    footer .update {
+      color: var(--text);
+    }
+    footer .update button {
+      font: inherit;
+      padding: 0 8px;
+      margin-left: 4px;
     }
     .budget.level-1 {
       color: #b26a00;
@@ -554,6 +565,14 @@ export class AppShell extends LitElement {
     super.disconnectedCallback();
     for (const stop of this.unsubscribe) stop();
     this.unsubscribe = [];
+  }
+
+  /** For src/pwa/pwa.ts: the IDE works offline now. */
+  offlineReady(): void {
+    this.showStatus(
+      tr('The IDE is saved in this browser: it opens without the network too.'),
+      8000,
+    );
   }
 
   private showStatus(message: string, ms = 3000): void {
@@ -1108,6 +1127,16 @@ ${this.outputText}</pre>
         ${
           this.deviceStatus
             ? html`<span data-testid="device-status">${this.deviceStatus}</span>`
+            : nothing
+        }
+        ${
+          this.applyUpdate
+            ? html`<span class="update" data-testid="update" role="status"
+                >${tr('A new version of the IDE is ready.')}
+                <button type="button" @click=${() => this.applyUpdate?.()}>
+                  ${tr('Reload')}
+                </button></span
+              >`
             : nothing
         }
         <span data-testid="python-status" role="status">${this.pythonStatus()}</span>

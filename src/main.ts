@@ -1,5 +1,6 @@
 import { Studio } from './app/studio.ts';
 import { PythonBridge } from './py/bridge.ts';
+import { registerApp } from './pwa/pwa.ts';
 import { Settings } from './storage/settings.ts';
 import './ui/app-shell.ts';
 
@@ -33,6 +34,13 @@ if (shell) {
   await shell.updateComplete;
   const studio = new Studio(python, shell.dialogs, settings);
   shell.studio = studio;
+  // once Python has started, so the files cached for offline use do not slow the first load
+  const pwa = () =>
+    void registerApp({
+      updateReady: (apply) => (shell.applyUpdate = apply),
+      offlineReady: () => shell.offlineReady(),
+    });
+  python.ready.then(pwa, pwa);
   window.lmsStudio.studio = studio;
   window.lmsStudio.started = studio.start();
   // In the capture phase: the terminal keeps the keys it handles from bubbling up.

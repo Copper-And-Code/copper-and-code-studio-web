@@ -1,13 +1,15 @@
 // Playwright's WebKit has no private file system (OPFS) in its default, throw-away profile;
 // Safari has it, and so has WebKit with a profile on disk. Each WebKit test gets a new profile
 // on disk, deleted afterwards; the other engines use the default context.
+//
+// Service workers are blocked unless a test file allows them (playwright.config.ts).
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test as base } from '@playwright/test';
 
 export const test = base.extend({
-  context: async ({ browserName, playwright, baseURL, context }, use) => {
+  context: async ({ browserName, playwright, baseURL, serviceWorkers, context }, use) => {
     if (browserName !== 'webkit') {
       await use(context);
       return;
@@ -16,6 +18,7 @@ export const test = base.extend({
     const persistent = await playwright.webkit.launchPersistentContext(profile, {
       baseURL,
       acceptDownloads: true,
+      serviceWorkers,
     });
     try {
       await use(persistent);

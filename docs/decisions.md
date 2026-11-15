@@ -410,3 +410,31 @@ checkout).
 - **`eim-01`, `eim-01-480` and `weather` start in the simulator**: they no longer carry a
   `runTarget`, so Start opens no port chooser for them, and the 4 designer workflows on `weather`
   save it without one. The board tests choose their run target.
+
+## Phase 8 (2026-11-15)
+
+- **A service worker written by hand, not a plugin.** The build lists every file of `dist/`
+  with its sha256 (`scripts/sw-plugin.mjs`) and puts the list into `src/pwa/sw.js`, about 120
+  lines; no new dependency. The version of the worker is the hash of that list, so a deploy that
+  changes no file offers no update.
+- **A cache per deploy, files reused by sha256.** "Pyodide, the runtime and the upstream bundle
+  per tag" from the plan, done per file: a file whose sha256 did not change since the deploy
+  cached before is copied from that cache. Pyodide (13 MB) and the runtime (6 MB) are downloaded
+  again only when their pins move; the bundle's name already carries its hash. Each file downloaded
+  is checked against its sha256, first from the HTTP cache and then from the server: a host still
+  serving part of an older deploy fails the install, which the browser tries again later, instead
+  of caching a mix.
+- **Registered once Python is ready**, so the 23 MB cached for offline use do not slow the first
+  start.
+- **The update is offered, never forced.** A new deploy installs beside the old one and waits;
+  the status bar says "A new version of the IDE is ready." with Reload. Reload asks the browser's
+  own question when there are unsaved changes (`beforeunload`). An hourly check, and one when the
+  tab is shown again, ask the host for a new `sw.js` (`updateViaCache: 'none'`).
+- **The icons are drawn from upstream's SVG** with Qt by `scripts/icons.py`, as upstream's
+  `packaging/make_icon.sh` draws its `icon.ico`; the PNGs are committed. The maskable one draws the
+  icon in the middle 80 % on its own background colour.
+- **Service workers are blocked in the e2e tests** apart from `pwa.spec.ts` and `web.spec.ts`:
+  each test has a new browser context, which would download the whole site again.
+- **The preview of a web version stays online-only.** Its worker (`public/preview/sw.js`) is
+  registered from the server, and a browser fetches a worker's script past every service worker.
+  The zip and Save to a Folder need no worker of their own, but were not tried offline.

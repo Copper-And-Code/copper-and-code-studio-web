@@ -11,6 +11,9 @@ import { unzipSync } from 'fflate';
 import { expect, test } from './fixtures.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
+
+// the preview of a web version is served by its own service worker
+test.use({ serviceWorkers: 'allow' });
 const expected = JSON.parse(
   readFileSync(join(ROOT, 'tests/fixtures/web/files.json'), 'utf8'),
 ) as Record<string, { folder: string; files: string[] }>;
