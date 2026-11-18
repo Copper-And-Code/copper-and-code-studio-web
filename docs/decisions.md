@@ -544,3 +544,14 @@ Point 6 of the capture request: the real flow of a board, with no hardware.
   without a board.
 - **What it reports is its own**: the free RAM is the iframe's 32 MB heap, the free flash that of
   the browser's memory file system; they are not made to look like the profile's board.
+
+## A widget placed at the zoom of the page (2026-11-18)
+
+Found by the capture driver of lvgl-mpy-stage: with `?capture=1&zoom=1.4` a widget from the
+Toolbox landed far from the click (y 680 for 475). An event's `clientX` and `getBoundingClientRect`
+are in the viewport's pixels, which a CSS `zoom` scales, while the designer's own zoom is in the
+stage's layout pixels: the point was divided by the designer's zoom only. It is now divided also by
+the stage's drawn width over its layout width (`cssScale` in `src/ui/designer-view.ts`), the same in
+Chromium, Firefox and WebKit, and so is the pointer of Ctrl+wheel zoom. The test places a Label at
+zoom 1 and 1.4 (`tests/e2e/capture.spec.ts`); Firefox gives the mouse whole pixels of the screen,
+so at 1.4 it may land one page pixel away.

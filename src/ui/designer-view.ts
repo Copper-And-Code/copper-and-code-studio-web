@@ -400,7 +400,7 @@ export class DesignerView extends LitElement {
   private scenePoint(event: PointerEvent | MouseEvent): { x: number; y: number } {
     const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
     const box = stage?.getBoundingClientRect();
-    const zoom = this.zoom;
+    const zoom = this.zoom * (stage ? cssScale(stage, box) : 1);
     return {
       x: (event.clientX - (box?.left ?? 0)) / zoom - MARGIN,
       y: (event.clientY - (box?.top ?? 0)) / zoom - MARGIN,
@@ -726,12 +726,16 @@ export class DesignerView extends LitElement {
     const after = before * factor;
     if (after < ZOOM_MIN || after > ZOOM_MAX) return;
     const box = scroller.getBoundingClientRect();
-    const x = (scroller.scrollLeft + event.clientX - box.left) / before;
-    const y = (scroller.scrollTop + event.clientY - box.top) / before;
+    // the pointer from the scroller's corner, in its own pixels: a CSS zoom scales the event's
+    const scale = cssScale(scroller, box);
+    const pointerX = (event.clientX - box.left) / scale;
+    const pointerY = (event.clientY - box.top) / scale;
+    const x = (scroller.scrollLeft + pointerX) / before;
+    const y = (scroller.scrollTop + pointerY) / before;
     this.controller.zoom(factor, this.pageId);
     void this.updateComplete.then(() => {
-      scroller.scrollLeft = x * after - (event.clientX - box.left);
-      scroller.scrollTop = y * after - (event.clientY - box.top);
+      scroller.scrollLeft = x * after - pointerX;
+      scroller.scrollTop = y * after - pointerY;
     });
   }
 
@@ -1088,6 +1092,16 @@ export class DesignerView extends LitElement {
 function lastLine(log: string): string {
   const lines = log.split('\n').filter((line) => line.trim());
   return lines.at(-1) ?? '';
+}
+
+/**
+ * How much a CSS zoom of the page (the capture mode's zoom=, or one of an ancestor) scales an
+ * element: an event's clientX and getBoundingClientRect are in the viewport's pixels, its layout
+ * in its own. 1 without a zoom.
+ */
+function cssScale(element: HTMLElement, box = element.getBoundingClientRect()): number {
+  const width = element.offsetWidth;
+  return width > 0 && box.width > 0 ? box.width / width : 1;
 }
 
 customElements.define('lms-designer-view', DesignerView);

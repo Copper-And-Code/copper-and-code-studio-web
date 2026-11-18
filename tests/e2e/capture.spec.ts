@@ -158,3 +158,56 @@ test('capture mode keeps away from the user workspace and settings', async ({ pa
     before,
   );
 });
+
+/**
+ * A Label from the Toolbox (double click, then a click on the page) at page point (x, y): the
+ * screen point from the stage as it is drawn, whatever scales it; then the new label's x and y.
+ */
+async function placeLabel(page: Page, x: number, y: number): Promise<[number, number]> {
+  await page.locator('[data-capture="tab-code"]').waitFor();
+  const panel = page.locator('[role="tabpanel"]:not([hidden])');
+  const stage = panel.locator('.stage');
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('no stage');
+  // the stage is the page with 40 pixels of margin on each side
+  const scale = box.width / (480 + 2 * 40);
+  const names = () =>
+    page.evaluate(() => {
+      const studio = window.lmsStudio.studio;
+      return (
+        studio?.designer?.pages.get(studio.currentPage() ?? '')?.widgets.map((w) => w.name) ?? []
+      );
+    });
+  const before = await names();
+  await page.locator('[data-capture="toolbox"] [data-type="label"]').dblclick();
+  await page.mouse.click(box.x + (40 + x) * scale, box.y + (40 + y) * scale);
+  await expect.poll(async () => (await names()).length).toBe(before.length + 1);
+  const added = (await names()).find((name) => !before.includes(name)) ?? '';
+  return page.evaluate((name) => {
+    const studio = window.lmsStudio.studio;
+    const widget = studio?.designer?.pages
+      .get(studio.currentPage() ?? '')
+      ?.widgets.find((w) => w.name === name);
+    const props = widget?.props as { x: number; y: number };
+    return [props.x, props.y] as [number, number];
+  }, added);
+}
+
+test('a widget from the Toolbox lands where the click is, with the zoom of the URL too', async ({
+  page,
+  context,
+}) => {
+  await start(page, 'capture=1');
+  await openExample(page, 'weather');
+  // a point of weather's background alone, which starts at 0, 0: far from any other container
+  expect(await placeLabel(page, 300, 215)).toEqual([300, 215]);
+
+  const zoomed = await context.newPage();
+  await start(zoomed, 'capture=1&zoom=1.4');
+  await openExample(zoomed, 'weather');
+  // Firefox gives the mouse whole pixels of the screen: at 1.4, half of one moves the point by up
+  // to a pixel of the page. The bug was the zoom left out: 85 pixels off at y 215.
+  const [x, y] = await placeLabel(zoomed, 300, 215);
+  expect(Math.abs(x - 300)).toBeLessThanOrEqual(1);
+  expect(Math.abs(y - 215)).toBeLessThanOrEqual(1);
+});
