@@ -1,5 +1,5 @@
 {
-  "upstreamVersion": "0.7.1",
+  "upstreamVersion": "0.7.2",
   "projects": {
     "breakout": {
       "width": 1024,

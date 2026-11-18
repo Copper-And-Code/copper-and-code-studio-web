@@ -838,21 +838,64 @@ def profiles_hidden():
 
 
 def profiles_apply(profiles):
-    """ProfileManagerDialog.apply_to_store: the custom profiles and the hidden built-in ones."""
+    """ProfileManagerDialog.apply_to_store: the custom and imported profiles, the hidden built-in ones."""
     from lvgl_mpy_studio.core.boards import builtin_profiles, portable_profile
 
     store = _profile_store()
-    custom = {profile["id"]: portable_profile(profile) for profile in profiles if profile.get("origin") == "custom"}
+    custom = {profile["id"]: portable_profile(profile) for profile in profiles if profile.get("origin") in ("custom", "imported")}
+    imported = [profile["id"] for profile in profiles if profile.get("origin") == "imported"]
     ids = {profile["id"] for profile in profiles}
     hidden = [profile["id"] for profile in builtin_profiles() if profile["id"] not in ids]
     previous = store.snapshot()
-    store.restore({"custom": custom, "hidden": hidden})
+    store.restore({"custom": custom, "hidden": hidden, "imported": imported})
     try:
         store.save()
     except Exception:
         store.restore(previous)
         raise
     return True
+
+
+PROFILE_FILE = "/tmp/board-profile.json"
+
+
+def profile_import(path=PROFILE_FILE):
+    """ProfileManagerDialog.import_file: the board in a .json file, checked as upstream's
+    read_profile_file checks it; kept with Apply. A built-in id is refused."""
+    from lvgl_mpy_studio.core.boards import ProfileError, builtin_profiles, profile_diagnostics, profile_error_text, read_profile_file
+
+    try:
+        profile = read_profile_file(path)
+    except ProfileError as exc:
+        return {"error": profile_error_text(exc), "profile": None}
+    except OSError as exc:
+        return {"error": str(exc), "profile": None}
+    if profile["id"] in {item["id"] for item in builtin_profiles()}:
+        return {"error": profile_error_text(ProfileError("profile.import.builtin", id=profile["id"])), "profile": None}
+    profile["origin"] = "imported"
+    profile["diagnostics"] = profile_diagnostics(profile)
+    return {"error": None, "profile": profile}
+
+
+def profile_export(profile):
+    """ProfileManagerDialog.export_file: the text upstream's write_profile_file writes."""
+    from lvgl_mpy_studio.core.boards import write_profile_file
+
+    try:
+        path = write_profile_file(profile, PROFILE_FILE)
+    except (OSError, ValueError) as exc:
+        return {"error": str(exc), "name": None, "text": None}
+    return {"error": None, "name": f"{profile['id']}.json", "text": path.read_text(encoding="utf-8")}
+
+
+def board_catalog_notice():
+    """main_files.py _warn_board_not_in_catalog: the project's board is not among the IDE's."""
+    from lvgl_mpy_studio.core.i18n import tr
+
+    board = _doc().project.board
+    if board and _profile_store().get(board.get("id")) is None:
+        return tr("The board {name} of this project is not among the boards of the IDE: it was deleted, or imported on another computer. The project keeps its own copy of the board and works with it; import the board again to update it.", name=board.get("name") or board.get("id"))
+    return None
 
 
 # ---- The Block Manager: ui/blocks_manager.py ----
@@ -1913,6 +1956,9 @@ METHODS = {
     "profile_default": profile_default,
     "profiles_hidden": profiles_hidden,
     "profiles_apply": profiles_apply,
+    "profile_import": profile_import,
+    "profile_export": profile_export,
+    "board_catalog_notice": board_catalog_notice,
     "toolbox": toolbox,
     "design_default_size": design_default_size,
     "design_add_widget": design_add_widget,

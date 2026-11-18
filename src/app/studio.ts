@@ -997,6 +997,7 @@ export class Studio {
 
   private prompts(): Prompts {
     return {
+      output: (text) => this.output(text),
       unsavedChanges: () =>
         this.dialogs.message(
           tr('Unsaved Changes'),

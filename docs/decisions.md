@@ -491,3 +491,31 @@ Asked by an outside video recorder that drives the IDE with Playwright; the cont
 - **Not done yet**: the demonstration board (point 6 of the request, "later"), the browser's
   tooltips, and the manual clock for programs without pages, whose loop is upstream's
   `lms_web_boot.py`.
+
+## Upstream v0.7.2 (2026-11-18)
+
+- **The submodule moves to `v0.7.2`** (`d4e461b`), for boards from a file. The runtime assets are
+  again the earlier zips under new names, with the same sha256: `runtime.lock.json` changes only
+  `tag`, `asset` and `url`.
+- **Most of the release is tests** (the desktop's suites run by hand, the virtual board, the
+  showreel tool). What reaches the web: `core/boards.py` with boards from a file,
+  `lv.init()` always before `ui` and `app_events` in the generated `main.py`, names over 200
+  characters refused, `mpremote … resume fs cp` (a copy no longer soft-resets the board), and
+  `it.json`, which now has `Terminal` and `Widgets`, dropped from `it-web.json`.
+- **The references were made again**: goldens, budgets (the earlier `lv.init()`), fonts and frames
+  and previews (only the version they name), `mpy-cross` outputs. The designer workflows and the
+  web file lists did not change.
+- **Import… and Export… in the profile manager use upstream's functions**: `read_profile_file`
+  checks the file (64 KiB at most, UTF-8 JSON, the catalog's diagnostics), a built-in id is refused
+  with upstream's message, an id already there is replaced only after a question, and Apply keeps
+  the imported ids in upstream's `board-profiles.json` under `imported`. The file comes from the PC
+  with the browser's file input and goes back as a download, as `QFileDialog` reads and writes
+  files of the PC; a file of the workspace can be downloaded first. A project whose board is not in
+  the catalog opens with upstream's notice in Output.
+- **The adapter list takes the adapter of an imported board** as an option, selected on the option:
+  a value given to the `<select>` was applied before its new option existed and showed the first
+  adapter (found by the new e2e test).
+- **New exclusions in Pyodide**: `tests/manual` (suites the desktop runs by hand with
+  `pytest --manual`, which import PySide6), `tests/test_window_checks.py` (PySide6), and four tests
+  with `qtbot`. The board test that counted a soft reset per copied file now counts one, as
+  upstream does since `resume`.

@@ -190,9 +190,9 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
       [...reply.result.files].sort(),
     );
     expect(board.file(`${app}/ui.mpy`)?.[0]).toBe(0x4d);
-    // the reset before the upload, and one for each file: _put runs `mpremote connect PORT fs cp`
-    // without `resume`, so mpremote soft-resets first, as on the desktop
-    expect(board.softResets).toBe(1 + reply.result.files.length);
+    // only the reset before the upload: since upstream 0.7.2 _put runs `mpremote … resume fs cp`,
+    // so copying the files does not reset the board again, as on the desktop
+    expect(board.softResets).toBe(1);
     const last = progress.at(-1);
     expect(last?.[0]).toBe(last?.[1]);
     // A second upload keeps the first as .previous

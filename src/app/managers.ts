@@ -7,6 +7,7 @@ import { live } from 'lit/directives/live.js';
 import { N_, tr } from '../i18n/tr.ts';
 import type { PythonBridge } from '../py/bridge.ts';
 import { type FileStore, joinPath, walkFiles } from '../storage/store.ts';
+import { download, pickFiles } from '../storage/download.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 
 /** The configuration folder of upstream, kept in a store of the browser. */
@@ -97,7 +98,9 @@ export async function manageProfiles(
   const edit = async (field: keyof Profile, value: string | number) => {
     const original = current();
     if (!original) return;
-    const profile: Profile = { ...original, [field]: value, origin: 'custom' };
+    // the adapter of a board from a file stays, and so does its origin
+    const origin = original.origin === 'imported' ? 'imported' : 'custom';
+    const profile: Profile = { ...original, [field]: value, origin };
     const content = (p: Profile) =>
       JSON.stringify(
         Object.fromEntries(
@@ -139,6 +142,55 @@ export async function manageProfiles(
       return;
     }
     finish(true);
+  };
+  /** import_file: a .json of the PC, read by upstream; kept with Apply, as every change here. */
+  const importFile = async () => {
+    const [file] = await pickFiles('.json,application/json', false);
+    if (!file) return;
+    message = '';
+    await python.writeFile(PROFILE_FILE, new Uint8Array(await file.arrayBuffer()));
+    const result = await python.call<{ error: string | null; profile: Profile | null }>(
+      'profile_import',
+      PROFILE_FILE,
+    );
+    const profile = result.profile;
+    if (!profile) {
+      message = `${tr('Import Board')}: ${result.error ?? ''}`;
+      refresh();
+      return;
+    }
+    const existing = profiles.get(profile.id);
+    if (
+      existing &&
+      // a question inside a dialog: the browser's own, as QMessageBox.question over it
+      !window.confirm(
+        tr(
+          'A board with the id {id} is already there: {name}. Replace it with the one in the file?',
+          { id: profile.id, name: existing.name },
+        ),
+      )
+    )
+      return;
+    profiles.set(profile.id, profile);
+    selected = profile.id;
+    refresh();
+  };
+  /** export_file: the selected board as upstream writes it, downloaded. */
+  const exportFile = async (profile: Profile) => {
+    const result = await python.call<{ error: string | null; name: string; text: string }>(
+      'profile_export',
+      strip(profile),
+    );
+    if (result.error) {
+      message = `${tr('Export Board')}: ${result.error}`;
+      refresh();
+      return;
+    }
+    download(result.name, new TextEncoder().encode(result.text), 'application/json');
+  };
+  const origins: Record<string, string> = {
+    builtin: N_('Built-in'),
+    imported: N_('Imported'),
   };
   const names = () => [...profiles.values()].map((p) => p.name);
   return dialogs.custom<boolean>(
@@ -182,7 +234,7 @@ export async function manageProfiles(
                     <td>
                       ${names().filter((name) => name === p.name).length > 1 ? `${p.name} [${p.id}]` : p.name}
                     </td>
-                    <td>${p.origin === 'builtin' ? tr('Built-in') : tr('Custom profile')}</td>
+                    <td>${tr(origins[p.origin ?? ''] ?? N_('Custom profile'))}</td>
                     <td>${p.adapter}</td>
                     <td>${p.logicalWidth}×${p.logicalHeight}</td>
                     <td>${p.physicalWidth}×${p.physicalHeight}</td>
@@ -207,10 +259,19 @@ export async function manageProfiles(
                 <label for="profile-adapter">${tr('Adapter')}</label>
                 <select
                   id="profile-adapter"
-                  .value=${live(profile.adapter)}
                   @change=${(e: Event) => void edit('adapter', (e.target as HTMLSelectElement).value)}
                 >
-                  ${view.adapters.map((adapter) => html`<option value=${adapter}>${adapter}</option>`)}
+                  ${(view.adapters.includes(profile.adapter)
+                    ? view.adapters
+                    : [...view.adapters, profile.adapter]
+                  ).map(
+                    // selected on the option: the adapter of a board from a file is an option only
+                    // once the list is drawn, after a value given to the select would be applied
+                    (adapter) =>
+                      html`<option value=${adapter} .selected=${adapter === profile.adapter}>
+                        ${adapter}
+                      </option>`,
+                  )}
                 </select>
                 ${PROFILE_NUMBERS.map(
                   ([field, label, spoken, min, max]) => html`
@@ -293,6 +354,14 @@ export async function manageProfiles(
           >
             ${tr('Restore Hidden Profiles')}
           </button>
+          <button type="button" @click=${() => void importFile()}>${tr('Import…')}</button>
+          <button
+            type="button"
+            ?disabled=${!profile}
+            @click=${() => profile && void exportFile(profile)}
+          >
+            ${tr('Export…')}
+          </button>
         </div>
         <div class="buttons">
           <button type="button" @click=${() => finish(false)}>${tr('Cancel')}</button>
@@ -306,6 +375,9 @@ export async function manageProfiles(
     true,
   );
 }
+
+/** Where a board definition from the PC is put for upstream to read: lms_bridge.PROFILE_FILE. */
+const PROFILE_FILE = '/tmp/board-profile.json';
 
 /** A profile as upstream keeps it: without what the dialog adds. */
 function strip(profile: Profile): Profile {

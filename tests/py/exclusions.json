@@ -1,6 +1,7 @@
 {
   "comment": "Upstream tests that do not run in Pyodide, each with its reason. Everything else must pass (tests/py/upstream-tests.mjs).",
   "files": {
+    "tests/manual": "suites run by hand on the desktop (pytest --manual), skipped there by default; they import PySide6 when loaded",
     "tests/test_arrange.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
     "tests/test_baseline.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
     "tests/test_blocks_manager.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
@@ -25,14 +26,19 @@
     "tests/test_sim_panel.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
     "tests/test_site.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
     "tests/test_theme.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
-    "tests/test_validation.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)"
+    "tests/test_validation.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)",
+    "tests/test_window_checks.py": "imports PySide6 when the file is loaded: tests of the Qt UI, or core tests in the same file as Qt ones (upstream request 4)"
   },
   "tests": {
     "tests/test_actions.py::test_helper_panel_is_translated": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
     "tests/test_blocks_generation.py::test_the_properties_panel_takes_a_pin_by_number_or_by_name": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
+    "tests/test_board_import.py::test_a_project_whose_board_was_deleted_opens_with_a_warning": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
+    "tests/test_board_import.py::test_the_import_and_export_buttons_ask_for_a_file": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
+    "tests/test_board_import.py::test_the_manager_imports_keeps_the_adapter_when_edited_exports_and_deletes": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
     "tests/test_device.py::test_upload_sends_the_user_modules_and_stop_forgets_them": "needs the native mpy-cross of runtime/out, not in the submodule; fails on the host as well",
     "tests/test_device_review3.py::test_console_reads_fragmented_utf8_and_opens_the_port_itself": "starts a thread, which Pyodide cannot; device/ is replaced by the Web Serial board stack (phase 6)",
     "tests/test_device_review3.py::test_console_write_sends_keys_in_small_pieces_and_stops_cleanly": "starts a thread, which Pyodide cannot; device/ is replaced by the Web Serial board stack (phase 6)",
+    "tests/test_fit_screen.py::test_the_main_window_and_the_large_dialogs_fit_the_screen": "uses the qtbot fixture of pytest-qt: a test of the Qt UI",
     "tests/test_gen_c.py::test_c_generation_covers_all_widget_types": "compiles C with make and the LVGL sources: native C build, left out by the owner",
     "tests/test_gen_c.py::test_deferred_page_callbacks_and_screen_loaded_at_runtime": "compiles C with make and the LVGL sources: native C build, left out by the owner",
     "tests/test_gen_c.py::test_fuzz_generated_c_compiles": "compiles C with make and the LVGL sources: native C build, left out by the owner",

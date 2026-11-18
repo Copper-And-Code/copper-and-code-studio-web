@@ -894,6 +894,77 @@ test('board profiles and blocks: managed, kept in the browser after a reload', a
   await d.getByRole('button', { name: 'Close' }).click();
 });
 
+test('board profiles from a file: export, import with an adapter of its own, kept after a reload', async ({
+  page,
+}) => {
+  page.on('dialog', (question) => void question.accept());
+  await start(page);
+  await menu(page, 'Device', 'Manage Board Profiles…');
+  const d = dialog(page);
+  const rows = d.getByTestId('profiles').locator('tbody tr');
+  await expect(rows).toHaveCount(3);
+  // Export…: the selected built-in board, as upstream's write_profile_file writes it
+  const downloaded = page.waitForEvent('download');
+  await d.getByRole('button', { name: 'Export…' }).click();
+  const file = await downloaded;
+  const builtin = JSON.parse(readFileSync(await file.path(), 'utf8')) as Record<string, unknown>;
+  expect(file.suggestedFilename()).toBe(`${String(builtin.id)}.json`);
+  expect(builtin.origin).toBeUndefined();
+
+  // the same id again is refused: a built-in board cannot be replaced from a file
+  const choose = async (profile: Record<string, unknown>) => {
+    const chooser = page.waitForEvent('filechooser');
+    await d.getByRole('button', { name: 'Import…' }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'board.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(profile)),
+    });
+  };
+  await choose(builtin);
+  await expect(d.getByRole('alert')).toContainText('is a built-in board');
+  await expect(rows).toHaveCount(3);
+
+  // a board the IDE does not ship, with an adapter it has no code for
+  await choose({
+    ...builtin,
+    id: 'my_file_board',
+    name: 'Board from a file',
+    adapter: 'my_adapter',
+  });
+  await expect(rows).toHaveCount(4);
+  const row = rows.filter({ hasText: 'Board from a file' });
+  await expect(row).toContainText('Imported');
+  await expect(row).toContainText('my_adapter');
+  await expect(row).toContainText('Valid');
+  await expect(d.locator('#profile-adapter')).toHaveValue('my_adapter');
+  // an edit keeps it imported
+  await d.locator('#profile-name').fill('Board from a file 2');
+  await d.locator('#profile-name').press('Enter');
+  await expect(rows.filter({ hasText: 'Board from a file 2' })).toContainText('Imported');
+  await d.getByRole('button', { name: 'Apply' }).click();
+  await expect(d).toHaveCount(0);
+
+  await page.reload();
+  await start(page);
+  await menu(page, 'Device', 'Manage Board Profiles…');
+  await expect(rows.filter({ hasText: 'Board from a file 2' })).toContainText('Imported');
+  // deleted, it is gone, not hidden
+  await rows.filter({ hasText: 'Board from a file 2' }).click();
+  await d.getByRole('button', { name: 'Delete' }).click();
+  await expect(rows).toHaveCount(3);
+  await d.getByRole('button', { name: 'Apply' }).click();
+  expect(
+    await page.evaluate(async () =>
+      (
+        (await window.lmsStudio.python.call('profiles_manager')) as { profiles: { id: string }[] }
+      ).profiles.map((p) => p.id),
+    ),
+  ).not.toContain('my_file_board');
+});
+
 /** A PNG of one colour, as upstream's write_png writes it. */
 function solidPng(width: number, height: number): Buffer {
   const crc = (data: Buffer) => {

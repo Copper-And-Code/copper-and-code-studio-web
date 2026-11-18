@@ -44,6 +44,8 @@ export interface Prompts {
   confirmReplace(name: string): Promise<boolean>;
   error(title: string, message: string): void;
   status(message: string): void;
+  /** A line in the Output panel. */
+  output?(text: string): void;
 }
 
 export interface Stores {
@@ -110,6 +112,9 @@ export class ProjectSession {
       return false;
     }
     addRecent(this.settings, location);
+    // main_files.py _warn_board_not_in_catalog
+    const notice = await this.python.call<string | null>('board_catalog_notice').catch(() => null);
+    if (notice) this.prompts.output?.(`${notice}\n`);
     capture.emit('project-opened', {
       store: location.store,
       path: location.path,
