@@ -120,7 +120,7 @@ export class Toolbox extends LitElement {
         .value=${this.search}
         @input=${(event: Event) => (this.search = (event.target as HTMLInputElement).value)}
       />
-      <ul role="listbox" aria-label=${tr('Toolbox')} data-testid="toolbox">
+      <ul role="listbox" aria-label=${tr('Toolbox')} data-testid="toolbox" data-capture="toolbox">
         ${this.visible().map(
           (category) => html`
             <li class="category" role="presentation">${category.label}</li>

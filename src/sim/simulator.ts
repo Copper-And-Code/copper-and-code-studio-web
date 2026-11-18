@@ -18,6 +18,16 @@ export interface SimStart {
   system: SimFile[];
   /** A project: the generated files. A program: its flash. */
   files: SimFile[];
+  /** Capture mode (docs/capture.md): frames out, a clock by steps, a fixed seed. */
+  capture?: SimCapture | null;
+}
+
+export interface SimCapture {
+  /** Every frame the program presents goes to SimEvents.captureFrame. */
+  frames: boolean;
+  /** manual: a project's clock moves only with step(ms). */
+  clock: 'real' | 'manual';
+  seed: number | null;
 }
 
 export interface FlashChange {
@@ -36,6 +46,8 @@ export interface SimEvents {
   frame?(pixels: Uint8Array | null): void;
   /** F5 or Shift+F5 pressed on the screen: the IDE's Start and Stop. */
   shortcut?(shift: boolean): void;
+  /** Capture mode: a frame the program presented, RGB565 as the runtime's frame buffer. */
+  captureFrame?(frame: { number: number; width: number; height: number; rgb565: Uint8Array }): void;
 }
 
 interface Runtime {
@@ -75,6 +87,8 @@ type FrameMessage =
   | { type: 'flash'; changed: SimFile[]; removed: string[] }
   | { type: 'frame'; pixels: Uint8Array | null }
   | { type: 'synced' }
+  | { type: 'capture-frame'; number: number; pixels: Uint8Array }
+  | { type: 'stepped'; now: number; frame: number }
   | { type: 'shortcut'; shift: boolean };
 
 export class Simulator {
@@ -196,9 +210,42 @@ export class Simulator {
         entry: start.entry,
         system: start.system,
         files: start.files,
+        capture: start.capture ?? null,
       },
       '*',
     );
+  }
+
+  private stepWaiter: { resolve: () => void; reject: (error: Error) => void } | null = null;
+
+  /**
+   * Capture mode with the manual clock: the project's clock moves by ms, LVGL runs once, and the
+   * promise resolves when the main loop is back at its poll, with the step's frames sent.
+   */
+  step(ms: number): Promise<void> {
+    const iframe = this.iframe;
+    if (!iframe || this.current?.mode !== 'project' || this.current.capture?.clock !== 'manual')
+      return Promise.reject(new Error('step: no project runs with the manual clock'));
+    if (this.stepWaiter) return Promise.reject(new Error('step: the previous step has not ended'));
+    if (this._state === 'ended' || this._state === 'failed')
+      return Promise.reject(new Error(`step: the simulator has ${this._state}`));
+    return new Promise<void>((resolve, reject) => {
+      this.stepWaiter = { resolve, reject };
+      iframe.contentWindow?.postMessage({ type: 'step', ms }, '*');
+    });
+  }
+
+  /** Capture mode with the manual clock: the pointer from the next step on, in display pixels. */
+  pointer(x: number, y: number, pressed: boolean): void {
+    this.iframe?.contentWindow?.postMessage({ type: 'pointer', pointer: [x, y, pressed] }, '*');
+  }
+
+  private endStep(error: Error | null): void {
+    const waiter = this.stepWaiter;
+    this.stepWaiter = null;
+    if (!waiter) return;
+    if (error) waiter.reject(error);
+    else waiter.resolve();
   }
 
   private readonly onMessage = (event: MessageEvent): void => {
@@ -236,6 +283,18 @@ export class Simulator {
       case 'synced':
         this.synced?.();
         break;
+      case 'capture-frame':
+        if (this.current)
+          this.events.captureFrame?.({
+            number: message.number,
+            width: this.current.width,
+            height: this.current.height,
+            rgb565: message.pixels,
+          });
+        break;
+      case 'stepped':
+        this.endStep(null);
+        break;
       case 'ended':
         this.tones.stop();
         this.setState('ended');
@@ -249,6 +308,8 @@ export class Simulator {
 
   private setState(state: SimState): void {
     this._state = state;
+    if (state !== 'running' && state !== 'starting')
+      this.endStep(new Error(`step: the simulator has ${state}`));
     this.events.state(state);
   }
 

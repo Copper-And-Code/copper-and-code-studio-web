@@ -61,6 +61,11 @@ export class PreviewRenderer {
     return this.running;
   }
 
+  /** Nothing drawn now or about to be: for lmsCapture.idle(). */
+  get idle(): boolean {
+    return !this.running && !this.scheduled && !this.dirty;
+  }
+
   onRendered(listener: (preview: Preview) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

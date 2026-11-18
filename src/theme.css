@@ -27,7 +27,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #17191d;
     --panel: #202328;
     --text: #e6e8eb;
@@ -46,6 +46,32 @@
     --code-module: #56d4dd;
     --code-error: #ff7b72;
   }
+}
+
+/* capture mode's theme=dark or theme=light (docs/capture.md): the same tokens, whatever the system */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17191d;
+  --panel: #202328;
+  --text: #e6e8eb;
+  --muted: #9aa1ad;
+  --border: #353a42;
+  --accent: #60a5fa;
+  --on-accent: #0b1220;
+  --selection: #23324d;
+  --danger: #f97066;
+  --canvas: #202020;
+  /* ui/theme.py CodeColors DARK */
+  --code-keyword: #6cb6ff;
+  --code-string: #8ddb8c;
+  --code-comment: #8b949e;
+  --code-number: #d2a8ff;
+  --code-module: #56d4dd;
+  --code-error: #ff7b72;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 html,

@@ -1,5 +1,6 @@
 // The IDE's dialogs, one at a time: questions with buttons, a line of text, and the file chooser
 // that stands in for the desktop's file dialog (a place, its folders, a file name).
+import { capture } from '../capture/hub.ts';
 import { LitElement, css, html, nothing } from 'lit';
 import { tr } from '../i18n/tr.ts';
 import {
@@ -367,12 +368,20 @@ export class Dialogs extends LitElement {
     const dialog = this.renderRoot.querySelector('dialog');
     if (dialog && !dialog.open) dialog.showModal();
     this.renderRoot.querySelector<HTMLElement>('[autofocus]')?.focus();
+    capture.emit('dialog-opened', { kind: this.current.kind, title: this.dialogTitle() });
+  }
+
+  /** The heading of the dialog shown, for the capture's events. */
+  private dialogTitle(): string {
+    return this.renderRoot.querySelector('#dialog-title')?.textContent?.trim() ?? '';
   }
 
   private finish(value: unknown): void {
     const request = this.current;
     if (!request) return;
+    const title = this.dialogTitle();
     this.renderRoot.querySelector('dialog')?.close();
+    capture.emit('dialog-closed', { kind: request.kind, title });
     this.current = null;
     if (request.kind === 'message') request.resolve(value);
     else if (request.kind === 'text') request.resolve(value as string | null);
@@ -722,6 +731,7 @@ export class Dialogs extends LitElement {
       body = this.renderChooser(request.options);
     }
     return html`<dialog
+      data-capture="dialog"
       class=${request?.kind === 'custom' && request.wide ? 'wide' : ''}
       aria-labelledby="dialog-title"
       @cancel=${(e: Event) => {

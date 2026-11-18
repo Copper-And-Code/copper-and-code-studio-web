@@ -101,6 +101,11 @@ export class PythonBridge {
     return () => this.listeners.delete(listener);
   }
 
+  /** Calls sent to the worker and not answered yet: for lmsCapture.idle(). */
+  get busy(): number {
+    return this.pending.size;
+  }
+
   call<T>(method: string, ...args: unknown[]): Promise<T> {
     const before = this.before;
     if (before)

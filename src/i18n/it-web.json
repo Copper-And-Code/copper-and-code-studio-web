@@ -58,6 +58,7 @@
   "Program running": "Programma in esecuzione",
   "Project tree": "Albero del progetto",
   "Python failed to start: {error}": "Python non è partito: {error}",
+  "Python {version} ready": "Python {version} pronto",
   "Python {version} ready in {seconds} s": "Python {version} pronto in {seconds} s",
   "Python: loading LVGL MPY Studio…": "Python: caricamento di LVGL MPY Studio…",
   "Python: starting…": "Python: avvio…",

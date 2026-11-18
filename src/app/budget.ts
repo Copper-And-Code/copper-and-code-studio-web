@@ -63,11 +63,23 @@ export class BudgetMonitor {
   schedule(limits: Limits): void {
     this.limits = limits;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.start(), DELAY_MS);
+    this.waiting = true;
+    this.timer = setTimeout(() => {
+      this.waiting = false;
+      void this.start();
+    }, DELAY_MS);
+  }
+
+  private waiting = false;
+
+  /** Nothing measured now or about to be: for lmsCapture.idle(). */
+  get idle(): boolean {
+    return !this.running && !this.waiting;
   }
 
   stop(): void {
     clearTimeout(this.timer);
+    this.waiting = false;
     this.dirty = false;
   }
 

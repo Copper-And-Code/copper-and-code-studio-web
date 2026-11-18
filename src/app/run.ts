@@ -17,6 +17,9 @@ import {
 } from '../storage/store.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 import type { MappedError } from './code.ts';
+import { capture } from '../capture/hub.ts';
+import { captureOptions } from '../capture/options.ts';
+import { rgb565ToRgba } from './preview.ts';
 import {
   type FlashChange,
   type SimFile,
@@ -100,6 +103,7 @@ async function sha12(text: string): Promise<string> {
 
 /** Where the flashes of the programs live: OPFS simulator/<key>/flash, as config_dir()/simulator. */
 async function flashRoot(): Promise<FileSystemDirectoryHandle | null> {
+  if (captureOptions.enabled) return null; // capture mode: flashes in memory, the user's untouched
   try {
     const root = await navigator.storage.getDirectory();
     return await root.getDirectoryHandle('simulator', { create: true });
@@ -136,6 +140,12 @@ export class RunController {
       },
       state: (state) => {
         view.state(state, this.simulator.mode === 'program');
+        const mode = this.simulator.mode;
+        if (mode === 'frame') return; // the first frame for a test, not a run
+        if (state === 'running') capture.emit('simulator-started', { mode });
+        else if (state === 'stopped') capture.emit('simulator-stopped', {});
+        else if (state === 'ended') capture.emit('simulator-ended', { mode });
+        else if (state === 'failed') capture.emit('simulator-failed', { mode });
         // ui/main_run.py: the terminal takes the focus, as a board's serial console
         if (state === 'running' && this.simulator.mode === 'program') view.focusTerminal();
       },
@@ -149,7 +159,29 @@ export class RunController {
         this.frameWaiter?.(pixels);
         this.frameWaiter = null;
       },
+      captureFrame: ({ number, width, height, rgb565 }) =>
+        capture.frame({
+          number,
+          width,
+          height,
+          pixels: rgb565ToRgba(rgb565, width, height).data,
+        }),
     });
+  }
+
+  /** Capture mode (docs/capture.md): what the simulator of a run is asked for. */
+  private capture(): SimStart['capture'] {
+    if (!captureOptions.enabled) return null;
+    return { frames: true, clock: captureOptions.clock, seed: captureOptions.seed };
+  }
+
+  /** Capture mode with the manual clock: one step of the project's clock. */
+  step(ms: number): Promise<void> {
+    return this.simulator.step(ms);
+  }
+
+  pointer(x: number, y: number, pressed: boolean): void {
+    this.simulator.pointer(x, y, pressed);
   }
 
   get running(): boolean {
@@ -186,7 +218,8 @@ export class RunController {
     this.transcript = '';
     this.trace = '';
     this.options.view.clearTerminal();
-    await this.simulator.start(start);
+    capture.last = null;
+    await this.simulator.start({ ...start, capture: this.capture() });
     view.status('');
     return true;
   }
@@ -335,6 +368,7 @@ export class RunController {
         entry: prepared.entry,
         system,
         files,
+        capture: this.capture(),
       });
       return true;
     } catch (error) {

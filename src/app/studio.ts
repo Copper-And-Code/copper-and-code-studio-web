@@ -1,5 +1,7 @@
 // The IDE's controller: the places where files live, the open project, the menus. The questions
 // and their wording are the desktop's (ui/main_files.py).
+import { captureOptions } from '../capture/options.ts';
+import { capture } from '../capture/hub.ts';
 import { applyLanguage } from '../i18n/retranslate.ts';
 import { LANGUAGES, language, tr } from '../i18n/tr.ts';
 import type { PythonBridge } from '../py/bridge.ts';
@@ -129,6 +131,12 @@ export class Studio {
   }
 
   show(tab: CenterTab): void {
+    const page = tab.startsWith('page:') ? tab.slice(5) : null;
+    if (tab !== this.tab && page)
+      capture.emit('page-changed', {
+        page,
+        name: this.session.state?.pages.find((p) => p.id === page)?.name ?? '',
+      });
     this.tab = tab;
     this.code.setActive(tab === 'code');
     this.designer?.setActive(this.currentPage());
@@ -858,18 +866,24 @@ export class Studio {
   }
 
   async start(): Promise<void> {
-    try {
-      this.addStore(await openWorkspace());
-    } catch (error) {
-      this.workspaceProblem = String(error instanceof Error ? error.message : error);
-      this.addStore(new MemoryStore('workspace', tr('Workspace (not kept)')));
+    if (captureOptions.enabled) {
+      // capture mode: a workspace of its own, gone with the page; the user's is not opened
+      this.addStore(new MemoryStore('workspace', tr('Workspace')));
+    } else {
+      try {
+        this.addStore(await openWorkspace());
+      } catch (error) {
+        this.workspaceProblem = String(error instanceof Error ? error.message : error);
+        this.addStore(new MemoryStore('workspace', tr('Workspace (not kept)')));
+      }
     }
     this.addStore(new ExamplesStore());
-    for (const folder of await savedFolders()) this.addStore(folder);
+    if (!captureOptions.enabled) for (const folder of await savedFolders()) this.addStore(folder);
     const saved = this.settings.get<Location | null>(FILES_FOLDER, null);
     if (saved && this.stores.has(saved.store)) this.filesFolder = saved;
     let config: FileStore;
     try {
+      if (captureOptions.enabled) throw new Error('capture mode');
       config = await openConfig();
     } catch {
       config = new MemoryStore('config', 'Configuration');

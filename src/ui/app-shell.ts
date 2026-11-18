@@ -1,3 +1,5 @@
+import { captureOptions } from '../capture/options.ts';
+import { capture } from '../capture/hub.ts';
 import { LitElement, css, html, nothing } from 'lit';
 import type { CenterTab, Studio } from '../app/studio.ts';
 import type { MappedError } from '../app/code.ts';
@@ -639,10 +641,19 @@ export class AppShell extends LitElement {
       raise: () => (this.bottom = 'device'),
       focusConsole: () => void this.updateComplete.then(() => console.focusTerminal()),
       progress: {
-        open: (rate, cancel) => progress.open(rate, cancel),
-        report: (sent, total, name, size) => progress.report(sent, total, name, size),
+        open: (rate, cancel) => {
+          capture.emit('upload-started', {});
+          progress.open(rate, cancel);
+        },
+        report: (sent, total, name, size) => {
+          capture.emit('upload-progress', { sent, total, name, size });
+          progress.report(sent, total, name, size);
+        },
         rate: () => progress.rate(),
-        finish: () => progress.finish(),
+        finish: () => {
+          capture.emit('upload-finished', {});
+          progress.finish();
+        },
       },
     };
   }
@@ -656,6 +667,9 @@ export class AppShell extends LitElement {
       case 'loading-upstream':
         return tr('Python: loading LVGL MPY Studio…');
       case 'ready':
+        // capture mode: no time in the text, so two captures show the same status bar
+        if (captureOptions.enabled)
+          return tr('Python {version} ready', { version: state.info.python });
         return tr('Python {version} ready in {seconds} s', {
           version: state.info.python,
           seconds: (state.info.startMs / 1000).toFixed(1),
@@ -698,6 +712,7 @@ export class AppShell extends LitElement {
       role="tab"
       id="tab-${this.tabId(tab)}"
       data-testid="tab-${this.tabId(tab)}"
+      data-capture="tab-${this.tabId(tab)}"
       aria-controls="panel-${this.tabId(tab)}"
       aria-selected=${selected ? 'true' : 'false'}
       tabindex=${selected ? 0 : -1}
@@ -796,6 +811,7 @@ export class AppShell extends LitElement {
             : nothing
         }
         <lms-code-editor
+          data-capture="file-editor"
           data-file=${tab.id}
           label=${tab.location.path}
           .provider=${(qualified: string) =>
@@ -982,6 +998,7 @@ export class AppShell extends LitElement {
         <dd>${doc.display.width}×${doc.display.height}</dd>
       </dl>
       <lms-project-tree
+        data-capture="project-tree"
         .tree=${this.projectTree(doc)}
         .modules=${doc.modules}
         .selected=${this.studio?.treeSelected ?? null}
@@ -1095,6 +1112,7 @@ export class AppShell extends LitElement {
           id="bottom-panel-output"
           aria-labelledby="bottom-output"
           data-testid="output"
+          data-capture="output"
           tabindex="0"
           ?hidden=${this.bottom !== 'output'}
         >
@@ -1131,6 +1149,7 @@ ${this.outputText}</pre>
             ? html`<span
                 class="budget level-${this.studio.budgetText.level}"
                 data-testid="budget"
+                data-capture="budget"
                 title=${this.studio.budgetText.tooltip}
                 >${this.studio.budgetText.text}</span
               >`
@@ -1151,7 +1170,9 @@ ${this.outputText}</pre>
               >`
             : nothing
         }
-        <span data-testid="python-status" role="status">${this.pythonStatus()}</span>
+        <span data-testid="python-status" data-capture="python-status" role="status"
+          >${this.pythonStatus()}</span
+        >
       </footer>
       <lms-upload-progress></lms-upload-progress>
       <lms-dialogs></lms-dialogs>

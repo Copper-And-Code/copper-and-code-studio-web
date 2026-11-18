@@ -21,6 +21,7 @@ host, Web Serial and the offline site; `docs/decisions.md` says why each piece i
 | Web version of a game                                         | `src/app/web.ts`, `public/preview/sw.js`                               |
 | Offline and installable                                       | `src/pwa/`, `scripts/sw-plugin.mjs`, `public/manifest.webmanifest`     |
 | Languages                                                     | `src/i18n/`, upstream's `translations/it.json`                         |
+| Capture mode for outside recorders (`docs/capture.md`)        | `src/capture/`, `src/sim/frame.js`                                     |
 
 ## Python
 

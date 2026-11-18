@@ -6,6 +6,7 @@
 //
 // The language is the desktop's setting "language" (Settings → Language). Without one, the
 // browser's language decides, as a web page is expected to do.
+import { captureOptions } from '../capture/options.ts';
 import upstreamIt from '../../upstream/lvgl_mpy_studio/translations/it.json';
 import { Settings } from '../storage/settings.ts';
 import webIt from './it-web.json';
@@ -32,6 +33,11 @@ function sourceOf(text: string): string {
 }
 
 function initial(): string {
+  // capture mode: the language of the URL, or English, never the user's or the browser's
+  if (captureOptions.enabled)
+    return captureOptions.lang && captureOptions.lang in LANGUAGES
+      ? captureOptions.lang
+      : DEFAULT_LANGUAGE;
   const saved = new Settings().get<string | null>('language', null);
   if (saved && saved in LANGUAGES) return saved;
   const browser = (globalThis.navigator?.language ?? '').slice(0, 2).toLowerCase();
@@ -59,6 +65,18 @@ export function tr(text: string, values: Record<string, string | number> = {}): 
   return translated.replace(/\{(\w+)\}/g, (match, key: string) =>
     key in values ? String(values[key]) : match,
   );
+}
+
+/**
+ * A stable name for a control, from its English text whatever the language: "Run Program…" is
+ * run-program. The capture mode's data-capture names of the menus (docs/capture.md).
+ */
+export function captureName(text: string): string {
+  const english = Object.values(catalogs).some((catalog) => text in catalog);
+  return (english ? text : sourceOf(text))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 /**

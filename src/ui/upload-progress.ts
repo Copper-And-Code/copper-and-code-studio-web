@@ -161,6 +161,7 @@ export class UploadProgress extends LitElement {
     return html`<dialog
       aria-labelledby="upload-title"
       data-testid="upload-progress"
+      data-capture="upload-progress"
       @cancel=${(event: Event) => this.cancel(event)}
     >
       <h3 id="upload-title">${tr('Uploading to the board')}</h3>

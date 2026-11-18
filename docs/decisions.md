@@ -463,3 +463,31 @@ checkout).
   code editor's area not reachable when read-only (the code is in the Tab order now).
 - **The code editor's colours are the desktop's** `ui/theme.py` `CodeColors`, as CSS variables for
   light and dark; CodeMirror's default style had dark blue keywords on the dark background.
+
+## Phase 10: capture hooks (2026-11-18)
+
+Asked by an outside video recorder that drives the IDE with Playwright; the contract is
+`docs/capture.md`.
+
+- **Off unless `?capture=1`.** The IDE in normal use runs none of it: no listeners, no frames sent,
+  the user's workspace and settings as before.
+- **No change upstream.** The runtime reads its clocks from the page (`performance.now()` for
+  lvsim, `Date.now()` for MicroPython) and its random numbers from `crypto.getRandomValues()`.
+  Replacing those three in the simulator's iframe, before the runtime loads, gives a clock that
+  moves only by steps and a fixed seed. On the Python side, a few lines before `import main`, as the
+  first-frame mode already did: `lvsim` in `sys.modules` through a wrapper whose `present()` hands
+  the frame buffer's address (`uctypes.addressof`) to the page, which copies it from the
+  WebAssembly memory; `display_driver.poll()` waiting for the next step; `time.sleep*()` moving the
+  clock. Generated code and upstream files stay as they are.
+- **The frame buffer, not the canvas.** The simulator draws with WebGL, and reading its canvas from
+  outside needs `preserveDrawingBuffer`. The RGB565 buffer is what upstream's `build/visual.py`
+  compares, and the same conversion gives RGBA.
+- **A pointer by steps.** The mouse reaches the runtime through SDL in real time, so a click between
+  two steps may be lost or land a step later. `pointer(x, y, pressed)` sets what the project reads at
+  the next step, in display pixels, whatever the zoom.
+- **Stable names from the English text.** `data-capture` of a menu item is made from its English
+  text, found back from the translation as `tr()` does, so the names are the same in every language
+  without a list to keep.
+- **Not done yet**: the demonstration board (point 6 of the request, "later"), the browser's
+  tooltips, and the manual clock for programs without pages, whose loop is upstream's
+  `lms_web_boot.py`.

@@ -1,5 +1,6 @@
 // The Simulator tab, as upstream's ui/sim_panel.py: the screen, and under it, for a program
 // without pages, the terminal that is its serial port. The status line says what runs.
+import { captureOptions } from '../capture/options.ts';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import xtermCss from '@xterm/xterm/css/xterm.css?inline';
@@ -69,6 +70,7 @@ export class SimPanel extends LitElement {
     super();
     this.screen.className = 'screen';
     this.screen.dataset.testid = 'sim-screen';
+    this.screen.dataset.capture = 'sim-screen';
   }
 
   override firstUpdated(): void {
@@ -76,7 +78,7 @@ export class SimPanel extends LitElement {
     if (!host) return;
     const terminal = new Terminal({
       convertEol: true, // a board's print ends lines with LF; the desktop terminal adds the CR
-      cursorBlink: true,
+      cursorBlink: !captureOptions.enabled,
       fontSize: 13,
       scrollback: 2000,
       theme: { background: '#000000' },
@@ -124,7 +126,12 @@ export class SimPanel extends LitElement {
   override render() {
     return html`
       ${this.screen}
-      <div class="terminal" data-testid="sim-terminal" aria-label=${tr('Terminal')}></div>
+      <div
+        class="terminal"
+        data-testid="sim-terminal"
+        data-capture="sim-terminal"
+        aria-label=${tr('Terminal')}
+      ></div>
       <div class="status" role="status" data-testid="sim-status">${this.status}</div>
     `;
   }

@@ -5,6 +5,7 @@
 // Upstream reads and writes the project through Python's file system. Before each operation
 // that looks at the file on disk, the session copies the file from its store into Pyodide's file
 // system (or removes it there, if it is gone); after a save it copies the result back.
+import { capture } from '../capture/hub.ts';
 import { tr } from '../i18n/tr.ts';
 import { PythonCallError, type PythonBridge } from '../py/bridge.ts';
 import { addRecent } from '../storage/recent.ts';
@@ -109,6 +110,11 @@ export class ProjectSession {
       return false;
     }
     addRecent(this.settings, location);
+    capture.emit('project-opened', {
+      store: location.store,
+      path: location.path,
+      name: this.state?.projectName ?? '',
+    });
     return true;
   }
 

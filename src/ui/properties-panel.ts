@@ -319,7 +319,7 @@ export class PropertiesPanel extends LitElement {
         <option value="category">${tr('By Category')}</option>
         <option value="alphabetical">${tr('Alphabetical')}</option>
       </select>
-      <table data-testid="properties">
+      <table data-testid="properties" data-capture="properties">
         <thead>
           <tr>
             <th scope="col">${tr('Properties')}</th>
@@ -335,7 +335,7 @@ export class PropertiesPanel extends LitElement {
     const view = this.controller?.propertiesView;
     const widget = view?.names.length === 1 ? view.names[0] : undefined;
     if (!widget || !view) return html`<p class="empty">${tr('No selection')}</p>`;
-    return html`<table class="events" data-testid="events">
+    return html`<table class="events" data-testid="events" data-capture="events">
       <thead>
         <tr>
           <th scope="col">${tr('Event')}</th>

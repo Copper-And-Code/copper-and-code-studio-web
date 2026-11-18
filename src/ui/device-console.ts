@@ -1,6 +1,7 @@
 // The Device Console, as upstream's DeviceConsole (ui/device_panel.py): a terminal that sends each
 // key to the board as it is typed, Ctrl-C and Ctrl-D buttons, Clear, and Cancel operation while
 // the IDE uses the board. Messages of the IDE are grey, so they are not taken for the board's.
+import { captureOptions } from '../capture/options.ts';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import xtermCss from '@xterm/xterm/css/xterm.css?inline';
@@ -64,7 +65,7 @@ export class DeviceConsole extends LitElement {
     if (!host) return;
     const terminal = new Terminal({
       convertEol: true, // a lone LF becomes CR LF, as on a serial terminal
-      cursorBlink: true,
+      cursorBlink: !captureOptions.enabled,
       fontSize: 13,
       scrollback: 5000,
       theme: { background: '#000000' },
@@ -136,7 +137,12 @@ export class DeviceConsole extends LitElement {
             </div>`
           : nothing
       }
-      <div class="terminal" data-testid="device-terminal" aria-label=${tr('Device Console')}></div>
+      <div
+        class="terminal"
+        data-testid="device-terminal"
+        data-capture="device-console"
+        aria-label=${tr('Device Console')}
+      ></div>
       <div class="row">
         <button
           type="button"

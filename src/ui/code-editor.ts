@@ -1,5 +1,6 @@
 // The editor of the Code tab and of file tabs, as upstream's ui/code/editor.py CodeEditor:
 // Python highlighting, line numbers, completion, the lines with errors marked.
+import { captureOptions } from '../capture/options.ts';
 import {
   type Completion,
   type CompletionContext,
@@ -202,7 +203,8 @@ export class CodeEditor extends LitElement {
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),
-        drawSelection(),
+        // capture mode: a cursor that does not blink, the same in every frame
+        drawSelection(captureOptions.enabled ? { cursorBlinkRate: 0 } : {}),
         indentOnInput(),
         indentUnit.of('    '),
         bracketMatching(),

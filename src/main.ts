@@ -1,4 +1,6 @@
 import { Studio } from './app/studio.ts';
+import { applyCaptureLook, installCapture } from './capture/api.ts';
+import { captureOptions } from './capture/options.ts';
 import { PythonBridge } from './py/bridge.ts';
 import { language } from './i18n/tr.ts';
 import { registerApp } from './pwa/pwa.ts';
@@ -6,6 +8,7 @@ import { Settings } from './storage/settings.ts';
 import './ui/app-shell.ts';
 
 document.documentElement.lang = language();
+if (captureOptions.enabled) applyCaptureLook();
 
 // The UI starts at once; Python loads in its worker meanwhile.
 const python = new PythonBridge();
@@ -45,8 +48,10 @@ if (shell) {
       updateReady: (apply) => (shell.applyUpdate = apply),
       offlineReady: () => shell.offlineReady(),
     });
-  python.ready.then(pwa, pwa);
+  // capture mode: no update offered in the middle of a recording
+  if (!captureOptions.enabled) python.ready.then(pwa, pwa);
   window.lmsStudio.studio = studio;
+  if (captureOptions.enabled) installCapture(studio, shell, python);
   window.lmsStudio.started = studio.start();
   // In the capture phase: the terminal keeps the keys it handles from bubbling up.
   window.addEventListener(

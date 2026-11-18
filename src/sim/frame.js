@@ -10,10 +10,11 @@
 // docs/decisions.md, phase 3, says why this page does not load those two files as they are.
 
 /** @typedef {[string, Uint8Array]} SimFile */
+/** @typedef {{ frames: boolean, clock: 'real' | 'manual', seed: number | null }} Capture */
 /**
  * @typedef {{ type: 'start', mode: 'project' | 'program' | 'frame', mjs: string,
  *   wasm: ArrayBuffer, width: number, height: number, board: string, entry: string,
- *   system: SimFile[], files: SimFile[] }} Start
+ *   system: SimFile[], files: SimFile[], capture: Capture | null }} Start
  */
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('canvas'));
@@ -247,6 +248,146 @@ _d._flush = _first
 _d.poll = lambda: not _done and _poll()
 `;
 
+// ---- capture mode (docs/capture.md): frames, a clock that moves by steps, a fixed seed ----
+// The runtime reads its clocks from the page: performance.now() for lvsim (LVGL's tick) and
+// Date.now() for MicroPython's time; random numbers come from crypto.getRandomValues(). With the
+// manual clock both clocks stand still between two steps; with a seed the random numbers are a
+// fixed sequence. Both are set before the runtime loads.
+/** @type {any} */
+let wasmModule = null;
+let virtualMs = 0;
+/** @type {number | null} */
+let stepMs = null;
+let stepping = false;
+let frameNumber = 0;
+let frameSize = 0;
+
+const VIRTUAL_EPOCH = Date.UTC(2026, 0, 1);
+
+function manualClock() {
+  performance.now = () => virtualMs;
+  Date.now = () => VIRTUAL_EPOCH + virtualMs;
+}
+
+/** mulberry32: a small generator, the same numbers for the same seed in every engine. */
+/** @param {number} seed */
+function fixedRandom(seed) {
+  let state = seed >>> 0;
+  const next = () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return (t ^ (t >>> 14)) >>> 0;
+  };
+  Math.random = () => next() / 4294967296;
+  crypto.getRandomValues = /** @type {any} */ (
+    (/** @type {ArrayBufferView} */ array) => {
+      const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+      for (let index = 0; index < bytes.length; index++) bytes[index] = next() & 0xff;
+      return array;
+    }
+  );
+}
+
+// What the Python side of capture calls (CAPTURE below), through the js module.
+/** @type {any} */ (window).lmsCapturePresent = (/** @type {number} */ address) => {
+  if (!wasmModule || !frameSize) return;
+  const pixels = wasmModule.HEAPU8.slice(address, address + frameSize);
+  frameNumber++;
+  post({ type: 'capture-frame', number: frameNumber, pixels }, [pixels.buffer]);
+};
+/** @type {any} */ (window).lmsCaptureGo = () => {
+  if (stepMs === null) return false;
+  virtualMs += stepMs;
+  stepMs = null;
+  stepping = true;
+  return true;
+};
+/** @type {any} */ (window).lmsCaptureStepped = () => {
+  if (!stepping) return;
+  stepping = false;
+  flushOutput();
+  post({ type: 'stepped', now: virtualMs, frame: frameNumber });
+};
+/** @type {[number, number, boolean] | null} the pointer lmsCapture.pointer() set, for the next step */
+let pointer = null;
+/** @type {any} */ (window).lmsCapturePointer = () =>
+  pointer ? 1 + (pointer[2] ? 1 : 0) + 2 * (pointer[0] + 65536 * pointer[1]) : 0;
+/** @type {any} */ (window).lmsCaptureSleep = (/** @type {number} */ ms) => {
+  virtualMs += Math.max(0, Math.floor(ms));
+};
+
+/**
+ * Before the program: lvsim through sys.modules, so every present() hands the frame buffer to the
+ * page; with the manual clock, display_driver.poll() waits for the next step and time.sleep*()
+ * moves the clock instead of waiting; with a seed, random.seed(N) as well.
+ * @param {Capture} capture @param {boolean} project
+ */
+function capturePrelude(capture, project) {
+  let code = `
+import sys, js
+import lvsim as _lvsim
+try:
+    from uctypes import addressof as _address
+except ImportError:
+    _address = None
+class _Lvsim:
+    def __getattr__(self, name):
+        return getattr(_lvsim, name)
+    def present(self):
+        _lvsim.present()
+        d = sys.modules.get("display_driver")
+        b = getattr(d, "_buffer", None)
+        if _address and b is not None:
+            js.lmsCapturePresent(_address(b))
+sys.modules["lvsim"] = _Lvsim()
+`;
+  if (capture.seed !== null) {
+    code += `
+try:
+    import random as _random
+    _random.seed(${Number(capture.seed)})
+except ImportError:
+    pass
+`;
+  }
+  if (capture.clock === 'manual') {
+    code += `
+import time as _time
+class _Time:
+    def __getattr__(self, name):
+        return getattr(_time, name)
+    def sleep(self, seconds):
+        js.lmsCaptureSleep(int(seconds * 1000))
+    def sleep_ms(self, ms):
+        js.lmsCaptureSleep(ms)
+    def sleep_us(self, us):
+        js.lmsCaptureSleep(us // 1000)
+sys.modules["time"] = sys.modules["utime"] = _Time()
+`;
+    if (project) {
+      code += `
+import display_driver as _d
+_real_poll = _d.poll
+def _step_poll():
+    js.lmsCaptureStepped()
+    while not js.lmsCaptureGo():
+        if not _lvsim.wait(1):
+            return False
+    running = _real_poll()
+    p = js.lmsCapturePointer()
+    if p:
+        p -= 1
+        _d._state = (p >> 1 & 0xFFFF, p >> 17, p & 1) + tuple(_d._state[3:])
+    return running
+_d.poll = _step_poll
+`;
+    }
+  }
+  return code;
+}
+
 /** @param {string} body */
 const guarded = (body) =>
   `try:\n${body.replace(/^/gm, ' ')}\nexcept BaseException as e:\n import sys\n sys.print_exception(e)\n`;
@@ -257,6 +398,10 @@ async function begin(start) {
   canvas.width = start.width;
   canvas.height = start.height;
   document.documentElement.style.setProperty('--ratio', `${start.width} / ${start.height}`);
+  const capture = start.capture;
+  if (capture?.clock === 'manual' && start.mode === 'project') manualClock();
+  if (capture?.seed !== null && capture?.seed !== undefined) fixedRandom(capture.seed);
+  frameSize = capture?.frames ? start.width * start.height * 2 : 0;
   const mjs = URL.createObjectURL(new Blob([start.mjs], { type: 'text/javascript' }));
   const wasm = URL.createObjectURL(new Blob([start.wasm], { type: 'application/wasm' }));
   await import(/* @vite-ignore */ mjs);
@@ -271,6 +416,9 @@ async function begin(start) {
   });
   const Module = mp._module;
   Module.canvas = canvas;
+  wasmModule = Module;
+  const prelude =
+    capture && start.mode !== 'frame' ? capturePrelude(capture, start.mode === 'project') : '';
   FS = mp.FS;
   let code;
   if (start.mode === 'program') {
@@ -288,13 +436,13 @@ async function begin(start) {
     known = walkFlash(FLASH, new Map());
     setInterval(syncFlash, FLASH_SYNC_MS);
     // The boot runs a REPL after the program, so it ends only on an error, which Python prints.
-    code = guarded('import lms_web_boot');
+    code = guarded(`${prelude}import lms_web_boot`);
   } else {
     for (const [name, data] of start.files) {
       makeFolders(FS, '/' + name);
       FS.writeFile('/' + name, data);
     }
-    code = guarded(`${start.mode === 'frame' ? FIRST_FRAME : ''}import main\nmain.main()`);
+    code = guarded(`${start.mode === 'frame' ? FIRST_FRAME : prelude}import main\nmain.main()`);
   }
   running = true;
   post({ type: 'running' });
@@ -327,6 +475,11 @@ window.addEventListener('message', (event) => {
     });
   } else if (message?.type === 'keys' && typeof message.data === 'string') {
     if (running && mode === 'program') keys += message.data;
+  } else if (message?.type === 'pointer' && Array.isArray(message.pointer)) {
+    const [x, y, pressed] = message.pointer;
+    pointer = [Math.max(0, Math.floor(x)) & 0xffff, Math.max(0, Math.floor(y)) & 0xffff, !!pressed];
+  } else if (message?.type === 'step' && typeof message.ms === 'number') {
+    stepMs = (stepMs ?? 0) + Math.max(0, Math.floor(message.ms));
   } else if (message?.type === 'sync') {
     syncFlash();
     flushOutput();

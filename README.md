@@ -49,6 +49,7 @@ Node 22.12 or later, and pnpm, at the version in `package.json`.
 - [`docs/architecture.md`](docs/architecture.md): how the pieces fit
 - [`docs/decisions.md`](docs/decisions.md): decisions and why
 - [`docs/upstream-requests.md`](docs/upstream-requests.md): changes proposed to the desktop IDE
+- [`docs/capture.md`](docs/capture.md): the capture mode, for programs that record the IDE
 
 ## Licence
 

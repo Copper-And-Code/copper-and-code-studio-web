@@ -351,7 +351,7 @@ export class CodePanel extends LitElement {
           : nothing
       }
       <div class="work">
-        <lms-code-editor label=${tr('Code')}></lms-code-editor>
+        <lms-code-editor label=${tr('Code')} data-capture="code-editor"></lms-code-editor>
         ${this.renderHelper()}
       </div>
       ${

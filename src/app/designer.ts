@@ -119,6 +119,11 @@ export class DesignerController {
   dragging: string | null = null;
   private toolboxEntries: Promise<ToolboxCategory[]> | null = null;
   private readonly renderer: PreviewRenderer;
+
+  /** No page being drawn or about to be: for lmsCapture.idle(). */
+  get idle(): boolean {
+    return this.renderer.idle;
+  }
   private readonly listeners = new Set<() => void>();
   private loading = Promise.resolve();
   /** How many times the pages were read again after a change: for tests that wait for one. */

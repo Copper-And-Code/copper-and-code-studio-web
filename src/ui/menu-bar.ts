@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from 'lit';
-import { tr } from '../i18n/tr.ts';
+import { captureName, tr } from '../i18n/tr.ts';
 
 export type MenuItem =
   | { separator: true }
@@ -278,7 +278,8 @@ export class MenuBar extends LitElement {
     event.preventDefault();
   }
 
-  private renderItems(items: MenuItem[], label: string, sub: boolean): unknown {
+  /** path: the data-capture name of the menu, as menu-run or menu-file.recent-files. */
+  private renderItems(items: MenuItem[], label: string, sub: boolean, path: string): unknown {
     if (items.length === 0) return html`<div class="empty">${tr('(empty)')}</div>`;
     return items.map((item, index) =>
       isEntry(item)
@@ -288,6 +289,7 @@ export class MenuBar extends LitElement {
               role=${item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
               aria-checked=${item.checked === undefined ? nothing : String(item.checked)}
               data-id=${item.id ?? nothing}
+              data-capture=${`${path}.${captureName(item.label)}`}
               data-sub=${item.items ? '1' : nothing}
               aria-haspopup=${item.items ? 'menu' : nothing}
               aria-keyshortcuts=${item.shortcut?.replace(/Ctrl/g, 'Control') ?? nothing}
@@ -308,7 +310,12 @@ export class MenuBar extends LitElement {
             ${
               !sub && this.submenu?.index === index
                 ? html`<div role="menu" aria-label=${item.label}>
-                    ${this.renderItems(this.submenu.items, item.label, true)}
+                    ${this.renderItems(
+                      this.submenu.items,
+                      item.label,
+                      true,
+                      `${path}.${captureName(item.label)}`,
+                    )}
                   </div>`
                 : nothing
             }
@@ -334,6 +341,7 @@ export class MenuBar extends LitElement {
           <button
             type="button"
             role="menuitem"
+            data-capture=${`menu-${captureName(menu.label)}`}
             tabindex=${index === this.current ? '0' : '-1'}
             aria-haspopup="menu"
             title=${menu.title ?? nothing}
@@ -346,7 +354,12 @@ export class MenuBar extends LitElement {
           ${
             this.open === index
               ? html`<div role="menu" aria-label=${menu.label}>
-                  ${this.renderItems(menu.items(), menu.label, false)}
+                  ${this.renderItems(
+                    menu.items(),
+                    menu.label,
+                    false,
+                    `menu-${captureName(menu.label)}`,
+                  )}
                 </div>`
               : nothing
           }

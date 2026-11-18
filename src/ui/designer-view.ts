@@ -849,6 +849,7 @@ export class DesignerView extends LitElement {
             @dblclick=${this.doubleClick}
             @contextmenu=${this.contextMenu}
             data-testid="canvas"
+            data-capture="designer-canvas"
             viewBox="${-MARGIN} ${-MARGIN} ${sceneWidth} ${sceneHeight}"
             width=${sceneWidth * zoom}
             height=${sceneHeight * zoom}
