@@ -147,6 +147,32 @@ export class AppShell extends LitElement {
     [role='tabpanel'][hidden] {
       display: none;
     }
+    /* the demonstration board: its screen, and a line that says it is no hardware */
+    #panel-demo-board {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 6px;
+      background: #101318;
+      color: #e6e8eb;
+    }
+    #panel-demo-board[hidden] {
+      display: none;
+    }
+    .demo-note {
+      margin: 0;
+      font-size: 13px;
+    }
+    .demo-screen {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .demo-screen iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
     /* the column does not grow with its contents: each part scrolls inside its own share, and
        the board's row stays at the bottom, in sight */
     .left {
@@ -457,6 +483,13 @@ export class AppShell extends LitElement {
     }
   `;
 
+  /** Where the demonstration board shows its display (src/board/demo-board.ts). */
+  get demoScreen(): HTMLElement {
+    const host = this.renderRoot.querySelector<HTMLElement>('.demo-screen');
+    if (!host) throw new Error('The shell is not rendered yet');
+    return host;
+  }
+
   get simPanel(): SimPanel {
     const panel = this.renderRoot.querySelector('lms-sim-panel');
     if (!panel) throw new Error('The shell is not rendered yet');
@@ -562,7 +595,7 @@ export class AppShell extends LitElement {
             this.requestUpdate();
           }
           if (!studio.device) {
-            const device = studio.attachDevice(this.deviceView());
+            const device = studio.attachDevice(this.deviceView(), this.demoScreen);
             this.deviceConsole.onKeys = (data) => device.write(data);
             this.deviceConsole.onCancel = () => device.cancel();
           }
@@ -725,7 +758,8 @@ export class AppShell extends LitElement {
   private centerTabs(): CenterTab[] {
     const pages = this.doc?.pages.map((page) => `page:${page.id}` as CenterTab) ?? [];
     const files = this.studio?.files.tabs.map((tab) => `file:${tab.id}` as CenterTab) ?? [];
-    return [...pages, 'code', 'simulator', ...files];
+    const demo: CenterTab[] = this.studio?.device?.demo ? ['demo-board'] : [];
+    return [...pages, 'code', 'simulator', ...demo, ...files];
   }
 
   private renderPagePanels() {
@@ -1047,6 +1081,7 @@ export class AppShell extends LitElement {
           <div role="tablist" @keydown=${this.tabKeys}>
             ${this.doc?.pages.map((page) => this.renderTab(`page:${page.id}`, page.name)) ?? nothing}
             ${this.renderTab('code', tr('Code'))} ${this.renderTab('simulator', tr('Simulator'))}
+            ${this.studio?.device?.demo ? this.renderTab('demo-board', tr('Demo board (simulated)')) : nothing}
             ${this.renderFileTabs()}
           </div>
           ${this.renderPagePanels()}
@@ -1069,6 +1104,19 @@ export class AppShell extends LitElement {
             ?hidden=${this.tab !== 'simulator'}
           >
             <lms-sim-panel></lms-sim-panel>
+          </div>
+          <div
+            role="tabpanel"
+            id="panel-demo-board"
+            aria-labelledby="tab-demo-board"
+            ?hidden=${this.tab !== 'demo-board'}
+          >
+            <p class="demo-note" role="note">
+              ${tr(
+                'A simulated board, not hardware: it runs what the IDE uploads, with the same MicroPython as the simulator, and behaves as the board of the project.',
+              )}
+            </p>
+            <div class="demo-screen" data-capture="demo-board-screen"></div>
           </div>
           ${this.renderFilePanels()}
         </section>

@@ -42,6 +42,8 @@ interface LmsCapture {
   onFrame(listener: (frame: CaptureFrame) => void): () => void; // returns unsubscribe
   onEvent(listener: (event: CaptureEvent) => void): () => void;
   frame(): CaptureFrame | null; // the last frame of the run
+  onBoardFrame(listener: (frame: CaptureFrame) => void): () => void; // the demo board
+  boardFrame(): CaptureFrame | null; // its last frame
   step(ms: number): Promise<CaptureFrame | null>; // clock=manual
   pointer(x: number, y: number, pressed: boolean): void; // clock=manual
   idle(timeoutMs?: number): Promise<void>; // default 30 000 ms
@@ -57,6 +59,22 @@ interface CaptureFrame {
 
 The object is there once the shell has started; `window.lmsStudio.started` resolves when the first
 project is ready.
+
+### The demonstration board
+
+Device → **Connect to Demo Board** (`menu-device.connect-to-demo-board`) connects to a board
+without hardware: the browser's MicroPython in an iframe, as the project's board profile (its
+resolution and the modules its firmware must have), behind an object with the shape of a Web
+Serial port. Everything between is the IDE's own: BoardPort, the Python worker, mpremote and
+upstream's DeviceSession, so the real flow shows: Connect, Device Information, Upload and Run,
+Stop, Restart Interpreter (a soft reset keeps the flash), the Device Console and its REPL. It is
+in every mode, not only in capture mode; it needs JSPI, as the board does (Chromium).
+
+Its display is the centre tab **Demo board (simulated)** (`tab-demo-board`, the screen
+`demo-board-screen`), with a line saying it is a simulated board. In capture mode each frame it
+presents reaches `onBoardFrame`, as RGBA at the profile's resolution; `number` counts from 1 on
+each page load. Its clock is real: `step()` and `pointer()` are the simulator's. Its flash lasts as
+long as the page.
 
 ### Frames
 
@@ -147,13 +165,13 @@ and Stop are `menu-run.start` and `menu-run.stop`.
 
 ## Not yet
 
-- A demonstration board without hardware (request point 6).
 - The browser's tooltips in capture mode.
 - `machine.Timer` and a program without pages under the manual clock.
 
 ## Versions
 
-- **1** (phase 10): first version.
+- **1** (phase 10): first version; later in the same version, the demonstration board's
+  `onBoardFrame` and `boardFrame` (additions only).
 
 Tested by `tests/e2e/capture.spec.ts` on Chromium, Firefox and WebKit: with
 `capture=1&clock=manual&seed=1` the fifteen runs 60 steps of 33 ms, with Play tapped, and two runs

@@ -31,6 +31,9 @@ export function portKey(port: SerialPort): string {
 }
 
 export function portLabel(port: SerialPort): string {
+  // the demonstration board names itself (demo-board.ts)
+  const own = (port as { label?: unknown }).label;
+  if (typeof own === 'string') return own;
   const key = portKey(port);
   return key ? `USB ${key}` : 'Serial port';
 }
@@ -41,6 +44,8 @@ export class BoardPort {
   /** The name DeviceSession knows the port by. */
   readonly name = `webserial:${++opened}`;
   readonly label: string;
+  /** The demonstration board, not hardware (demo-board.ts). */
+  readonly demo: boolean;
   /** Where the bytes go: the worker during an operation, else the console. */
   private toWorker = false;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -58,6 +63,7 @@ export class BoardPort {
     private readonly python: PythonBridge,
   ) {
     this.label = portLabel(port);
+    this.demo = (port as { demo?: unknown }).demo === true;
     this.stopListening = python.onSerial((message) => this.fromWorker(message));
   }
 

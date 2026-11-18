@@ -18,6 +18,7 @@ host, Web Serial and the offline site; `docs/decisions.md` says why each piece i
 | Simulator host: sandboxed iframe with the WebAssembly runtime | `src/sim/`, `src/app/run.ts`, `src/ui/sim-panel.ts`                    |
 | Page designer: a canvas per page, Real LVGL Preview           | `src/app/designer.ts`, `src/app/preview.ts`, `src/ui/designer-view.ts` |
 | Board: Web Serial, upstream's DeviceSession in Pyodide        | `src/board/`, `src/app/device.ts`, `py/lms_board.py`, `py/serial/`     |
+| The demonstration board: a port without hardware              | `src/board/demo-board.ts`, `src/board/demo-frame.js`                   |
 | Web version of a game                                         | `src/app/web.ts`, `public/preview/sw.js`                               |
 | Offline and installable                                       | `src/pwa/`, `scripts/sw-plugin.mjs`, `public/manifest.webmanifest`     |
 | Languages                                                     | `src/i18n/`, upstream's `translations/it.json`                         |

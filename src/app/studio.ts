@@ -1,5 +1,7 @@
 // The IDE's controller: the places where files live, the open project, the menus. The questions
 // and their wording are the desktop's (ui/main_files.py).
+import { type BoardFile, DemoBoard } from '../board/demo-board.ts';
+import { rgb565ToRgba } from './preview.ts';
 import { captureOptions } from '../capture/options.ts';
 import { capture } from '../capture/hub.ts';
 import { applyLanguage } from '../i18n/retranslate.ts';
@@ -44,7 +46,7 @@ import { WebPublisher } from './web.ts';
 const reported = () => {};
 
 /** What the center shows: a page's canvas, the Code tab, the simulator, or a file tab by id. */
-export type CenterTab = `page:${string}` | 'code' | 'simulator' | `file:${number}`;
+export type CenterTab = `page:${string}` | 'code' | 'simulator' | 'demo-board' | `file:${number}`;
 const FILES_FOLDER = 'files/folder';
 
 const isProject = (name: string) => name.toLowerCase().endsWith('.json');
@@ -931,8 +933,51 @@ export class Studio {
     return this.run;
   }
 
+  private demoBoard: DemoBoard | null = null;
+
+  /** Device → Connect to Demo Board: the board powered on as the project's board profile. */
+  private async powerDemoBoard(host: HTMLElement): Promise<SerialPort | null> {
+    const config = await this.python.call<{
+      id: string;
+      width: number;
+      height: number;
+      modules: string[];
+      system: string[];
+    } | null>('demo_board');
+    if (!config) return null;
+    const system: BoardFile[] = [];
+    for (const path of config.system) {
+      const data = await this.python.readFile(path);
+      if (data) system.push([baseName(path), data]);
+    }
+    this.demoBoard?.dispose();
+    this.demoBoard = new DemoBoard(
+      host,
+      {
+        board: config.id,
+        width: config.width,
+        height: config.height,
+        modules: config.modules,
+        system,
+      },
+      capture.enabled
+        ? {
+            frame: (rgb565, width, height) =>
+              capture.boardFrame({
+                width,
+                height,
+                number: 0,
+                pixels: rgb565ToRgba(rgb565, width, height).data,
+              }),
+          }
+        : {},
+    );
+    // the shape of a Web Serial port: BoardPort opens it as any other
+    return this.demoBoard as unknown as SerialPort;
+  }
+
   /** The Device Console and the upload's progress of the shell. */
-  attachDevice(view: DeviceView): DeviceController {
+  attachDevice(view: DeviceView, demoScreen?: HTMLElement): DeviceController {
     this.device = new DeviceController(this.python, this.session, this.settings, view, {
       appendError: (text) => this.appendError(text),
       addErrors: (rows) => this.setErrors([...this.errors, ...rows]),
@@ -955,12 +1000,16 @@ export class Studio {
       reloadBoardFolder: () => this.refreshBoardFiles(),
       output: (text) => this.output(`${text}\n`),
       saveConfig: () => this.config?.save() ?? Promise.resolve(),
+      ...(demoScreen ? { demoBoard: () => this.powerDemoBoard(demoScreen) } : {}),
     });
     const device = this.device;
     let connected = false;
     device.onChange(() => {
       if (device.connected !== connected) {
         connected = device.connected;
+        // the demonstration board's tab comes and goes with it
+        if (connected && device.demo) this.show('demo-board');
+        else if (!connected && this.tab === 'demo-board') this.show('code');
         this.boardRevision++; // the board's view is read again, or emptied
         this.boardSelection = null;
       }
@@ -1634,7 +1683,8 @@ export class Studio {
 
   /** ui/main_window.py, the Device menu, enabled as _update_device_actions says. */
   private deviceItems(device: DeviceController, ready: boolean): MenuItem[] {
-    const board = ready && this.onBoard && device.available;
+    // a board through Web Serial, or the demonstration board, which needs no port
+    const board = ready && this.onBoard && (device.available || device.demo);
     const busy = device.busy;
     const connected = device.connected;
     const notice: MenuItem[] = device.available
@@ -1661,6 +1711,12 @@ export class Studio {
         id: 'device-connect',
         disabled: busy || !(connected || board),
         action: () => void device.connectDisconnect(),
+      },
+      {
+        label: tr('Connect to Demo Board'),
+        id: 'device-demo',
+        disabled: busy || !ready || !this.onBoard || !device.demoAvailable,
+        action: () => void device.connectDemo(),
       },
       {
         label: tr('Device Information'),

@@ -2,6 +2,7 @@
 // time, the upload and its progress, Stop, Restart, the console. The operations are upstream's
 // DeviceSession, in the Python worker (py/lms_board.py); this side holds the port and the queue.
 import { BoardPort, portKey, webSerialAvailable } from '../board/web-serial.ts';
+import { stackSwitching } from '../board/worker-board.ts';
 import { tr } from '../i18n/tr.ts';
 import { PythonCallError, type PythonBridge } from '../py/bridge.ts';
 import type { ProjectSession } from '../project/session.ts';
@@ -52,6 +53,8 @@ export interface DeviceHooks {
   reloadBoardFolder(folder: string): void;
   /** config_dir changed (an autostart transaction): it is kept in the browser's storage. */
   saveConfig(): Promise<void>;
+  /** The demonstration board, powered on as a port (src/board/demo-board.ts); null without one. */
+  demoBoard?(): Promise<SerialPort | null>;
 }
 
 /** A file of the PC or of a place, to copy to the board under its relative name. */
@@ -232,6 +235,30 @@ export class DeviceController {
     return this.port !== null;
   }
 
+  /** Device → Connect to Demo Board: needs only JSPI, for Python to wait for the board. */
+  get demoAvailable(): boolean {
+    return stackSwitching() && this.hooks.demoBoard !== undefined;
+  }
+
+  /** Connected to the demonstration board, not to hardware. */
+  get demo(): boolean {
+    return this.port?.demo ?? false;
+  }
+
+  private demoRequested = false;
+
+  /** Connect to Demo Board: the real flow of a board, with no hardware (demo-board.ts). */
+  async connectDemo(): Promise<boolean> {
+    if (this.running) return false;
+    if (this.port) await this.disconnect();
+    this.demoRequested = true;
+    try {
+      return await this.withConnection(() => true, true);
+    } finally {
+      this.demoRequested = false;
+    }
+  }
+
   get busy(): boolean {
     return this.running !== null && !this.running.background;
   }
@@ -389,6 +416,7 @@ export class DeviceController {
 
   /** The port remembered for the profile, among those the browser allows; else the user picks. */
   private async choosePort(profile: string, ask: boolean): Promise<SerialPort | null> {
+    if (this.demoRequested) return (await this.hooks.demoBoard?.()) ?? null;
     if (!this.serial) return null;
     const key = this.settings.get<string>(`device/ports/${profile}`, '');
     if (!ask && key) {
@@ -410,7 +438,7 @@ export class DeviceController {
       action();
       return true;
     }
-    if (!this.serial) {
+    if (!this.serial && !(this.demoRequested && this.demoAvailable)) {
       this.notAvailable();
       return false;
     }

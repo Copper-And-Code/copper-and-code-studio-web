@@ -519,3 +519,28 @@ Asked by an outside video recorder that drives the IDE with Playwright; the cont
   `pytest --manual`, which import PySide6), `tests/test_window_checks.py` (PySide6), and four tests
   with `qtbot`. The board test that counted a soft reset per copied file now counts one, as
   upstream does since `resume`.
+
+## Phase 10: the demonstration board (2026-11-18)
+
+Point 6 of the capture request: the real flow of a board, with no hardware.
+
+- **A port, not a mode of the IDE.** The board is an object with what `BoardPort` uses of a Web
+  Serial `SerialPort` (`open`, `readable`, `writable`, `getInfo`, `setSignals`, `close`). The
+  worker, mpremote and upstream's DeviceSession run unchanged, so what is shown is what a USB
+  board gets. The port names itself "Demo board (simulated)" in the status bar and the Files panel.
+- **The firmware is the simulator's MicroPython** in a sandboxed iframe (`src/board/demo-frame.js`),
+  with its event-driven REPL (`replProcessChar`), which has the raw REPL. Upstream's
+  `runtime/program/display_driver.py` (contract 1) and `lms_sandbox.py` make it a board with a
+  display and a flash; the profile's firmware modules the browser's MicroPython has not (`gt911`,
+  `rgbpanel`) are empty modules, because the IDE only checks that they import.
+- **What a board does and that MicroPython does not, the page does**, as upstream's virtual board
+  (`tests/virtual_board.py`) does with its process: a soft reset loads the iframe again with the
+  flash; LVGL is served every 5 ms while the REPL waits, as a board's timer; raw-paste is answered
+  "not supported" (`R\x00`), so mpremote sends plain raw REPL input; Ctrl-C during a command
+  schedules a KeyboardInterrupt. Emscripten's error numbers are those of Linux in the VFS
+  (ENOENT 2, not 44): mpremote's `cp` reads ENOENT to tell a missing file.
+- **Only where JSPI is**, as the board itself: Python waits for the port with stack switching. The
+  menu entry is there in every mode, not only in capture mode: it also serves a demonstration
+  without a board.
+- **What it reports is its own**: the free RAM is the iframe's 32 MB heap, the free flash that of
+  the browser's memory file system; they are not made to look like the profile's board.

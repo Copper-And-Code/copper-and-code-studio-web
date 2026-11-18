@@ -19,6 +19,9 @@ export interface LmsCapture {
   onEvent(listener: (event: CaptureEvent) => void): () => void;
   /** The last frame of the simulator's run, or null. */
   frame(): CaptureFrame | null;
+  /** The frames of the demonstration board's display (Device → Connect to Demo Board). */
+  onBoardFrame(listener: (frame: CaptureFrame) => void): () => void;
+  boardFrame(): CaptureFrame | null;
   /** clock=manual: moves the project's clock by ms; resolves with the frame after the step. */
   step(ms: number): Promise<CaptureFrame | null>;
   /** clock=manual: the pointer the project reads from the next step on, in display pixels. */
@@ -64,6 +67,8 @@ export function installCapture(studio: Studio, shell: Shell, python: PythonBridg
     onFrame: (listener) => capture.onFrame(listener),
     onEvent: (listener) => capture.onEvent(listener),
     frame: () => capture.last,
+    onBoardFrame: (listener) => capture.onBoardFrame(listener),
+    boardFrame: () => capture.lastBoard,
     async step(ms: number) {
       const run = studio.run;
       if (!run) throw new Error('step: the simulator is not there yet');

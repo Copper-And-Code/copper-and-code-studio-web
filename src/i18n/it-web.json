@@ -86,5 +86,8 @@
   "{name} already exists in the workspace. Replace its files with those of the example?": "{name} esiste già nell'area di lavoro. Sostituirne i file con quelli dell'esempio?",
   "{name} already exists. Replace it?": "{name} esiste già. Sostituirlo?",
   "{name} is ready: open it here, or take the folder to publish it on a static host.": "{name} è pronta: aprila qui, oppure prendi la cartella per pubblicarla su un hosting statico.",
-  "{path} already exists and is not a web build made by this IDE: move or rename it": "{path} esiste già e non è una versione web fatta da questo IDE: spostala o rinominala"
+  "{path} already exists and is not a web build made by this IDE: move or rename it": "{path} esiste già e non è una versione web fatta da questo IDE: spostala o rinominala",
+  "Demo board (simulated)": "Scheda dimostrativa (simulata)",
+  "Connect to Demo Board": "Connetti alla scheda dimostrativa",
+  "A simulated board, not hardware: it runs what the IDE uploads, with the same MicroPython as the simulator, and behaves as the board of the project.": "Una scheda simulata, non hardware: esegue ciò che l'IDE carica, con lo stesso MicroPython del simulatore, e si comporta come la scheda del progetto."
 }

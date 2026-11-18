@@ -33,6 +33,10 @@ export interface CaptureEvent {
 
 export class CaptureHub {
   private readonly frameListeners = new Set<(frame: CaptureFrame) => void>();
+  private readonly boardListeners = new Set<(frame: CaptureFrame) => void>();
+  private boardNumber = 0;
+  /** The last frame of the demonstration board, or null. */
+  lastBoard: CaptureFrame | null = null;
   private readonly eventListeners = new Set<(event: CaptureEvent) => void>();
   private seq = 0;
   /** The last frame of the simulator, or null before the first one of a run. */
@@ -43,6 +47,25 @@ export class CaptureHub {
   onFrame(listener: (frame: CaptureFrame) => void): () => void {
     this.frameListeners.add(listener);
     return () => this.frameListeners.delete(listener);
+  }
+
+  onBoardFrame(listener: (frame: CaptureFrame) => void): () => void {
+    this.boardListeners.add(listener);
+    return () => this.boardListeners.delete(listener);
+  }
+
+  /** A frame of the demonstration board's display; number counts from 1 on each page load. */
+  boardFrame(frame: CaptureFrame): void {
+    if (!this.enabled) return;
+    const numbered = { ...frame, number: ++this.boardNumber };
+    this.lastBoard = numbered;
+    for (const listener of this.boardListeners) {
+      try {
+        listener(numbered);
+      } catch (error) {
+        console.error(error);
+      }
+    }
   }
 
   onEvent(listener: (event: CaptureEvent) => void): () => void {

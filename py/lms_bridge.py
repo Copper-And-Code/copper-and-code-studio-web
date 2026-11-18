@@ -311,6 +311,27 @@ def sim_program(entry, flash):
     }
 
 
+def demo_board():
+    """The demonstration board (src/board/demo-board.ts) as the open project's board profile: its
+    logical size, the modules its firmware must have, and the files of runtime/program that make
+    the browser's MicroPython a board with a display: display_driver.py (contract 1) and
+    lms_sandbox.py. None without a board profile."""
+    from lvgl_mpy_studio.platform import root_dir
+
+    board = _doc().project.board
+    if not board:
+        return None
+    system = root_dir() / "runtime" / "program"
+    return {
+        "id": board["id"],
+        "name": board.get("name", board["id"]),
+        "width": board["logicalWidth"],
+        "height": board["logicalHeight"],
+        "modules": list((board.get("firmware") or {}).get("modules") or []),
+        "system": [str(system / name) for name in ("display_driver.py", "lms_sandbox.py")],
+    }
+
+
 # ---- Code: the Code tab, modules, mpy-cross's errors, tracebacks (phase 4) ----
 # mpy-cross runs in the page (WebAssembly, src/mpy/); its output comes back here, where upstream's
 # own parse_compiler_errors, map_error and traceback_errors read it.
@@ -1956,6 +1977,7 @@ METHODS = {
     "profile_default": profile_default,
     "profiles_hidden": profiles_hidden,
     "profiles_apply": profiles_apply,
+    "demo_board": demo_board,
     "profile_import": profile_import,
     "profile_export": profile_export,
     "board_catalog_notice": board_catalog_notice,

@@ -50,24 +50,26 @@ test('the code editor in the dark theme uses the desktop dark colours', async ({
   await start(page);
   await openWeather(page);
   await page.getByRole('tab', { name: 'Code', exact: true }).click();
-  const colours = await page.evaluate(() => {
-    const editor = document
-      .querySelector('lms-app')
-      ?.shadowRoot?.querySelector('lms-code-panel')
-      ?.shadowRoot?.querySelector('lms-code-editor')?.shadowRoot;
-    const keyword = [...(editor?.querySelectorAll('.cm-line span') ?? [])].find(
-      (span) => span.textContent === 'import',
-    );
-    const gutter = editor?.querySelector('.cm-gutters');
-    return {
-      keyword: keyword ? getComputedStyle(keyword).color : '',
-      gutter: gutter ? getComputedStyle(gutter).backgroundColor : '',
-      page: getComputedStyle(document.body).backgroundColor,
-    };
-  });
-  expect(colours.keyword).toBe('rgb(108, 182, 255)'); // ui/theme.py DARK keyword #6CB6FF
-  expect(colours.gutter).toBe('rgb(23, 25, 29)');
-  expect(colours.page).toBe('rgb(23, 25, 29)');
+  // CodeMirror highlights after it draws: wait for the keyword's own span
+  const colours = async () =>
+    page.evaluate(() => {
+      const editor = document
+        .querySelector('lms-app')
+        ?.shadowRoot?.querySelector('lms-code-panel')
+        ?.shadowRoot?.querySelector('lms-code-editor')?.shadowRoot;
+      const keyword = [...(editor?.querySelectorAll('.cm-line span') ?? [])].find(
+        (span) => span.textContent === 'import',
+      );
+      const gutter = editor?.querySelector('.cm-gutters');
+      return {
+        keyword: keyword ? getComputedStyle(keyword).color : '',
+        gutter: gutter ? getComputedStyle(gutter).backgroundColor : '',
+        page: getComputedStyle(document.body).backgroundColor,
+      };
+    });
+  await expect.poll(async () => (await colours()).keyword).toBe('rgb(108, 182, 255)'); // ui/theme.py DARK keyword #6CB6FF
+  expect((await colours()).gutter).toBe('rgb(23, 25, 29)');
+  expect((await colours()).page).toBe('rgb(23, 25, 29)');
 });
 
 test('the menu bar from the keyboard: F10, arrows, Escape, Enter', async ({ page }) => {
