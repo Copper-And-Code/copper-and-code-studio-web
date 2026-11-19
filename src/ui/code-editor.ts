@@ -8,9 +8,19 @@ import {
   autocompletion,
   closeBrackets,
   completionKeymap,
+  completionStatus,
+  currentCompletions,
+  selectedCompletionIndex,
   startCompletion,
 } from '@codemirror/autocomplete';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  insertNewline,
+  insertTab,
+} from '@codemirror/commands';
 import { python } from '@codemirror/lang-python';
 import {
   HighlightStyle,
@@ -23,6 +33,8 @@ import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import {
   Compartment,
   EditorState,
+  type Extension,
+  Prec,
   RangeSetBuilder,
   StateEffect,
   StateField,
@@ -101,6 +113,29 @@ export type CompletionProvider = (
 
 /** core/actions.py CURSOR: where the cursor goes after an action is inserted. */
 const CURSOR = '§';
+
+/** A line and a column of the text, both from 1, as lmsCapture.editor() gives them. */
+export interface TextPoint {
+  line: number;
+  column: number;
+}
+
+/** What lmsCapture.editor() says of an editor (docs/capture.md). */
+export interface EditorCapture {
+  text: string;
+  caret: TextPoint;
+  selection: { from: TextPoint; to: TextPoint } | null;
+  visible: { first: number; last: number };
+  completion: { open: boolean; options: string[]; selected: number | null };
+}
+
+/** Capture mode: the list opens and updates as soon as the answer is there, with no wait. */
+const CAPTURE_TIMING = captureOptions.enabled
+  ? { activateOnTypingDelay: 0, interactionDelay: 0, updateSyncTime: 0 }
+  : {};
+
+/** editor=plain: the text exactly as typed; Enter is a new line, Tab a tab. */
+const PLAIN = captureOptions.enabled && captureOptions.editor === 'plain';
 
 const setErrors = StateEffect.define<number[]>();
 const errorLine = Decoration.line({ class: 'cm-error-line' });
@@ -205,16 +240,14 @@ export class CodeEditor extends LitElement {
         history(),
         // capture mode: a cursor that does not blink, the same in every frame
         drawSelection(captureOptions.enabled ? { cursorBlinkRate: 0 } : {}),
-        indentOnInput(),
         indentUnit.of('    '),
         bracketMatching(),
-        closeBrackets(),
+        this.typing(),
         highlightActiveLine(),
         highlightSelectionMatches(),
         syntaxHighlighting(highlight),
         look,
         python(),
-        autocompletion({ override: [(context) => this.complete(context)] }),
         keymap.of([
           ...completionKeymap,
           ...defaultKeymap,
@@ -231,6 +264,22 @@ export class CodeEditor extends LitElement {
         }),
       ],
     });
+  }
+
+  /** What the editor does while one types: indent, close brackets, complete; none with plain. */
+  private typing(): Extension {
+    if (PLAIN)
+      return Prec.highest(
+        keymap.of([
+          { key: 'Enter', run: insertNewline },
+          { key: 'Tab', run: insertTab },
+        ]),
+      );
+    return [
+      indentOnInput(),
+      closeBrackets(),
+      autocompletion({ override: [(context) => this.complete(context)], ...CAPTURE_TIMING }),
+    ];
   }
 
   private async complete(context: CompletionContext): Promise<CompletionResult | null> {
@@ -299,6 +348,71 @@ export class CodeEditor extends LitElement {
 
   get text(): string {
     return this.view?.state.doc.toString() ?? this.pendingText;
+  }
+
+  /** lmsCapture.editor(): the text, the caret, the lines in view, the completion list. */
+  captureState(): EditorCapture | null {
+    const view = this.view;
+    if (!view) return null;
+    const state = view.state;
+    const point = (position: number): TextPoint => {
+      const line = state.doc.lineAt(position);
+      return { line: line.number, column: position - line.from + 1 };
+    };
+    const main = state.selection.main;
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const first = view.lineBlockAtHeight(scroller.top - view.documentTop);
+    const last = view.lineBlockAtHeight(scroller.bottom - view.documentTop - 1);
+    const open = completionStatus(state) === 'active' && currentCompletions(state).length > 0;
+    return {
+      text: state.doc.toString(),
+      caret: point(main.head),
+      selection: main.empty ? null : { from: point(main.from), to: point(main.to) },
+      visible: {
+        first: state.doc.lineAt(first.from).number,
+        last: state.doc.lineAt(last.from).number,
+      },
+      completion: {
+        open,
+        options: open ? currentCompletions(state).map((option) => option.label) : [],
+        selected: open ? selectedCompletionIndex(state) : null,
+      },
+    };
+  }
+
+  /** No completion asked and not answered yet: for lmsCapture.idle(). */
+  get settled(): boolean {
+    return !this.view || completionStatus(this.view.state) !== 'pending';
+  }
+
+  /**
+   * lmsCapture.editorPoint: where a line and column of the text are in the viewport, in CSS
+   * pixels, the middle of the caret there; null when not in view.
+   */
+  pointAt(line: number, column: number): { x: number; y: number } | null {
+    const view = this.view;
+    if (!view || line < 1 || line > view.state.doc.lines) return null;
+    const text = view.state.doc.line(line);
+    if (column < 1 || column > text.length + 1) return null;
+    const coords = view.coordsAtPos(text.from + column - 1);
+    if (!coords) return null;
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const y = (coords.top + coords.bottom) / 2;
+    if (y < scroller.top || y > scroller.bottom) return null;
+    return { x: coords.left, y };
+  }
+
+  /** lmsCapture.paste: as Ctrl+V with the text on the clipboard, one undo step. */
+  paste(text: string): boolean {
+    const view = this.view;
+    if (!view || this.locked) return false;
+    view.focus();
+    view.dispatch({
+      ...view.state.replaceSelection(text.replace(/\r\n?/g, '\n')),
+      userEvent: 'input.paste',
+      scrollIntoView: true,
+    });
+    return true;
   }
 
   /** New text, as when another file is opened: the undo history starts again. */

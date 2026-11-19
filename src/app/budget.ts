@@ -77,6 +77,11 @@ export class BudgetMonitor {
     return !this.running && !this.waiting;
   }
 
+  /** A measure running now, not one waiting for its pause: for lmsCapture.settle(). */
+  get measuring(): boolean {
+    return this.running;
+  }
+
   stop(): void {
     clearTimeout(this.timer);
     this.waiting = false;

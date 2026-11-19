@@ -555,3 +555,37 @@ the stage's drawn width over its layout width (`cssScale` in `src/ui/designer-vi
 Chromium, Firefox and WebKit, and so is the pointer of Ctrl+wheel zoom. The test places a Label at
 zoom 1 and 1.4 (`tests/e2e/capture.spec.ts`); Firefox gives the mouse whole pixels of the screen,
 so at 1.4 it may land one page pixel away.
+
+## Phase 11: building a project on camera (2026-11-19)
+
+Asked by lvgl-mpy-stage, whose agent writes the steps of a video that builds a project from
+nothing; the contract stays version 1, with additions only (`docs/capture.md`, Versions).
+
+- **Names put on at render, not written in each dialog.** The dialogs drawn by their callers
+  (Project Settings, the managers, the resize question) are many and change. In capture mode the
+  dialog element names each field and button after every render, from the form's own name or the
+  English of its label, as the menus are named; Lit reuses elements between dialogs, so the names
+  it put on are put on again each time. A label written as `tr('New Folder') + ':'` is found
+  without its colon, so the names are the same in Italian.
+- **Reads without Python.** `project()`, `widgetBox()` and `editor()` answer at once from what the
+  IDE already holds: the session's state, the designer's pages (the same geometry the canvas
+  draws, `sceneRects`), the editor's CodeMirror state. Python gives two more facts with the state it
+  already sends: each page's `initial`, each widget's events.
+- **Completion the same in every take, not synchronous.** The options come from Python, so the list
+  cannot open within the keystroke. In capture mode CodeMirror's delays are 0 (start, update,
+  the guard against an Enter right after opening) and `idle()` waits while the list waits for its
+  options; after `idle()` it is open or not by the text alone. `idle()` waits for a syntax check
+  that runs, not for the one an editor will start 0.5 s after the last key: a driver that waits
+  after every key would otherwise wait half a second per key.
+- **`settle()` beside `idle()`.** `idle()` waits for the budget's measure, due 1.5 s after the last
+  change, and the contract says so; with it after every key a typed function took 1.6 s a key,
+  eight minutes a take. `settle()` waits for what runs now, not for what is only scheduled, and
+  `idle()` keeps its meaning.
+- **`editor=plain`** takes out indentOnInput, closeBrackets and the completion, and binds Enter to
+  a plain new line and Tab to a tab character, so the text is the keys typed.
+- **The Events tab stays as on the desktop**: no field to type a handler in; the double click makes
+  `<widget>_<event>` and opens it, which is how a person gives a widget a handler.
+- **`python-error` from the Errors panel's own mapping** (upstream's `traceback_errors` through the
+  source map): the file and line are those of the text a person corrects.
+- **New for a Board** said the resolution twice ("ESP32-4848S040 (480×480) (480×480)"): the
+  built-in profiles' names have it already, so it is added only to a name without it.

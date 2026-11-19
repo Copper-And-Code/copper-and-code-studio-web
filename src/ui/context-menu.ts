@@ -1,6 +1,7 @@
 // A context menu at a point, as QMenu.exec(position): arrow keys, Enter and Escape; a click outside
 // closes it.
 import { LitElement, css, html, nothing } from 'lit';
+import { captureName } from '../i18n/tr.ts';
 import type { MenuItem } from './menu-bar.ts';
 
 export class ContextMenu extends LitElement {
@@ -114,6 +115,7 @@ export class ContextMenu extends LitElement {
               type="button"
               role="menuitem"
               data-id=${item.id ?? nothing}
+              data-capture=${`context-menu.${captureName(item.label)}`}
               ?disabled=${item.disabled}
               @click=${() => {
                 this.close();

@@ -16,6 +16,8 @@ interface Node {
   key: TreeKey;
   label: string;
   testid: string;
+  /** The capture mode's stable name (docs/capture.md). */
+  capture: string;
   title?: string;
   children?: Node[];
 }
@@ -90,10 +92,12 @@ export class ProjectTree extends LitElement {
       key: `page:${page.id}`,
       label: page.name,
       testid: 'page',
+      capture: `tree.page.${page.name}`,
       children: page.widgets.map((widget) => ({
         key: `widget:${widget.name}` as TreeKey,
         label: `${widget.name} — ${widget.type}`,
         testid: 'tree-widget',
+        capture: `tree.widget.${widget.name}`,
       })),
     }));
     return [
@@ -102,6 +106,7 @@ export class ProjectTree extends LitElement {
         key: 'modules',
         label: tr('Python Modules'),
         testid: 'modules',
+        capture: 'tree.modules',
         title: tr(
           '.py files of the project, imported by name from handlers, the general code and each other',
         ),
@@ -109,6 +114,7 @@ export class ProjectTree extends LitElement {
           key: `pymodule:${module.id}` as TreeKey,
           label: `${module.name}.py`,
           testid: 'module',
+          capture: `tree.module.${module.name}`,
         })),
       },
     ];
@@ -203,6 +209,7 @@ export class ProjectTree extends LitElement {
           role="treeitem"
           data-key=${node.key}
           data-testid=${node.testid}
+          data-capture=${node.capture}
           aria-level=${level}
           aria-expanded=${open === undefined ? nothing : String(open)}
           aria-selected=${String(this.selected === node.key)}

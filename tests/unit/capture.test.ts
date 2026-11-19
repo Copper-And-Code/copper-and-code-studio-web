@@ -11,20 +11,33 @@ describe('capture options', () => {
     expect(parseCaptureOptions('?capture=0').enabled).toBe(false);
   });
 
-  it('reads the clock, the seed, the zoom, the theme and the language', () => {
+  it('reads the clock, the seed, the zoom, the theme, the language and the editor', () => {
     expect(
-      parseCaptureOptions('?capture=1&clock=manual&seed=42&zoom=1.25&theme=dark&lang=it'),
-    ).toEqual({ enabled: true, clock: 'manual', seed: 42, zoom: 1.25, theme: 'dark', lang: 'it' });
+      parseCaptureOptions(
+        '?capture=1&clock=manual&seed=42&zoom=1.25&theme=dark&lang=it&editor=plain',
+      ),
+    ).toEqual({
+      enabled: true,
+      clock: 'manual',
+      seed: 42,
+      zoom: 1.25,
+      theme: 'dark',
+      lang: 'it',
+      editor: 'plain',
+    });
   });
 
   it('keeps the defaults for values it does not know', () => {
-    expect(parseCaptureOptions('?capture=1&clock=fast&seed=-1&zoom=9&theme=blue')).toEqual({
+    expect(
+      parseCaptureOptions('?capture=1&clock=fast&seed=-1&zoom=9&theme=blue&editor=bare'),
+    ).toEqual({
       enabled: true,
       clock: 'real',
       seed: null,
       zoom: 1,
       theme: null,
       lang: null,
+      editor: 'normal',
     });
   });
 });
@@ -35,6 +48,7 @@ describe('captureName', () => {
   it('is the English text, in lower case with dashes', () => {
     expect(captureName('Run Program…')).toBe('run-program');
     expect(captureName('About LVGL MPY Studio')).toBe('about-lvgl-mpy-studio');
+    expect(captureName('Module name, without .py:')).toBe('module-name-without-py');
   });
 
   it('is the same name in Italian', () => {
@@ -42,6 +56,14 @@ describe('captureName', () => {
     const label = tr('Project Settings…');
     expect(label).not.toBe('Project Settings…');
     expect(captureName(label)).toBe('project-settings');
+  });
+
+  it('finds a label drawn with a colon after the text, in Italian too', () => {
+    setLanguage('it');
+    const label = `${tr('New Folder')}:`;
+    expect(label).not.toBe('New Folder:');
+    expect(captureName(label)).toBe('new-folder');
+    expect(captureName(tr('Name:'))).toBe('name');
   });
 });
 

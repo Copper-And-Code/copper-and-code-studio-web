@@ -350,13 +350,14 @@ export class PropertiesPanel extends LitElement {
               class=${event.bound ? 'bound' : ''}
               tabindex="0"
               data-event=${event.event}
+              data-capture=${`event.${event.event}`}
               @dblclick=${() => this.onEvent(widget, event.event)}
               @keydown=${(key: KeyboardEvent) =>
                 key.key === 'Enter' && this.onEvent(widget, event.event)}
             >
               <td>${event.event}</td>
               <td title=${event.description}>${event.description}</td>
-              <td>${event.handler}</td>
+              <td data-capture=${`event.${event.event}.handler`}>${event.handler}</td>
             </tr>`,
         )}
       </tbody>
@@ -383,6 +384,7 @@ export class PropertiesPanel extends LitElement {
               role="tab"
               id="properties-tab-${tab}"
               data-testid="properties-tab-${tab}"
+              data-capture="properties-tab.${tab}"
               aria-selected=${String(this.tab === tab)}
               aria-controls="properties-panel-${tab}"
               tabindex=${this.tab === tab ? 0 : -1}

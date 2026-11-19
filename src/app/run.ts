@@ -60,6 +60,37 @@ export interface RunHooks {
   currentPythonFile(): Location | null;
 }
 
+/** A frame line of a traceback: File "<name>", line <n>. */
+const TRACE_FRAME = /File "([^"]+)", line (\d+)/g;
+
+/**
+ * Capture mode: python-error for a traceback of the project, at the line of the text a person
+ * would correct (the handler, the general code or the module, as the Errors panel maps it), or
+ * at the generated file's own line when it maps to none.
+ */
+function emitPythonError(traceback: string, exception: string, rows: MappedError[]): void {
+  const origin = rows.find((row) => row.origin && row.tooltip?.trim() === traceback.trim());
+  let file: string;
+  let line: number;
+  if (origin?.module) {
+    file = `module:${origin.module}`;
+    line = origin.sourceLine ?? origin.line;
+  } else if (origin?.handler) {
+    file = origin.handler === 'module' ? 'general' : `handler:${origin.handler}`;
+    line = origin.sourceLine ?? origin.line;
+  } else {
+    const last = [...traceback.matchAll(TRACE_FRAME)].at(-1);
+    file = last?.[1] ?? '';
+    line = Number(last?.[2] ?? 0);
+  }
+  capture.emit('python-error', {
+    file,
+    line,
+    message: exception.trim(),
+    traceback: traceback.trim(),
+  });
+}
+
 // ui/main_run.py TRACEBACK_BLOCK: a complete traceback, its frame lines, then the exception line.
 const TRACEBACK_BLOCK = /Traceback \(most recent call last\):\n(?:[ \t].*\n)+(\S.*)\n/g;
 
@@ -132,8 +163,11 @@ export class RunController {
     this.simulator = new Simulator(screen, {
       output: (text) => {
         this.transcript += text;
-        if (this.simulator.mode === 'program') view.terminal(text);
-        else {
+        if (this.simulator.mode !== 'frame') this.captureLines(text);
+        if (this.simulator.mode === 'program') {
+          view.terminal(text);
+          if (capture.enabled) this.readTracebacks(text, false);
+        } else {
           view.output(text.replace(/\r\n/g, '\n'));
           if (this.simulator.mode === 'project') this.readTracebacks(text);
         }
@@ -217,6 +251,7 @@ export class RunController {
     this.program = null;
     this.transcript = '';
     this.trace = '';
+    this.printed = '';
     this.options.view.clearTerminal();
     capture.last = null;
     await this.simulator.start({ ...start, capture: this.capture() });
@@ -351,6 +386,7 @@ export class RunController {
       this.program = entry;
       this.flash = flash;
       this.transcript = '';
+      this.printed = '';
       view.clearTerminal();
       view.output(
         tr('Program {name}, {width}×{height}; its flash is {flash}', {
@@ -412,8 +448,19 @@ export class RunController {
     return true;
   }
 
+  /** Capture mode: what the program printed and has not ended with a new line yet. */
+  private printed = '';
+
+  /** The capture's output events: one for each complete line the program prints. */
+  private captureLines(text: string): void {
+    if (!capture.enabled) return;
+    const lines = (this.printed + text.replace(/\r\n/g, '\n')).split('\n');
+    this.printed = (lines.pop() ?? '').slice(-20000);
+    for (const line of lines) capture.emit('output', { text: line });
+  }
+
   /** ui/main_run.py _sim_output: complete tracebacks become rows of the Errors panel. */
-  private readTracebacks(text: string): void {
+  private readTracebacks(text: string, project = true): void {
     this.trace += text.replace(/\r\n/g, '\n');
     const blocks = [...this.trace.matchAll(TRACEBACK_BLOCK)];
     const last = blocks.at(-1);
@@ -421,9 +468,16 @@ export class RunController {
     const start = rest.lastIndexOf('Traceback (most recent call last)');
     this.trace = start >= 0 ? rest.slice(start).slice(-20000) : rest.slice(-40);
     if (!blocks.length) return;
+    if (!project) {
+      // a program's own files: its lines are the file's lines
+      for (const block of blocks) emitPythonError(block[0], block[1] ?? '', []);
+      return;
+    }
     const complete = blocks.map((block) => block[0]).join('');
     void this.options.hooks.traceErrors(complete).then((rows) => {
       if (rows.length) this.options.hooks.addErrors(rows);
+      if (capture.enabled)
+        for (const block of blocks) emitPythonError(block[0], block[1] ?? '', rows);
     });
   }
 

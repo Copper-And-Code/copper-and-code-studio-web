@@ -1299,7 +1299,10 @@ export class Studio {
         'profiles',
       );
     return profiles.map((profile) => ({
-      label: `${profile.name} (${profile.width}×${profile.height})`,
+      // the built-in names say their resolution already: "ESP32-4848S040 (480×480)"
+      label: profile.name.includes(`${profile.width}×${profile.height}`)
+        ? profile.name
+        : `${profile.name} (${profile.width}×${profile.height})`,
       id: `board:${profile.id}`,
       action: () => void this.session.newProject(profile.id),
     }));

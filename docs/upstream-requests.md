@@ -4,20 +4,21 @@ Changes this project needs in the desktop repository. The owner decides each one
 made upstream, on a branch there, and this repository moves the submodule only once it is
 tagged.
 
-| #   | Request                                           | State                         |
-| --- | ------------------------------------------------- | ----------------------------- |
-| 1   | Web runtime as a release asset                    | done for `v0.7.0` to `v0.7.2` |
-| 2   | `mpy-cross` in WebAssembly as a release asset     | done for `v0.7.0` to `v0.7.2` |
-| 3   | A CI check that the Qt-free packages stay Qt-free | proposed                      |
-| 4   | Test files that load without Qt                   | proposed                      |
-| 5   | The project document without Qt                   | proposed                      |
-| 6   | The browser loaders with a host interface         | proposed                      |
-| 7   | The preview after a quick undo                    | proposed                      |
-| 8   | `.mpy` files without the temporary folder's path  | proposed                      |
-| 9   | The board's file helpers without Qt               | proposed                      |
-| 10  | No swap interval before the main loop             | proposed                      |
-| 11  | Removing the folder a program ran from            | proposed                      |
-| 12  | The web IDE's texts in `it.json`                  | proposed                      |
+| #   | Request                                                 | State                         |
+| --- | ------------------------------------------------------- | ----------------------------- |
+| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.7.2` |
+| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.7.2` |
+| 3   | A CI check that the Qt-free packages stay Qt-free       | proposed                      |
+| 4   | Test files that load without Qt                         | proposed                      |
+| 5   | The project document without Qt                         | proposed                      |
+| 6   | The browser loaders with a host interface               | proposed                      |
+| 7   | The preview after a quick undo                          | proposed                      |
+| 8   | `.mpy` files without the temporary folder's path        | proposed                      |
+| 9   | The board's file helpers without Qt                     | proposed                      |
+| 10  | No swap interval before the main loop                   | proposed                      |
+| 11  | Removing the folder a program ran from                  | proposed                      |
+| 12  | The web IDE's texts in `it.json`                        | proposed                      |
+| 13  | An LVGL assertion that does not spin in the web runtime | proposed                      |
 
 ---
 
@@ -244,3 +245,22 @@ IDE drops it from its own file (`tests/unit/translations.test.ts` refuses a text
 
 **Test.** Upstream has no test of the catalogue's keys against its code (checked at `v0.7.1`), so
 extra keys break nothing; the web IDE's `tests/unit/translations.test.ts` checks the rest.
+
+## 13. An LVGL assertion that does not spin in the web runtime
+
+**What.** In the web build of the runtime, make `LV_ASSERT_HANDLER` end the program with an error
+that reaches MicroPython or the page (for example `abort()`, or a call the web build provides),
+instead of the default `while(1);`.
+
+**Why.** `runtime/lv_conf.h` halts on an assertion, as a board must. In the browser the runtime runs
+in the page's own thread, so the halt blocks the whole tab: the IDE stops answering, and only
+closing it helps. It is easy to reach: `x = lv.obj()` at the top of the general code runs at
+`import app_events`, before `display_driver.init()` makes a display, and LVGL asserts on the
+missing display. The RAM budget measures the project 1.5 s after a change, so typing that line is
+enough. On the desktop only the simulator's process hangs. Found on 2026-11-19 by the web IDE's
+phase 11 tests.
+
+**Where.** `runtime/lv_conf.h` (`LV_ASSERT_HANDLER`), `runtime/build_web.sh`.
+
+**Test.** In the web runtime, `import lvgl as lv; lv.obj()` before the display exists ends with an
+error, and the page goes on answering.

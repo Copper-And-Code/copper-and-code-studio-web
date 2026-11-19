@@ -20,7 +20,8 @@ export interface DocState {
   /** MainWindow.run_target: where F5 runs the project. */
   runTarget: 'simulator' | 'board';
   display: { width: number; height: number };
-  pages: { id: string; name: string }[];
+  /** initial: the page the app starts from (Set Initial Page). */
+  pages: { id: string; name: string; initial: boolean }[];
   modules: { id: string; name: string }[];
   canUndo: boolean;
   canRedo: boolean;

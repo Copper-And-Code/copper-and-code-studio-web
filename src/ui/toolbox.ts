@@ -132,6 +132,7 @@ export class Toolbox extends LitElement {
                   draggable="true"
                   title=${entry.type}
                   data-type=${entry.type}
+                  data-capture=${`toolbox.${entry.type}`}
                   aria-selected=${String(armed === entry.type)}
                   @dragstart=${(event: DragEvent) => {
                     event.dataTransfer?.setData(WIDGET_MIME, entry.type);

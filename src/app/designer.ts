@@ -18,6 +18,8 @@ export interface DesignWidget {
   /** The container, when it is on the page: the widget's x and y are relative to it. */
   parentId: string | null;
   props: Record<string, unknown>;
+  /** Its events and their handlers, as the project has them. */
+  events?: Record<string, string>;
 }
 
 export interface DesignPage {
@@ -123,6 +125,11 @@ export class DesignerController {
   /** No page being drawn or about to be: for lmsCapture.idle(). */
   get idle(): boolean {
     return this.renderer.idle;
+  }
+
+  /** A page being drawn now, not one about to be: for lmsCapture.settle(). */
+  get drawing(): boolean {
+    return this.renderer.drawing;
   }
   private readonly listeners = new Set<() => void>();
   private loading = Promise.resolve();

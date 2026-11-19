@@ -4,6 +4,7 @@
 //
 // A file of the examples cannot be written: saving it copies the whole example folder into the
 // workspace first, at the owner's choice, so that a program keeps its modules next to it.
+import { capture } from '../capture/hub.ts';
 import { tr } from '../i18n/tr.ts';
 import type { MpyCross } from '../mpy/mpy-cross.ts';
 import type { PythonBridge } from '../py/bridge.ts';
@@ -349,6 +350,7 @@ export class FileTabs {
   async checkSyntax(tab: FileTab): Promise<SyntaxError[]> {
     const text = tab.text;
     let errors: SyntaxError[] = [];
+    this.runningChecks++;
     try {
       const name = baseName(tab.location.path);
       const result = await this.mpyCross.compile(name, text);
@@ -357,11 +359,24 @@ export class FileTabs {
       }
     } catch {
       errors = []; // no mpy-cross: no opinion, as the desktop without its mpy-cross
+    } finally {
+      this.runningChecks--;
     }
     if (tab.text !== text || !this.tabs.includes(tab)) return errors; // typed meanwhile
     tab.errors = errors;
     this.changed();
+    capture.emit('code-checked', {
+      file: `file:${tab.location.path}`,
+      errors: errors.map((error) => ({ line: error.line, message: error.message })),
+    });
     return errors;
+  }
+
+  private runningChecks = 0;
+
+  /** No syntax check running: for lmsCapture.idle(). */
+  get idle(): boolean {
+    return this.runningChecks === 0;
   }
 }
 

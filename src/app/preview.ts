@@ -66,6 +66,11 @@ export class PreviewRenderer {
     return !this.running && !this.scheduled && !this.dirty;
   }
 
+  /** A page being drawn now: for lmsCapture.settle(). */
+  get drawing(): boolean {
+    return this.running;
+  }
+
   onRendered(listener: (preview: Preview) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

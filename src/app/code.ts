@@ -4,6 +4,7 @@
 // made by the first text typed; each edit is a step of the project's undo, merged while the same
 // thing stays open; the syntax check compiles the generated project with mpy-cross and keeps the
 // errors of what is open.
+import { capture } from '../capture/hub.ts';
 import { tr } from '../i18n/tr.ts';
 import type { MpyCross } from '../mpy/mpy-cross.ts';
 import type { PythonBridge } from '../py/bridge.ts';
@@ -67,6 +68,13 @@ export const keyId = (key: CodeKey) =>
     : key.kind === 'handler'
       ? `handler:${key.name}`
       : `pymodule:${key.id}`;
+
+/** What lmsCapture calls what the Code tab shows: general, handler:<name>, module:<name>. */
+export function captureFile(key: CodeKey, moduleName: string | null): string {
+  if (key.kind === 'handler') return `handler:${key.name}`;
+  if (key.kind === 'pymodule') return `module:${moduleName ?? key.id}`;
+  return 'general';
+}
 
 export function parseKey(id: string): CodeKey {
   if (id.startsWith('handler:')) return { kind: 'handler', name: id.slice(8) };
@@ -324,17 +332,36 @@ export class CodeController {
   /** CodePanel.check_syntax: the project generated and compiled; the errors of what is open. */
   async check(): Promise<MappedError[]> {
     const ticket = ++this.checking;
-    await this.editing;
-    let errors: MappedError[];
+    this.runningChecks++;
     try {
-      errors = await this.compileProject();
-    } catch {
-      return []; // no mpy-cross: no opinion
+      await this.editing;
+      let errors: MappedError[];
+      try {
+        errors = await this.compileProject();
+      } catch {
+        return []; // no mpy-cross: no opinion
+      }
+      if (ticket !== this.checking) return errors;
+      this.allErrors = errors;
+      this.changed();
+      capture.emit('code-checked', {
+        file: captureFile(this.current, this.moduleName()),
+        errors: this.errors().map((error) => ({
+          line: error.sourceLine ?? error.line,
+          message: error.message,
+        })),
+      });
+      return errors;
+    } finally {
+      this.runningChecks--;
     }
-    if (ticket !== this.checking) return errors;
-    this.allErrors = errors;
-    this.changed();
-    return errors;
+  }
+
+  private runningChecks = 0;
+
+  /** No syntax check running (mpy-cross is not Python's worker): for lmsCapture.idle(). */
+  get idle(): boolean {
+    return this.runningChecks === 0;
   }
 
   /**

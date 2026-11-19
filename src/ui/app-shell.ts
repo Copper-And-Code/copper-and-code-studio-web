@@ -2,7 +2,7 @@ import { captureOptions } from '../capture/options.ts';
 import { capture } from '../capture/hub.ts';
 import { LitElement, css, html, nothing } from 'lit';
 import type { CenterTab, Studio } from '../app/studio.ts';
-import type { MappedError } from '../app/code.ts';
+import { type MappedError, captureFile } from '../app/code.ts';
 import { upstream } from '../build-info.ts';
 import { tr } from '../i18n/tr.ts';
 import type { PythonBridge, PythonState } from '../py/bridge.ts';
@@ -21,6 +21,7 @@ import './code-editor.ts';
 import type { CodePanel } from './code-panel.ts';
 import './code-panel.ts';
 import './files-panel.ts';
+import type { DesignerView } from './designer-view.ts';
 import './designer-view.ts';
 import './project-tree.ts';
 import './properties-panel.ts';
@@ -488,6 +489,46 @@ export class AppShell extends LitElement {
     const host = this.renderRoot.querySelector<HTMLElement>('.demo-screen');
     if (!host) throw new Error('The shell is not rendered yet');
     return host;
+  }
+
+  /**
+   * lmsCapture.editor(): the editor the centre shows and what it holds: general (the Code tab's
+   * general code), handler:<name>, module:<name>, or file:<path> for a file tab.
+   */
+  shownEditor(): { file: string; editor: CodeEditor } | null {
+    const studio = this.studio;
+    if (!studio) return null;
+    if (this.tab === 'code') {
+      const editor = this.renderRoot.querySelector<CodePanel>('lms-code-panel')?.editor;
+      if (!editor) return null;
+      const current = studio.code.current;
+      return { file: captureFile(current, studio.code.moduleName(current)), editor };
+    }
+    if (this.tab.startsWith('file:')) {
+      const id = this.tab.slice(5);
+      const tab = studio.files.get(Number(id));
+      const editor = this.renderRoot.querySelector<CodeEditor>(
+        `lms-code-editor[data-file="${CSS.escape(id)}"]`,
+      );
+      return tab && editor ? { file: `file:${tab.location.path}`, editor } : null;
+    }
+    return null;
+  }
+
+  /** Every editor of the shell, for lmsCapture.idle(). */
+  editors(): CodeEditor[] {
+    const code = this.renderRoot.querySelector<CodePanel>('lms-code-panel')?.editor;
+    return [
+      ...(code ? [code] : []),
+      ...this.renderRoot.querySelectorAll<CodeEditor>('lms-code-editor[data-file]'),
+    ];
+  }
+
+  /** The canvas of a page, for lmsCapture.widgetBox. */
+  designerView(pageId: string): DesignerView | null {
+    return this.renderRoot.querySelector<DesignerView>(
+      `lms-designer-view[page-id="${CSS.escape(pageId)}"]`,
+    );
   }
 
   get simPanel(): SimPanel {

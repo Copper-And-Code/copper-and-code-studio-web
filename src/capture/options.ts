@@ -14,6 +14,8 @@ export interface CaptureOptions {
   zoom: number;
   theme: 'light' | 'dark' | null;
   lang: string | null;
+  /** editor=plain: no automatic indent, no bracket closing, no completion list. */
+  editor: 'normal' | 'plain';
 }
 
 const OFF: CaptureOptions = {
@@ -23,6 +25,7 @@ const OFF: CaptureOptions = {
   zoom: 1,
   theme: null,
   lang: null,
+  editor: 'normal',
 };
 
 export function parseCaptureOptions(search: string): CaptureOptions {
@@ -38,6 +41,7 @@ export function parseCaptureOptions(search: string): CaptureOptions {
     zoom: Number.isFinite(zoom) && zoom >= 0.5 && zoom <= 4 ? zoom : 1,
     theme: theme === 'light' || theme === 'dark' ? theme : null,
     lang: query.get('lang'),
+    editor: query.get('editor') === 'plain' ? 'plain' : 'normal',
   };
 }
 

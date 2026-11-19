@@ -3,7 +3,7 @@
 // opens a file; the context menu (right click, the Menu key or Shift+F10) runs, creates, renames
 // and deletes.
 import { LitElement, css, html, nothing } from 'lit';
-import { tr } from '../i18n/tr.ts';
+import { captureName, tr } from '../i18n/tr.ts';
 import { type Entry, type FileStore, type Location, joinPath } from '../storage/store.ts';
 import type { MenuItem } from './menu-bar.ts';
 
@@ -281,6 +281,7 @@ export class FilesPanel extends LitElement {
             type="button"
             role="treeitem"
             data-path=${node.path}
+            data-capture=${`tree.file.${node.path}`}
             aria-expanded=${node.kind === 'folder' ? String(this.open.has(node.path)) : nothing}
             aria-selected=${String(this.selected === node.path)}
             title=${node.path}
@@ -323,6 +324,7 @@ export class FilesPanel extends LitElement {
               type="button"
               role="menuitem"
               data-id=${item.id ?? nothing}
+              data-capture=${`context-menu.${captureName(item.label)}`}
               ?disabled=${item.disabled}
               @click=${() => {
                 this.menu = null;

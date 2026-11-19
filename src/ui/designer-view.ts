@@ -66,6 +66,9 @@ export function qtColor(value: unknown, fallback: string): string {
   return (text && parse(text)) || parse(fallback) || '#000000';
 }
 
+/** The capture mode's name of each handle, by its index (docs/capture.md). */
+const HANDLE_NAMES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
 /** The cursor of each ResizeHandle, by its index: corners and sides, clockwise from top left. */
 const HANDLE_CURSORS = [
   'nwse-resize',
@@ -353,6 +356,27 @@ export class DesignerView extends LitElement {
 
   private get zoom(): number {
     return this.controller?.view(this.pageId).zoom ?? 1;
+  }
+
+  /**
+   * lmsCapture.widgetBox: where a widget of this page is in the browser's viewport, in CSS pixels
+   * as a pointer event's clientX and clientY, at any zoom of the canvas or of the page; null when
+   * the page is not shown or has no such widget.
+   */
+  screenBox(name: string): Rect | null {
+    const page = this.page;
+    const stage = this.renderRoot.querySelector<HTMLElement>('.stage');
+    const rect = page ? sceneRects(page).get(name) : undefined;
+    if (!page || !stage || !rect) return null;
+    const box = stage.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    const scale = box.width / (page.display.width + 2 * MARGIN);
+    return {
+      x: box.left + (rect.x + MARGIN) * scale,
+      y: box.top + (rect.y + MARGIN) * scale,
+      width: rect.width * scale,
+      height: rect.height * scale,
+    };
   }
 
   override updated(): void {
@@ -907,7 +931,7 @@ export class DesignerView extends LitElement {
       const y = Math.round(number(widget.props.y, 0));
       const inner = (children.get(widget.id) ?? []).map((child) => draw(child, left + x, top + y));
       const selected = this.controller?.selected(page.id).includes(widget.name) ?? false;
-      return svg`<g transform="translate(${x} ${y})" data-widget=${widget.name} aria-selected=${String(selected)}>
+      return svg`<g transform="translate(${x} ${y})" data-widget=${widget.name} data-capture=${`designer-widget.${widget.name}`} aria-selected=${String(selected)}>
         <title>${widget.name} (${widget.type})</title>
         ${this.paintWidget(widget, page, previewActive, left + x, top + y)}
         ${inner}
@@ -936,7 +960,7 @@ export class DesignerView extends LitElement {
       ];
       points.forEach(([px, py], index) => {
         handles.push(
-          svg`<rect class="handle" data-handle=${index} data-id=${ids.get(name) ?? ''} x=${(px ?? 0) - 4} y=${(py ?? 0) - 4} width="8" height="8" fill="#FFFFFF" stroke=${SELECTION} stroke-width="1" pointer-events="all" style="cursor:${HANDLE_CURSORS[index] ?? 'default'}" />`,
+          svg`<rect class="handle" data-handle=${index} data-id=${ids.get(name) ?? ''} data-capture=${`designer-handle.${HANDLE_NAMES[index]}`} x=${(px ?? 0) - 4} y=${(py ?? 0) - 4} width="8" height="8" fill="#FFFFFF" stroke=${SELECTION} stroke-width="1" pointer-events="all" style="cursor:${HANDLE_CURSORS[index] ?? 'default'}" />`,
         );
       });
     }

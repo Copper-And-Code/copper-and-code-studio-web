@@ -107,7 +107,7 @@ def doc_state():
         "projectName": project.projectName,
         "board": project.board.get("id") if isinstance(project.board, dict) else None,
         "display": {"width": project.display.width, "height": project.display.height},
-        "pages": [{"id": page.id, "name": page.name} for page in project.pages],
+        "pages": [{"id": page.id, "name": page.name, "initial": index == project.initial_page_index()} for index, page in enumerate(project.pages)],
         "modules": [{"id": module.id, "name": module.name} for module in project.modules],
         "runTarget": _run_target(project),
         "canUndo": stack.can_undo(),
@@ -368,10 +368,11 @@ def design_page(page_id):
                 "type": widget.type,
                 "parentId": widget.parentId if widget.parentId in placed else None,
                 "props": widget.props,
+                "events": dict(widget.events),
             })
         if len(deferred) == len(pending):  # a container that never comes: as rebuild, no parent
             for widget in deferred:
-                items.append({"id": widget.id, "name": widget.name, "type": widget.type, "parentId": None, "props": widget.props})
+                items.append({"id": widget.id, "name": widget.name, "type": widget.type, "parentId": None, "props": widget.props, "events": dict(widget.events)})
             break
         pending = deferred
     return {

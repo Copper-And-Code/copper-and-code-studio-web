@@ -291,6 +291,7 @@ export class CodePanel extends LitElement {
         <select
           id="code-object"
           data-testid="code-object"
+          data-capture="code.object"
           .value=${controller.object}
           @change=${(event: Event) =>
             void controller.selectObject((event.target as HTMLSelectElement).value)}
@@ -306,6 +307,7 @@ export class CodePanel extends LitElement {
         <select
           id="code-procedure"
           data-testid="code-procedure"
+          data-capture="code.procedure"
           .value=${current.startsWith('handler:') ? current.slice(8) : (controller.procedures[0]?.handler ?? '')}
           @change=${(event: Event) =>
             void controller.selectProcedure((event.target as HTMLSelectElement).value)}
@@ -323,11 +325,17 @@ export class CodePanel extends LitElement {
         </select>
       </div>
       <div class="row">
-        <button type="button" ?disabled=${this.running} @click=${() => void controller.newModule()}>
+        <button
+          type="button"
+          data-capture="code.new-python-module"
+          ?disabled=${this.running}
+          @click=${() => void controller.newModule()}
+        >
           ${tr('New Python Module…')}
         </button>
         <button
           type="button"
+          data-capture="code.rename-module"
           ?disabled=${this.running || !module}
           @click=${() => void controller.renameModule()}
         >
@@ -335,6 +343,7 @@ export class CodePanel extends LitElement {
         </button>
         <button
           type="button"
+          data-capture="code.delete-module"
           ?disabled=${this.running || !module}
           @click=${() => void controller.deleteModule()}
         >

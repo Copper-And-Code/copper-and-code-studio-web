@@ -22,7 +22,10 @@ export type CaptureEventType =
   | 'upload-progress'
   | 'upload-finished'
   | 'dialog-opened'
-  | 'dialog-closed';
+  | 'dialog-closed'
+  | 'python-error'
+  | 'output'
+  | 'code-checked';
 
 export interface CaptureEvent {
   type: CaptureEventType;

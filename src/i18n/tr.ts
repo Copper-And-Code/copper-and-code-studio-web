@@ -72,8 +72,16 @@ export function tr(text: string, values: Record<string, string | number> = {}): 
  * run-program. The capture mode's data-capture names of the menus (docs/capture.md).
  */
 export function captureName(text: string): string {
-  const english = Object.values(catalogs).some((catalog) => text in catalog);
-  return (english ? text : sourceOf(text))
+  const known = (value: string) => Object.values(catalogs).some((catalog) => value in catalog);
+  // a label drawn as tr('New Folder') + ':' is found without its colon
+  const bare = text.replace(/[\s:…]+$/u, '');
+  let english = text;
+  if (!known(text)) {
+    if (sourceOf(text) !== text) english = sourceOf(text);
+    else if (known(bare)) english = bare;
+    else english = sourceOf(bare);
+  }
+  return english
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');

@@ -2,7 +2,7 @@
 // that stands in for the desktop's file dialog (a place, its folders, a file name).
 import { capture } from '../capture/hub.ts';
 import { LitElement, css, html, nothing } from 'lit';
-import { tr } from '../i18n/tr.ts';
+import { captureName, tr } from '../i18n/tr.ts';
 import {
   type Entry,
   type FileStore,
@@ -352,6 +352,8 @@ export class Dialogs extends LitElement {
 
   choose(options: ChooseOptions): Promise<Location | null> {
     options = { ...options, stores: options.stores.filter((store) => !store.ownView) };
+    // capture mode: the browser's folder picker can be neither driven nor filmed
+    if (capture.enabled) options.addFolder = undefined;
     return new Promise((resolve) => this.push({ kind: 'choose', options, resolve }));
   }
 
@@ -368,7 +370,90 @@ export class Dialogs extends LitElement {
     const dialog = this.renderRoot.querySelector('dialog');
     if (dialog && !dialog.open) dialog.showModal();
     this.renderRoot.querySelector<HTMLElement>('[autofocus]')?.focus();
-    capture.emit('dialog-opened', { kind: this.current.kind, title: this.dialogTitle() });
+    if (capture.enabled) {
+      capture.emit('dialog-opened', {
+        kind: this.current.kind,
+        title: this.dialogTitle(),
+        ...this.controlNames(),
+      });
+    }
+  }
+
+  override updated(): void {
+    if (capture.enabled) this.nameControls();
+  }
+
+  /**
+   * Capture mode: dialog.field.<name> on every field and dialog.button.<id> on every button, the
+   * same in every language (docs/capture.md). A field's name is the one the form gives it, or its
+   * English label; a button's id is its English text. Drawn again at every update, since Lit
+   * reuses the elements of one dialog for the next.
+   */
+  private nameControls(): void {
+    const dialog = this.renderRoot.querySelector('dialog');
+    if (!dialog) return;
+    const used = new Set<string>();
+    for (const element of dialog.querySelectorAll<HTMLElement>(
+      'input, select, textarea, button, a.button',
+    )) {
+      const explicit = element.dataset.capture;
+      if (explicit !== undefined && element.dataset.captureAuto === undefined) {
+        used.add(explicit);
+        continue;
+      }
+      let name = this.controlName(dialog, element);
+      if (used.has(name)) {
+        let count = 2;
+        while (used.has(`${name}-${count}`)) count++;
+        name = `${name}-${count}`;
+      }
+      used.add(name);
+      element.dataset.capture = name;
+      element.dataset.captureAuto = '';
+    }
+  }
+
+  private controlName(dialog: HTMLDialogElement, element: HTMLElement): string {
+    const text = (value: string | null | undefined) =>
+      captureName((value ?? '').replace(/\s+/g, ' ').trim());
+    if (element.matches('button, a.button')) {
+      const id =
+        element.dataset.button ??
+        (text(element.getAttribute('aria-label')) ||
+          text(element.textContent) ||
+          text(element.title) ||
+          'button');
+      return `dialog.button.${id}`;
+    }
+    const labelled = element.id
+      ? dialog.querySelector(`label[for="${CSS.escape(element.id)}"]`)?.textContent
+      : null;
+    const field =
+      element.dataset.field ??
+      (text(labelled) ||
+        text(element.getAttribute('aria-label')) ||
+        (element.matches('[type="radio"]')
+          ? text(element.closest('fieldset')?.querySelector('legend')?.textContent)
+          : text(element.closest('label')?.textContent)) ||
+        text(element.getAttribute('placeholder')) ||
+        'field');
+    if (!element.matches('[type="radio"]')) return `dialog.field.${field}`;
+    const choice =
+      element.dataset.choice ??
+      (text(element.closest('label')?.textContent) || text((element as HTMLInputElement).value));
+    return `dialog.field.${field}.${choice}`;
+  }
+
+  /** The names of the shown dialog's fields and buttons, after dialog.field. and dialog.button. */
+  private controlNames(): { fields: string[]; buttons: string[] } {
+    const fields: string[] = [];
+    const buttons: string[] = [];
+    for (const element of this.renderRoot.querySelectorAll<HTMLElement>('dialog [data-capture]')) {
+      const name = element.dataset.capture ?? '';
+      if (name.startsWith('dialog.field.')) fields.push(name.slice(13));
+      else if (name.startsWith('dialog.button.')) buttons.push(name.slice(14));
+    }
+    return { fields, buttons };
   }
 
   /** The heading of the dialog shown, for the capture's events. */
@@ -535,10 +620,16 @@ export class Dialogs extends LitElement {
           : nothing
       }
       <nav class="crumbs" aria-label=${tr('Folder')}>
-        <button type="button" @click=${() => this.enter('')}>${this.place?.label ?? ''}</button>
+        <button type="button" data-button="folder" @click=${() => this.enter('')}>
+          ${this.place?.label ?? ''}
+        </button>
         ${parts.map(
           (part, i) =>
-            html`/<button type="button" @click=${() => this.enter(parts.slice(0, i + 1).join('/'))}>
+            html`/<button
+                type="button"
+                data-button=${`folder.${parts.slice(0, i + 1).join('/')}`}
+                @click=${() => this.enter(parts.slice(0, i + 1).join('/'))}
+              >
                 ${part}
               </button>`,
         )}
@@ -547,7 +638,11 @@ export class Dialogs extends LitElement {
         ${
           this.folder
             ? html`<li>
-                <button type="button" @click=${() => this.enter(parentPath(this.folder))}>
+                <button
+                  type="button"
+                  data-button="entry.parent"
+                  @click=${() => this.enter(parentPath(this.folder))}
+                >
                   📁 ..
                 </button>
               </li>`
@@ -560,6 +655,7 @@ export class Dialogs extends LitElement {
                   type="button"
                   role="option"
                   aria-selected="false"
+                  data-button=${`entry.${entry.name}`}
                   @click=${() => this.enter(joinPath(this.folder, entry.name))}
                 >
                   📁 ${entry.name}
@@ -569,6 +665,7 @@ export class Dialogs extends LitElement {
                 <button
                   type="button"
                   role="option"
+                  data-button=${`entry.${entry.name}`}
                   aria-selected=${entry.name === this.name ? 'true' : 'false'}
                   ?disabled=${options.mode === 'folder' || !accept(entry.name)}
                   @click=${() => (this.name = entry.name)}
@@ -643,6 +740,7 @@ export class Dialogs extends LitElement {
               <label for="field-${index}">${field.label}</label>
               <input
                 id="field-${index}"
+                data-field=${field.name}
                 type="number"
                 min=${field.min}
                 max=${field.max}
@@ -661,6 +759,8 @@ export class Dialogs extends LitElement {
                   <input
                     type="radio"
                     name="field-${index}"
+                    data-field=${field.name}
+                    data-choice=${captureName(option.value)}
                     .value=${option.value}
                     ?autofocus=${values[field.name] === option.value && autofocus()}
                     .checked=${values[field.name] === option.value}
