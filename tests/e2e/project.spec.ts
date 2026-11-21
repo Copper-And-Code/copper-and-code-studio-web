@@ -43,7 +43,7 @@ test('an example changed, saved in the workspace, is still changed after a reloa
   await start(page);
   await menu(page, 'File', 'Open Example', 'demo');
   await expect(page.getByTestId('project-file')).toHaveText('Examples: demo.json');
-  await expect(page).toHaveTitle('demo.json — LVGL MPY Studio');
+  await expect(page).toHaveTitle('demo.json — Copper and Code Studio');
 
   // the value: the name of the first page, renamed as on the desktop
   await page.getByTestId('page').first().click({ button: 'right' });
@@ -51,7 +51,7 @@ test('an example changed, saved in the workspace, is still changed after a reloa
   await dialog(page).locator('#text').fill('Welcome Home');
   await dialog(page).getByRole('button', { name: 'OK' }).click();
   await expect(page.getByTestId('page').first()).toHaveText('Welcome Home');
-  await expect(page).toHaveTitle('*demo.json — LVGL MPY Studio');
+  await expect(page).toHaveTitle('*demo.json — Copper and Code Studio');
 
   // Save on an example asks where: the workspace, in a new folder
   await page.keyboard.press('ControlOrMeta+s');
@@ -60,7 +60,7 @@ test('an example changed, saved in the workspace, is still changed after a reloa
   await chooseFolder(page, 'mine', true);
   await expect(dialog(page).locator('#name')).toHaveValue('demo.json');
   await dialog(page).getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page).toHaveTitle('demo.json — LVGL MPY Studio');
+  await expect(page).toHaveTitle('demo.json — Copper and Code Studio');
   await expect(page.getByTestId('project-file')).toHaveText('Workspace: mine/demo.json');
 
   await page.reload();
@@ -68,7 +68,7 @@ test('an example changed, saved in the workspace, is still changed after a reloa
   await expect(page.getByTestId('project-file')).toHaveText('not saved');
   await menu(page, 'File', 'Recent Files', 'Workspace: mine/demo.json');
   await expect(page.getByTestId('page').first()).toHaveText('Welcome Home');
-  await expect(page).toHaveTitle('demo.json — LVGL MPY Studio');
+  await expect(page).toHaveTitle('demo.json — Copper and Code Studio');
   expect(await workspaceFile(page, 'mine/demo.json')).toContain('"Welcome Home"');
 });
 
@@ -141,7 +141,7 @@ test('undo and redo follow the document', async ({ page }) => {
   await dialog(page).getByRole('button', { name: 'OK' }).click();
   await page.keyboard.press('ControlOrMeta+z');
   await expect(page.getByTestId('page').first()).toHaveText(name);
-  await expect(page).toHaveTitle('demo.json — LVGL MPY Studio');
+  await expect(page).toHaveTitle('demo.json — Copper and Code Studio');
   await menu(page, 'Edit', 'Redo');
   await expect(page.getByTestId('page').first()).toHaveText('Renamed');
 });

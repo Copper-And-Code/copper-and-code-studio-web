@@ -37,9 +37,9 @@ def _sleep(seconds):
 # Before upstream's device modules are imported: their sleep= defaults take time.sleep then.
 time.sleep = _sleep
 
-from lvgl_mpy_studio.device.common import DeviceError  # noqa: E402
-from lvgl_mpy_studio.device import service  # noqa: E402
-from lvgl_mpy_studio.gen import board_gen  # noqa: E402
+from copper_and_code_studio.device.common import DeviceError  # noqa: E402
+from copper_and_code_studio.device import service  # noqa: E402
+from copper_and_code_studio.gen import board_gen  # noqa: E402
 
 MPREMOTE_PROG = "mpremote"
 
@@ -113,7 +113,7 @@ def _session():
 
 def _profile(profile=None):
     """The profile given, or the open project's board, as MainWindow._board_profile."""
-    from lvgl_mpy_studio.core.boards import portable_profile
+    from copper_and_code_studio.core.boards import portable_profile
 
     if profile is not None:
         return profile
@@ -197,7 +197,7 @@ def upload(run=False):
     import copy
 
     import lms_bridge
-    from lvgl_mpy_studio.gen import live
+    from copper_and_code_studio.gen import live
 
     project = copy.deepcopy(lms_bridge._doc().project)
     result = _session().upload(project, None, run=run, progress=_progress, cancel=_state["cancel"])
@@ -221,7 +221,7 @@ def live_send(upload_key, design_key, page_id=None):
     import copy
 
     import lms_bridge
-    from lvgl_mpy_studio.gen import live
+    from copper_and_code_studio.gen import live
 
     project = copy.deepcopy(lms_bridge._doc().project)
     if live.upload_key(project) != upload_key:
@@ -240,7 +240,7 @@ def trace_errors(text, sourcemap):
     """DeviceMixin._device_output: the tracebacks the board printed, mapped to the project's code,
     the line of the error first (_trace_rows)."""
     import lms_bridge
-    from lvgl_mpy_studio.build.compiler import traceback_errors
+    from copper_and_code_studio.build.compiler import traceback_errors
 
     modules = {module.name for module in lms_bridge._doc().project.modules}
     return sorted(traceback_errors(text, sourcemap, modules), key=lambda error: not error.get("origin"))
@@ -382,7 +382,7 @@ METHODS = {
 def _error(error):
     reply = {"type": type(error).__name__, "message": str(error), "traceback": traceback.format_exc()}
     if isinstance(error, DeviceError):
-        from lvgl_mpy_studio.core.i18n import device_error_text
+        from copper_and_code_studio.core.i18n import device_error_text
 
         reply.update(code=error.code, output=error.output, errors=error.errors, warnings=error.warnings, text=device_error_text(error.code, error.output))
     return reply

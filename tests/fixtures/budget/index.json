@@ -1,50 +1,50 @@
 {
-  "upstreamVersion": "0.7.2",
+  "upstreamVersion": "0.8.0",
   "budgets": {
     "breakout": {
-      "flash": 27968,
+      "flash": 27956,
       "ram": 48544,
-      "flashByName": 27968
+      "flashByName": 27956
     },
     "eim-01": {
-      "flash": 100856,
+      "flash": 100844,
       "ram": 263424,
-      "flashByName": 100856
+      "flashByName": 100844
     },
     "eim-01-480": {
-      "flash": 101249,
-      "ram": 261280,
-      "flashByName": 101249
+      "flash": 101237,
+      "ram": 261312,
+      "flashByName": 101237
     },
     "fifteen": {
-      "flash": 13339,
+      "flash": 13383,
       "ram": 46592,
-      "flashByName": 13103
+      "flashByName": 13110
     },
     "simon": {
-      "flash": 19220,
-      "ram": 20544,
-      "flashByName": 19220
+      "flash": 19208,
+      "ram": 20576,
+      "flashByName": 19208
     },
     "snake": {
-      "flash": 28901,
+      "flash": 28889,
       "ram": 19008,
-      "flashByName": 28901
+      "flashByName": 28889
     },
     "sysmon": {
-      "flash": 13344,
+      "flash": 13332,
       "ram": 28736,
-      "flashByName": 13344
+      "flashByName": 13332
     },
     "tictactoe": {
-      "flash": 17713,
+      "flash": 17701,
       "ram": 28576,
-      "flashByName": 17713
+      "flashByName": 17701
     },
     "weather": {
-      "flash": 20786,
+      "flash": 20774,
       "ram": 51296,
-      "flashByName": 20786
+      "flashByName": 20774
     }
   }
 }

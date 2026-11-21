@@ -1,21 +1,21 @@
 """TEMPORARY: the Qt-free part of upstream's project document, until upstream request 5.
 
-Upstream keeps it in lvgl_mpy_studio/ui/document.py (ProjectDocument, SnapshotCommand) and
+Upstream keeps it in copper_and_code_studio/ui/document.py (ProjectDocument, SnapshotCommand) and
 ui/main_files.py (_default_project), both of which import Qt, so they cannot run in Pyodide.
 This file follows them line by line, with QUndoStack replaced by the few rules of it that they
 use. When upstream moves this logic into a Qt-free module, the glue imports it from there and
 this file is deleted (docs/decisions.md, "Phase 2").
 
-Upstream v0.7.2 is the reference; any difference from it is a bug here.
+Upstream v0.8.0 is the reference; any difference from it is a bug here.
 """
 
 import copy
 from pathlib import Path
 from uuid import uuid4
 
-from lvgl_mpy_studio.core.boards import portable_profile
-from lvgl_mpy_studio.core.i18n import tr
-from lvgl_mpy_studio.core.model import Project, file_revision
+from copper_and_code_studio.core.boards import portable_profile
+from copper_and_code_studio.core.i18n import tr
+from copper_and_code_studio.core.model import Project, file_revision
 
 NEW_PROJECT_BOARD = "stm32h7_core_v1_3_1024x600"  # ui/main_files.py: without saved defaults, a new project is for this board
 

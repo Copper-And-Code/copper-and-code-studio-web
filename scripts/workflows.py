@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio.core.model import Project  # noqa: E402
+from copper_and_code_studio.core.model import Project  # noqa: E402
 
 NORMALISED = "<normalised>"
 
@@ -71,8 +71,8 @@ def initial_page(project, name):
 
 
 def property_type(project, names, name):
-    from lvgl_mpy_studio.core.components import COMPONENTS
-    from lvgl_mpy_studio.core.model import widget_definitions
+    from copper_and_code_studio.core.components import COMPONENTS
+    from copper_and_code_studio.core.model import widget_definitions
 
     definitions = {**widget_definitions(), **COMPONENTS}
     for widget_name in names:
@@ -85,7 +85,7 @@ def property_type(project, names, name):
 
 def set_property(project, names, name, text):
     """_item_changed's mutate, after its checks."""
-    from lvgl_mpy_studio.core.blocks import parse_pin
+    from copper_and_code_studio.core.blocks import parse_pin
 
     if name == "Name":
         project.rename_widget(names[0], text)
@@ -129,8 +129,8 @@ def write_frame(project, page_name, target):
     """build/preview.py render_page with the native runtime, as the designer's preview draws it."""
     import os
 
-    from lvgl_mpy_studio.build import preview
-    from lvgl_mpy_studio.build.visual import rgb565_to_rgb, write_png
+    from copper_and_code_studio.build import preview
+    from copper_and_code_studio.build.visual import rgb565_to_rgb, write_png
 
     runtime = os.environ.get("LMS_RUNTIME")
     if not runtime:
@@ -153,7 +153,7 @@ class Canvas:
     def __init__(self, project):
         from PySide6.QtWidgets import QApplication
 
-        from lvgl_mpy_studio.ui.document import ProjectDocument
+        from copper_and_code_studio.ui.document import ProjectDocument
 
         self.app = QApplication.instance() or QApplication(["workflows", "-platform", "offscreen"])
         self.document = ProjectDocument(project)
@@ -161,7 +161,7 @@ class Canvas:
         self.page = None
 
     def scene(self):
-        from lvgl_mpy_studio.ui.designer.scene import DesignerScene
+        from copper_and_code_studio.ui.designer.scene import DesignerScene
 
         page = next(item for item in self.document.project.pages if item.name == self.page)
         if page.id not in self.scenes:
@@ -181,13 +181,13 @@ class Canvas:
     def step(self, step):
         from PySide6.QtCore import QPointF, Qt  # noqa: F401
 
-        from lvgl_mpy_studio.core.i18n import tr
+        from copper_and_code_studio.core.i18n import tr
 
         if "page" in step:
             self.page = step["page"]
             return True
         if "file" in step:
-            from lvgl_mpy_studio.ui.properties.panel import DESCRIPTOR_ROLE, PropertiesPanel
+            from copper_and_code_studio.ui.properties.panel import DESCRIPTOR_ROLE, PropertiesPanel
 
             if not hasattr(self, "properties"):
                 self.properties = PropertiesPanel(self.document)
@@ -204,7 +204,7 @@ class Canvas:
             self.properties.rebuild()
             return True
         if "code" in step:
-            from lvgl_mpy_studio.ui.code.editor import CodePanel
+            from copper_and_code_studio.ui.code.editor import CodePanel
 
             if not hasattr(self, "code"):
                 self.code = CodePanel(self.document)
@@ -289,7 +289,7 @@ def main(argv):
             elif "initialPage" in step:
                 initial_page(project, step["initialPage"])
             elif "projectSettings" in step:
-                from lvgl_mpy_studio.core.boards import ProfileStore, portable_profile
+                from copper_and_code_studio.core.boards import ProfileStore, portable_profile
 
                 profile_id, mode = step["projectSettings"]
                 profile = portable_profile(next(item for item in ProfileStore(Path("/nonexistent/profiles.json")).profiles() if item["id"] == profile_id))

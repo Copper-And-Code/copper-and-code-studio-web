@@ -1,6 +1,10 @@
-# LVGL MPY Studio Web
+# Copper and Code Studio Web
 
-The [LVGL MPY Studio](https://github.com/Copper-And-Code/lvgl-mpy-studio) IDE in the browser:
+**Copper and Code Studio Web** — the visual GUI builder for MicroPython and LVGL, in the browser.
+
+Formerly LVGL MPY Studio Web.
+
+The [Copper and Code Studio](https://github.com/Copper-And-Code/copper-and-code-studio) IDE in the browser:
 page designer, code editor, simulator, board over Web Serial and publishing a game for the web.
 It runs alongside the desktop IDE and does not replace it.
 
@@ -10,7 +14,7 @@ It runs alongside the desktop IDE and does not replace it.
 > IDE and what was tested how. Real boards have been tried from the test bench, not yet by a
 > person in a browser.
 
-- Site: <https://copper-and-code.github.io/lvgl-mpy-studio-web/>
+- Site: <https://copper-and-code.github.io/copper-and-code-studio-web/>
 - Upstream: the desktop IDE is a git submodule in `upstream/`, pinned to a tag. Its Python core
   runs in the browser through Pyodide, unchanged.
 
@@ -30,10 +34,10 @@ Italian is upstream's own catalogue, `translations/it.json`.
 ## Development
 
 ```bash
-git clone --recurse-submodules https://github.com/Copper-And-Code/lvgl-mpy-studio-web.git
-cd lvgl-mpy-studio-web
+git clone --recurse-submodules https://github.com/Copper-And-Code/copper-and-code-studio-web.git
+cd copper-and-code-studio-web
 pnpm install
-pnpm dev          # http://localhost:5173/lvgl-mpy-studio-web/
+pnpm dev          # http://localhost:5173/copper-and-code-studio-web/
 pnpm lint && pnpm typecheck && pnpm test
 pnpm goldens      # upstream on the host, Python 3.11 or later
 pnpm test:py      # upstream in Pyodide: goldens, audit, upstream's own tests
@@ -57,3 +61,6 @@ The IDE is GPL-3.0-or-later, as upstream, whose core it runs: see [`LICENSE`](LI
 the IDE generates for its users (generated code, a game's web folder, the runtime files) keeps
 upstream's MIT terms, as described in `upstream/LICENSING.md`. Third-party components are listed
 in [`THIRD_PARTY.md`](THIRD_PARTY.md).
+
+Copper and Code Studio Web is a personal project, not affiliated with or endorsed by LVGL or
+MicroPython, whose names belong to their owners.

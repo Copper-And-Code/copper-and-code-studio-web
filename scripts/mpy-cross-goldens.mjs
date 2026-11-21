@@ -25,7 +25,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const SOURCES = [
   'upstream/examples',
   'upstream/runtime/program',
-  'upstream/lvgl_mpy_studio/gen',
+  'upstream/copper_and_code_studio/gen',
   'tests/fixtures/goldens',
 ];
 export const BROKEN = {

@@ -77,11 +77,11 @@ export class ProjectSession {
     return () => this.listeners.delete(listener);
   }
 
-  /** "*name — LVGL MPY Studio", as the desktop's window title. */
+  /** "*name — Copper and Code Studio", as the desktop's window title. */
   title(): string {
     const marker = this.state?.modified ? '*' : '';
     const name = this.location ? baseName(this.location.path) : (this.state?.projectName ?? '');
-    return `${marker}${name} — LVGL MPY Studio`;
+    return `${marker}${name} — Copper and Code Studio`;
   }
 
   get modified(): boolean {

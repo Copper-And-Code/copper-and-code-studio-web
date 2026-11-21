@@ -1,8 +1,8 @@
 {
-  "name": "lvgl-mpy-studio-web",
+  "name": "copper-and-code-studio-web",
   "version": "0.0.0",
   "private": true,
-  "description": "LVGL MPY Studio in the browser",
+  "description": "Copper and Code Studio Web: the visual GUI builder for MicroPython and LVGL, in the browser",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "packageManager": "pnpm@11.21.0",

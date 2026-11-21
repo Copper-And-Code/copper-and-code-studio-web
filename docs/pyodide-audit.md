@@ -1,11 +1,11 @@
 # Upstream in Pyodide: the audit
 
-Upstream `v0.7.2`, Pyodide 314.0.7 (Python 3.14). Checked by `tests/py/audit.test.ts`, which
+Upstream `v0.8.0`, Pyodide 314.0.7 (Python 3.14). Checked by `tests/py/audit.test.ts`, which
 imports every module of the bundle in Pyodide.
 
 ## Imports
 
-Every module of `lvgl_mpy_studio/{core,gen,build,sim,blocks}` and `platform.py` imports in
+Every module of `copper_and_code_studio/{core,gen,build,sim,blocks}` and `platform.py` imports in
 Pyodide, and none of them loads PySide6, qtawesome, pyserial or mpremote. `device/`, in the
 bundle since phase 6, imports `serial`: the bundle's `py/serial/`, which gives pyserial's
 interface over the page's port; mpremote is loaded only when a board command runs. `subprocess`, `socket`

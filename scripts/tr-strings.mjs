@@ -54,7 +54,7 @@ export function trStrings(root = ROOT) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { texts, dynamic } = trStrings();
   const read = (path) => JSON.parse(readFileSync(join(ROOT, path), 'utf8'));
-  const upstream = read('upstream/lvgl_mpy_studio/translations/it.json');
+  const upstream = read('upstream/copper_and_code_studio/translations/it.json');
   let web = {};
   try {
     web = read('src/i18n/it-web.json');

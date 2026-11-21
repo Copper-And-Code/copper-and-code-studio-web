@@ -1,3 +1,3 @@
 [submodule "upstream"]
 	path = upstream
-	url = https://github.com/Copper-And-Code/lvgl-mpy-studio.git
+	url = https://github.com/Copper-And-Code/copper-and-code-studio.git

@@ -10,7 +10,7 @@ import { setLanguage, tr } from '../../src/i18n/tr.ts';
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (path: string) =>
   JSON.parse(readFileSync(join(ROOT, path), 'utf8')) as Record<string, string>;
-const upstream = read('upstream/lvgl_mpy_studio/translations/it.json');
+const upstream = read('upstream/copper_and_code_studio/translations/it.json');
 const web = read('src/i18n/it-web.json');
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 

@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
+import { BASE } from './scripts/site.mjs';
 import { swPlugin } from './scripts/sw-plugin.mjs';
 import { upstreamInfo } from './scripts/upstream-info.mjs';
 
-// GitHub Pages serves the site under the repository name. Dev and preview use the same base,
-// so a wrong path shows up locally and not only once deployed.
+// GitHub Pages serves the site under the repository name (scripts/site.mjs). Dev and preview use
+// the same base, so a wrong path shows up locally and not only once deployed.
 export default defineConfig({
-  base: '/lvgl-mpy-studio-web/',
+  base: BASE,
   plugins: [swPlugin()],
   define: {
     __UPSTREAM__: JSON.stringify(upstreamInfo()),

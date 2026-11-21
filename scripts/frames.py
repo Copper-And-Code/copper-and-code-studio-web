@@ -22,10 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio import __version__  # noqa: E402
-from lvgl_mpy_studio.build import preview  # noqa: E402
-from lvgl_mpy_studio.build.visual import rgb565_to_rgb, write_png  # noqa: E402
-from lvgl_mpy_studio.core.model import Project  # noqa: E402
+from copper_and_code_studio import __version__  # noqa: E402
+from copper_and_code_studio.build import preview  # noqa: E402
+from copper_and_code_studio.build.visual import rgb565_to_rgb, write_png  # noqa: E402
+from copper_and_code_studio.core.model import Project  # noqa: E402
 
 GAMES = ("breakout", "fifteen", "simon", "snake", "tictactoe")
 

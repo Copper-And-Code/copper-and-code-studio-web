@@ -14,7 +14,7 @@ import { ASSETS, CACHE, assetUrl } from './runtime-info.mjs';
 import { upstreamInfo } from './upstream-info.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const LICENSES = join(ROOT, 'upstream', 'lvgl_mpy_studio', 'gen', 'output', 'licenses');
+const LICENSES = join(ROOT, 'upstream', 'copper_and_code_studio', 'gen', 'output', 'licenses');
 const LOCK = join(ROOT, 'runtime.lock.json');
 const MTIME = new Date('2026-01-01T00:00:00Z');
 

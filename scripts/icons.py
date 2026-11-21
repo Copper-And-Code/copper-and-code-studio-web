@@ -1,5 +1,5 @@
 """The icons of the installed app (public/manifest.webmanifest), drawn from upstream's own icon
-(upstream/packaging/lvgl-mpy-studio.svg) with Qt, as upstream's packaging/make_icon.sh draws its
+(upstream/packaging/copper-and-code-studio.svg) with Qt, as upstream's packaging/make_icon.sh draws its
 icon.ico. The PNGs are committed; run this again only when upstream's drawing changes.
 
 The maskable icon fills its square with the icon's background colour and draws the icon in the
@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 ROOT = Path(__file__).resolve().parents[1]
-SVG = ROOT / "upstream" / "packaging" / "lvgl-mpy-studio.svg"
+SVG = ROOT / "upstream" / "packaging" / "copper-and-code-studio.svg"
 OUT = ROOT / "public" / "icons"
 BACKGROUND = "#17324d"  # the SVG's own background
 

@@ -133,7 +133,7 @@ test('dialogs are events; the status bar has no times; the stable names are ther
   for (const name of ['toolbox', 'project-tree', 'designer-canvas', 'output', 'menu-run']) {
     await expect(page.locator(`[data-capture="${name}"]`).first()).toBeAttached();
   }
-  await menu(page, 'help', 'about-lvgl-mpy-studio');
+  await menu(page, 'help', 'about-copper-and-code-studio');
   await page.keyboard.press('Escape');
   await menu(page, 'project', 'project-settings');
   await expect(page.locator('[data-capture="dialog"][open]')).toBeVisible();

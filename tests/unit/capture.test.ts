@@ -47,7 +47,7 @@ describe('captureName', () => {
 
   it('is the English text, in lower case with dashes', () => {
     expect(captureName('Run Program…')).toBe('run-program');
-    expect(captureName('About LVGL MPY Studio')).toBe('about-lvgl-mpy-studio');
+    expect(captureName('About Copper and Code Studio')).toBe('about-copper-and-code-studio');
     expect(captureName('Module name, without .py:')).toBe('module-name-without-py');
   });
 

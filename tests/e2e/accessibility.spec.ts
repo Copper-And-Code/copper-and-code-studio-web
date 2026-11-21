@@ -94,9 +94,9 @@ test('the menu bar from the keyboard: F10, arrows, Escape, Enter', async ({ page
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menu', { name: 'Help' })).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog', { name: 'LVGL MPY Studio Web' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Copper and Code Studio Web' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'LVGL MPY Studio Web' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Copper and Code Studio Web' })).toHaveCount(0);
 });
 
 test('one stop of the menu bar in the Tab order, then the Toolbox', async ({ page }) => {

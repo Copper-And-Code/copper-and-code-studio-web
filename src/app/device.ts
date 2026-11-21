@@ -486,7 +486,7 @@ export class DeviceController {
   private notAvailable(): void {
     this.view.message(
       tr(
-        'This browser has no Web Serial: the board works in Chrome or Edge, or from the desktop LVGL MPY Studio.',
+        'This browser has no Web Serial: the board works in Chrome or Edge, or from the desktop Copper and Code Studio.',
       ),
     );
   }

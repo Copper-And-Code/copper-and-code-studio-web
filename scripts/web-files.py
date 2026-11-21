@@ -20,8 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio.build import compiler, web  # noqa: E402
-from lvgl_mpy_studio.core.model import Project  # noqa: E402
+from copper_and_code_studio.build import compiler, web  # noqa: E402
+from copper_and_code_studio.core.model import Project  # noqa: E402
 
 PROGRAMS = {"shell": "shell.py"}
 

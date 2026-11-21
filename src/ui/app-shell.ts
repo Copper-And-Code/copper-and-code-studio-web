@@ -739,7 +739,7 @@ export class AppShell extends LitElement {
       case 'loading-python':
         return tr('Python: starting…');
       case 'loading-upstream':
-        return tr('Python: loading LVGL MPY Studio…');
+        return tr('Python: loading Copper and Code Studio…');
       case 'ready':
         // capture mode: no time in the text, so two captures show the same status bar
         if (captureOptions.enabled)
@@ -757,7 +757,7 @@ export class AppShell extends LitElement {
     const help: Menu = {
       label: tr('Help'),
       items: () => [
-        { label: tr('About LVGL MPY Studio'), id: 'about', action: () => this.openAbout() },
+        { label: tr('About Copper and Code Studio'), id: 'about', action: () => this.openAbout() },
       ],
     };
     return [...(this.studio?.menus() ?? []), help];
@@ -1088,7 +1088,7 @@ export class AppShell extends LitElement {
     const label = upstreamLabel(upstream);
     return html`
       <header>
-        <h1 class="visually-hidden">LVGL MPY Studio Web</h1>
+        <h1 class="visually-hidden">Copper and Code Studio Web</h1>
         <lms-menu-bar label=${tr('Main menu')} .menus=${this.menus()}></lms-menu-bar>
       </header>
       <main>
@@ -1232,7 +1232,7 @@ ${this.outputText}</pre>
         ></lms-device-console>
       </section>
       <footer>
-        <span>${this.statusMessage || `LVGL MPY Studio ${label}`}</span>
+        <span>${this.statusMessage || `Copper and Code Studio ${label}`}</span>
         ${
           this.studio?.budgetText
             ? html`<span
@@ -1267,8 +1267,8 @@ ${this.outputText}</pre>
       <lms-dialogs></lms-dialogs>
       <div class="preview-host" aria-hidden="true"></div>
       <dialog id="about" aria-labelledby="about-title">
-        <h1 id="about-title">LVGL MPY Studio Web</h1>
-        <p>${tr('The LVGL MPY Studio IDE in the browser.')}</p>
+        <h1 id="about-title">Copper and Code Studio Web</h1>
+        <p>${tr('The visual GUI builder for MicroPython and LVGL, in the browser.')}</p>
         <p>${tr('Upstream:')} <strong data-testid="upstream-tag">${label}</strong></p>
         <p>
           Python:

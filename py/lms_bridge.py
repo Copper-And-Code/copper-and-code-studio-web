@@ -26,7 +26,7 @@ def _read_tree(directory):
 
 def _load_project(folder, project_text):
     """Write the project file and load it as the desktop IDE does, validation included."""
-    from lvgl_mpy_studio.core.model import Project
+    from copper_and_code_studio.core.model import Project
 
     path = Path(folder) / "project.json"
     path.write_text(project_text, encoding="utf-8", newline="")
@@ -34,21 +34,21 @@ def _load_project(folder, project_text):
 
 
 def info():
-    from lvgl_mpy_studio import __version__
+    from copper_and_code_studio import __version__
 
     return {"upstreamVersion": __version__, "python": sys.version.split()[0]}
 
 
 def set_language(code):
     """core/i18n.py set_language: upstream's own messages in the IDE's language."""
-    from lvgl_mpy_studio.core.i18n import set_language as choose
+    from copper_and_code_studio.core.i18n import set_language as choose
 
     return choose(code)
 
 
 def generate(project_text):
     """The project's MicroPython code, as upstream's generate_project writes it (CLI: generate)."""
-    from lvgl_mpy_studio.gen.project_gen import generate_project
+    from copper_and_code_studio.gen.project_gen import generate_project
 
     folder = tempfile.mkdtemp(prefix="lms-generate-")
     try:
@@ -61,9 +61,9 @@ def generate(project_text):
 
 def export_board(project_text, profile_id=None):
     """The sources for a board, as upstream's export_board writes them (CLI: generate --target board)."""
-    from lvgl_mpy_studio.core.boards import ProfileStore, portable_profile
-    from lvgl_mpy_studio.core.i18n import device_error_text
-    from lvgl_mpy_studio.gen.board_gen import export_board as upstream_export
+    from copper_and_code_studio.core.boards import ProfileStore, portable_profile
+    from copper_and_code_studio.core.i18n import device_error_text
+    from copper_and_code_studio.gen.board_gen import export_board as upstream_export
 
     folder = tempfile.mkdtemp(prefix="lms-board-")
     try:
@@ -126,7 +126,7 @@ def _run_target(project):
 def run_target_plan(kind, profile_id=None):
     """select_run_target before the question: the same target changes nothing; a board of
     another profile brings its resolution, after validate_profile."""
-    from lvgl_mpy_studio.core.boards import ProfileStore, validate_profile
+    from copper_and_code_studio.core.boards import ProfileStore, validate_profile
 
     project = _doc().project
     current = project.board.get("id") if project.board else None
@@ -144,8 +144,8 @@ def run_target_plan(kind, profile_id=None):
 
 def doc_set_run_target(kind, profile_id=None, mode="keep"):
     """select_run_target's mutate: one undo step, then _report_outside."""
-    from lvgl_mpy_studio.core.boards import ProfileStore, portable_profile
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.boards import ProfileStore, portable_profile
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     current = document.project.board.get("id") if document.project.board else None
@@ -170,14 +170,14 @@ def new_project_defaults():
 
 def profiles():
     """The board profiles, as the desktop's profile store lists them."""
-    from lvgl_mpy_studio.core.boards import ProfileStore
+    from copper_and_code_studio.core.boards import ProfileStore
 
     return [{"id": profile["id"], "name": profile.get("name", profile["id"]), "width": profile["logicalWidth"], "height": profile["logicalHeight"], "origin": profile["origin"]} for profile in ProfileStore.tolerant().profiles()]
 
 
 def doc_new(defaults=None, board=None):
     """File > New Project: the user's defaults for new projects, or a board chosen by the user."""
-    from lvgl_mpy_studio.core.boards import ProfileStore
+    from copper_and_code_studio.core.boards import ProfileStore
     from lms_document import default_project
 
     if board is not None:
@@ -232,8 +232,8 @@ def doc_redo():
 
 def doc_rename_page(page_id, name):
     """ui/main_tree.py rename_page, after the dialog: the same checks and the same undo step."""
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.model import page_constant
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.model import page_constant
 
     document = _doc()
     page = next(item for item in document.project.pages if item.id == page_id)
@@ -265,7 +265,7 @@ def sim_project():
     files from Pyodide's file system and runs them as upstream's runtime/web/lms_web.js does.
     compile_python is not called: mpy-cross for the browser is upstream request 2, and the
     runtime runs the .py files as they are."""
-    from lvgl_mpy_studio.gen.project_gen import generate_project
+    from copper_and_code_studio.gen.project_gen import generate_project
 
     project = _doc().project
     shutil.rmtree(SIM_PROJECT, ignore_errors=True)
@@ -290,9 +290,9 @@ def sim_program(entry, flash):
     """ui/main_run.py run_program with build/program.py: the folder of entry copied over the
     program's flash, as an upload; the board every program runs as; the system files that
     build/web.py gives a program in the browser."""
-    from lvgl_mpy_studio.build.program import copy_program, program_board
-    from lvgl_mpy_studio.build.web import PROGRAM_SYSTEM
-    from lvgl_mpy_studio.platform import root_dir
+    from copper_and_code_studio.build.program import copy_program, program_board
+    from copper_and_code_studio.build.web import PROGRAM_SYSTEM
+    from copper_and_code_studio.platform import root_dir
 
     entry = Path(entry)
     if entry.suffix != ".py" or not entry.is_file():  # as prepare_program
@@ -316,7 +316,7 @@ def demo_board():
     logical size, the modules its firmware must have, and the files of runtime/program that make
     the browser's MicroPython a board with a display: display_driver.py (contract 1) and
     lms_sandbox.py. None without a board profile."""
-    from lvgl_mpy_studio.platform import root_dir
+    from copper_and_code_studio.platform import root_dir
 
     board = _doc().project.board
     if not board:
@@ -347,8 +347,8 @@ def design_page(page_id):
     """What DesignerScene.rebuild puts on the canvas of a page: its widgets, components left
     out, parents before their children, each with the props WidgetItem paints from; and
     design_key, which changes only when what the page shows changes."""
-    from lvgl_mpy_studio.build.preview import design_key
-    from lvgl_mpy_studio.core.components import is_component
+    from copper_and_code_studio.build.preview import design_key
+    from copper_and_code_studio.core.components import is_component
 
     project = _doc().project
     index = _page_index(project, page_id)
@@ -389,8 +389,8 @@ def design_page(page_id):
 def design_tree():
     """ui/main_tree.py rebuild_project_tree and ComponentTray.rebuild: each page with its widgets
     in page order, and the non-visual components of the project."""
-    from lvgl_mpy_studio.core.components import is_component
-    from lvgl_mpy_studio.core.events import events_for
+    from copper_and_code_studio.core.components import is_component
+    from copper_and_code_studio.core.events import events_for
 
     project = _doc().project
     return {
@@ -405,7 +405,7 @@ def design_tree():
 def widget_handler(name):
     """The handler that ui/code/editor.py open_handler shows for a widget: the one of its default
     event, or else its first one; None when it has none yet."""
-    from lvgl_mpy_studio.core.events import default_event, handler_name
+    from copper_and_code_studio.core.events import default_event, handler_name
 
     project = _doc().project
     widget = project.find_widget(name)
@@ -420,7 +420,7 @@ def widget_handler(name):
 
 def doc_add_page():
     """ui/main_tree.py add_page."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     name = f"page{len(document.project.pages) + 1}"
@@ -430,7 +430,7 @@ def doc_add_page():
 
 def doc_delete_page(page_id):
     """ui/main_tree.py delete_page: the last page stays."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     if len(document.project.pages) == 1:
@@ -441,7 +441,7 @@ def doc_delete_page(page_id):
 
 def doc_initial_page(page_id):
     """ui/main_tree.py set_initial_page: the page goes first and the app starts from it."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     def mutate(project):
         selected = next(item for item in project.pages if item.id == page_id)
@@ -469,8 +469,8 @@ def _page(project, page_id):
 
 def toolbox():
     """Toolbox.populate: the widgets and components by category, with their names."""
-    from lvgl_mpy_studio.core.components import is_component
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.components import is_component
+    from copper_and_code_studio.core.i18n import tr
 
     categories = {}
     for widget_type, definition in _property_definitions().items():
@@ -480,7 +480,7 @@ def toolbox():
 
 def design_default_size(widget_type):
     """The size a new widget gets, for the drop preview (show_drop_preview, _centered)."""
-    from lvgl_mpy_studio.core.components import is_component
+    from copper_and_code_studio.core.components import is_component
 
     if is_component(widget_type):
         return None
@@ -491,8 +491,8 @@ def design_default_size(widget_type):
 def design_add_widget(page_id, widget_type, x, y, parent_id=None, centered=False, grid=1):
     """DesignerScene.add_widget: a component goes to the page as add_component; a widget goes
     inside the container under the point, if it is one, at the point (centred on a drop)."""
-    from lvgl_mpy_studio.core.components import is_component
-    from lvgl_mpy_studio.core.model import widget_definitions
+    from copper_and_code_studio.core.components import is_component
+    from copper_and_code_studio.core.model import widget_definitions
 
     document = _doc()
     created = []
@@ -699,7 +699,7 @@ def adapt_page_plan(page_id):
 
 def doc_adapt_page(page_id, mode):
     """adapt_current_page after the question: one undo step, then _report_outside."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     document.execute(tr("Adapt Page to Resolution"), lambda project: project.adapt_page(_page(project, page_id), mode))
@@ -711,14 +711,14 @@ def doc_adapt_page(page_id, mode):
 
 
 def _profile_store():
-    from lvgl_mpy_studio.core.boards import ProfileStore
+    from copper_and_code_studio.core.boards import ProfileStore
 
     return ProfileStore.tolerant()
 
 
 def config_dir():
     """platform.config_dir: where board profiles and blocks are kept; the page mirrors it."""
-    from lvgl_mpy_studio.platform import config_dir as upstream_config_dir
+    from copper_and_code_studio.platform import config_dir as upstream_config_dir
 
     folder = upstream_config_dir()
     folder.mkdir(parents=True, exist_ok=True)
@@ -732,7 +732,7 @@ def config_files():
 
 def config_reload():
     """After the page put the kept files back: the blocks read again, as at start-up."""
-    from lvgl_mpy_studio.core import components
+    from copper_and_code_studio.core import components
 
     carried = {"assets": {"blocks": {block.id: block.to_dict() for block in components.BLOCKS.values() if block.origin == "project"}}}
     components.reload_blocks()
@@ -743,7 +743,7 @@ def config_reload():
 def project_settings_view():
     """ProjectSettingsDialog: the presets (common sizes and those of the boards), the profiles
     with the project's own copy first, the resolution diagnostics."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     project = _doc().project
     profiles = _profile_store().profiles()
@@ -772,8 +772,8 @@ def project_settings_view():
 
 def doc_project_settings(width, height, profile_key, mode):
     """open_project_settings after its dialogs: the resolution and the board in one step."""
-    from lvgl_mpy_studio.core.boards import portable_profile
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.boards import portable_profile
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     project = document.project
@@ -790,8 +790,8 @@ def doc_project_settings(width, height, profile_key, mode):
 
 def doc_update_profile():
     """ui/main_resolution.py update_project_profile: the project's copy from the catalog."""
-    from lvgl_mpy_studio.core.boards import portable_profile, validate_profile
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.boards import portable_profile, validate_profile
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     current = document.project.board
@@ -813,7 +813,7 @@ def doc_update_profile():
 
 def profiles_manager():
     """ProfileManagerDialog: the profiles with their state, the adapters, the store's snapshot."""
-    from lvgl_mpy_studio.core.boards import ADAPTERS, profile_diagnostics
+    from copper_and_code_studio.core.boards import ADAPTERS, profile_diagnostics
 
     store = _profile_store()
     profiles = store.profiles()
@@ -829,14 +829,14 @@ def profile_new(source=None):
 
 def profile_check(profile):
     """profile_diagnostics, for the dialog's messages."""
-    from lvgl_mpy_studio.core.boards import profile_diagnostics
+    from copper_and_code_studio.core.boards import profile_diagnostics
 
     return profile_diagnostics(profile)
 
 
 def profile_default(profile_id):
     """ProfileManagerDialog.restore_default: the built-in profile as shipped."""
-    from lvgl_mpy_studio.core.boards import builtin_profiles
+    from copper_and_code_studio.core.boards import builtin_profiles
 
     defaults = {item["id"]: item for item in builtin_profiles()}
     if profile_id not in defaults:
@@ -848,7 +848,7 @@ def profile_default(profile_id):
 
 def profiles_hidden():
     """ProfileManagerDialog.restore_hidden: the built-in profiles, as customised if they were."""
-    from lvgl_mpy_studio.core.boards import builtin_profiles
+    from copper_and_code_studio.core.boards import builtin_profiles
 
     customized = _profile_store().snapshot()["custom"]
     restored = []
@@ -861,7 +861,7 @@ def profiles_hidden():
 
 def profiles_apply(profiles):
     """ProfileManagerDialog.apply_to_store: the custom and imported profiles, the hidden built-in ones."""
-    from lvgl_mpy_studio.core.boards import builtin_profiles, portable_profile
+    from copper_and_code_studio.core.boards import builtin_profiles, portable_profile
 
     store = _profile_store()
     custom = {profile["id"]: portable_profile(profile) for profile in profiles if profile.get("origin") in ("custom", "imported")}
@@ -884,7 +884,7 @@ PROFILE_FILE = "/tmp/board-profile.json"
 def profile_import(path=PROFILE_FILE):
     """ProfileManagerDialog.import_file: the board in a .json file, checked as upstream's
     read_profile_file checks it; kept with Apply. A built-in id is refused."""
-    from lvgl_mpy_studio.core.boards import ProfileError, builtin_profiles, profile_diagnostics, profile_error_text, read_profile_file
+    from copper_and_code_studio.core.boards import ProfileError, builtin_profiles, profile_diagnostics, profile_error_text, read_profile_file
 
     try:
         profile = read_profile_file(path)
@@ -901,7 +901,7 @@ def profile_import(path=PROFILE_FILE):
 
 def profile_export(profile):
     """ProfileManagerDialog.export_file: the text upstream's write_profile_file writes."""
-    from lvgl_mpy_studio.core.boards import write_profile_file
+    from copper_and_code_studio.core.boards import write_profile_file
 
     try:
         path = write_profile_file(profile, PROFILE_FILE)
@@ -912,7 +912,7 @@ def profile_export(profile):
 
 def board_catalog_notice():
     """main_files.py _warn_board_not_in_catalog: the project's board is not among the IDE's."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     board = _doc().project.board
     if board and _profile_store().get(board.get("id")) is None:
@@ -927,7 +927,7 @@ BLOCK_SOURCE = "/tmp/block-source"
 
 def _used_blocks(project):
     """ui/blocks_manager.py used_blocks."""
-    from lvgl_mpy_studio.core import components
+    from copper_and_code_studio.core import components
 
     used = {}
     for widget in project.widgets:
@@ -938,8 +938,8 @@ def _used_blocks(project):
 
 def blocks_view():
     """BlocksDialog.populate and _show_selected: each block with its details, the problems."""
-    from lvgl_mpy_studio.core import components
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core import components
+    from copper_and_code_studio.core.i18n import tr
 
     used = _used_blocks(_doc().project)
     rows = []
@@ -978,8 +978,8 @@ def block_source_folder():
 def block_check(source=BLOCK_SOURCE):
     """BlocksDialog.install_folder before installing: the folder is a block, not the Timer, and
     the question when one with its id is there already."""
-    from lvgl_mpy_studio.core import blocks, components
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core import blocks, components
+    from copper_and_code_studio.core.i18n import tr
 
     try:
         candidate = blocks.load_block(source, "user", check_name=False)
@@ -994,7 +994,7 @@ def block_check(source=BLOCK_SOURCE):
 
 def block_install(source=BLOCK_SOURCE):
     """blocks.install_block, into the blocks folder of the configuration."""
-    from lvgl_mpy_studio.core import blocks
+    from copper_and_code_studio.core import blocks
 
     candidate = blocks.load_block(source, "user", check_name=False)
     blocks.install_block(source)
@@ -1003,7 +1003,7 @@ def block_install(source=BLOCK_SOURCE):
 
 def block_install_project(block_id):
     """BlocksDialog.install_selected: a block the project carries, installed for every project."""
-    from lvgl_mpy_studio.core import blocks, components
+    from copper_and_code_studio.core import blocks, components
 
     block = components.BLOCKS.get(block_id)
     if block is None or block.origin != "project":
@@ -1013,8 +1013,8 @@ def block_install_project(block_id):
 
 
 def block_remove_question(block_id):
-    from lvgl_mpy_studio.core import components
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core import components
+    from copper_and_code_studio.core.i18n import tr
 
     block = components.BLOCKS[block_id]
     users = _used_blocks(_doc().project).get(block_id, [])
@@ -1026,7 +1026,7 @@ def block_remove_question(block_id):
 
 def block_remove(block_id):
     """BlocksDialog.remove_selected after its question: the project keeps its copy if it uses it."""
-    from lvgl_mpy_studio.core import blocks, components
+    from copper_and_code_studio.core import blocks, components
 
     block = components.BLOCKS.get(block_id)
     if block is None or block.origin != "user":
@@ -1058,9 +1058,9 @@ def _budget_key(data, args):
 def budget_prepare(board_mpy=None):
     """The files measure_budget compiles: the generated project, and the board's files when the
     project names a compatible board. The page compiles each one into the cache."""
-    from lvgl_mpy_studio.core.boards import compatible, portable_profile
-    from lvgl_mpy_studio.gen.board_gen import PRECOMPILED, generate_board
-    from lvgl_mpy_studio.gen.project_gen import generate_project
+    from copper_and_code_studio.core.boards import compatible, portable_profile
+    from copper_and_code_studio.gen.board_gen import PRECOMPILED, generate_board
+    from copper_and_code_studio.gen.project_gen import generate_project
 
     project = _doc().project
     shutil.rmtree(BUDGET, ignore_errors=True)
@@ -1094,8 +1094,8 @@ def _cached(path, args, cache=BUDGET_CACHE):
 def budget_measure(board_mpy=None):
     """measure_budget, with compile_python and _bytecode_file answered from the cache and the RAM
     run left to the page: the app instrumented by upstream's _instrument, in a folder to run."""
-    from lvgl_mpy_studio.build import budget, compiler
-    from lvgl_mpy_studio.gen import board_gen
+    from copper_and_code_studio.build import budget, compiler
+    from copper_and_code_studio.gen import board_gen
 
     def compile_python(directory, mpy_cross=None):
         directory = Path(directory)
@@ -1159,7 +1159,7 @@ WEB_DIST = "/web/dist"
 
 def web_runtime_dir():
     """Where build/web.py takes micropython.mjs and .wasm from: the page writes them there."""
-    from lvgl_mpy_studio.build.web import web_runtime
+    from copper_and_code_studio.build.web import web_runtime
 
     return str(web_runtime())
 
@@ -1167,7 +1167,7 @@ def web_runtime_dir():
 def web_prepare():
     """The files build_web's compile_python will compile: the project generated, as build_web
     generates it. The page compiles each one into the cache."""
-    from lvgl_mpy_studio.gen.project_gen import generate_project
+    from copper_and_code_studio.gen.project_gen import generate_project
 
     shutil.rmtree(WEB, ignore_errors=True)
     Path(WEB_CACHE).mkdir(parents=True)
@@ -1178,7 +1178,7 @@ def web_prepare():
 
 def web_build():
     """build_web on the open project, compile_python answered from the cache."""
-    from lvgl_mpy_studio.build import compiler, web
+    from copper_and_code_studio.build import compiler, web
 
     def compile_python(directory, mpy_cross=None):
         directory = Path(directory)
@@ -1205,8 +1205,8 @@ def web_build():
 def program_web(entry):
     """program_in_browser: build_program_web on a program the page copied into Python, with the
     board every program runs as."""
-    from lvgl_mpy_studio.build.program import program_board
-    from lvgl_mpy_studio.build.web import build_program_web
+    from copper_and_code_studio.build.program import program_board
+    from copper_and_code_studio.build.web import build_program_web
 
     shutil.rmtree(WEB_DIST, ignore_errors=True)
     board, width, height = program_board()
@@ -1216,7 +1216,7 @@ def program_web(entry):
 
 def budget_texts(budget_value, limits):
     """ui/budget.py budget_text and budget_level, and the tooltip of MainWindow._show_budget."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     ratio = 0.8  # ui/budget.py WARNING_RATIO
 
@@ -1243,8 +1243,8 @@ def budget_texts(budget_value, limits):
     return {"text": text, "level": level, "tooltip": tip}
 
 
-# ---- Fonts: lvgl_mpy_studio/fontconv.py, which is Qt, answered by the page ----
-# gen/fonts.py imports lvgl_mpy_studio.fontconv only to call convert(data, size, characters).
+# ---- Fonts: copper_and_code_studio/fontconv.py, which is Qt, answered by the page ----
+# gen/fonts.py imports copper_and_code_studio.fontconv only to call convert(data, size, characters).
 # Here that module is one of this file's: convert answers from the glyphs the page rasterised
 # (src/fonts/rasterise.ts) and writes them with upstream's own gen/binfont.py. Before each call
 # that generates code, the page asks fonts_needed and converts what is missing.
@@ -1260,7 +1260,7 @@ def _font_key(data, size, characters):
 
 def _fontconv_convert(data, size, characters):
     """fontconv.convert: {"output", "missing"} or {"error"}."""
-    from lvgl_mpy_studio.gen.binfont import write_binfont
+    from copper_and_code_studio.gen.binfont import write_binfont
 
     found = _glyphs.get(_font_key(data, size, characters))
     if found is None:
@@ -1278,10 +1278,10 @@ def _fontconv_convert(data, size, characters):
 def _install_fontconv():
     import types
 
-    module = types.ModuleType("lvgl_mpy_studio.fontconv")
-    module.__doc__ = "lvgl_mpy_studio.fontconv for the browser: see py/lms_bridge.py"
+    module = types.ModuleType("copper_and_code_studio.fontconv")
+    module.__doc__ = "copper_and_code_studio.fontconv for the browser: see py/lms_bridge.py"
     module.convert = _fontconv_convert
-    sys.modules["lvgl_mpy_studio.fontconv"] = module
+    sys.modules["copper_and_code_studio.fontconv"] = module
 
 
 _install_fontconv()
@@ -1292,8 +1292,8 @@ def fonts_needed():
     gen/fonts.py convert_fonts's requests."""
     import base64
 
-    from lvgl_mpy_studio.gen.gen_python import build_project_code
-    from lvgl_mpy_studio.gen.project_gen import legacy_data
+    from copper_and_code_studio.gen.gen_python import build_project_code
+    from copper_and_code_studio.gen.project_gen import legacy_data
 
     project = _doc().project
     if not (project.assets or {}).get("fonts"):
@@ -1318,7 +1318,7 @@ def fonts_needed():
 def fonts_put(key, font=None, missing="", error=None):
     """What the page made of a request; upstream's cache of conversions is emptied, so that a
     conversion asked before it was ready is asked again."""
-    from lvgl_mpy_studio.gen import fonts
+    from copper_and_code_studio.gen import fonts
 
     _glyphs[key] = {"font": font, "missing": missing, "error": error}
     fonts._cache.clear()
@@ -1339,8 +1339,8 @@ def _display_value(value):
 
 
 def _property_definitions():
-    from lvgl_mpy_studio.core.components import COMPONENTS
-    from lvgl_mpy_studio.core.model import widget_definitions
+    from copper_and_code_studio.core.components import COMPONENTS
+    from copper_and_code_studio.core.model import widget_definitions
 
     return {**widget_definitions(), **COMPONENTS}  # MainWindow._blocks_changed reads them again
 
@@ -1372,9 +1372,9 @@ def _descriptors(widgets):
 def properties_view(names):
     """PropertiesPanel.rebuild: the rows of the selected widgets by category, and the Events tab
     for a single widget. The panel sorts them alphabetically when asked."""
-    from lvgl_mpy_studio.core.assets import fonts
-    from lvgl_mpy_studio.core.events import EVENTS, events_for
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.assets import fonts
+    from copper_and_code_studio.core.events import EVENTS, events_for
+    from copper_and_code_studio.core.i18n import tr
 
     widgets = _selected_widgets(names)
     if not widgets:
@@ -1406,9 +1406,9 @@ def properties_set(names, name, text, checked=None):
     """PropertiesPanel._item_changed, without the image and font files of sub-step 6: the name
     checked and the widget renamed, or the value read by its type and written to every selected
     widget, in one undo step. checked is the box of a boolean row."""
-    from lvgl_mpy_studio.core.blocks import parse_pin
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.names import validate_name
+    from copper_and_code_studio.core.blocks import parse_pin
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.names import validate_name
 
     document = _doc()
     widgets = _selected_widgets(names)
@@ -1461,7 +1461,7 @@ def asset_upload_path():
 
 def image_sizes():
     """core/assets.py images: the pictures of the project with their size."""
-    from lvgl_mpy_studio.core.assets import images
+    from copper_and_code_studio.core.assets import images
 
     return [{"name": item["name"], "width": item["width"], "height": item["height"]} for item in images(_doc().project)]
 
@@ -1470,9 +1470,9 @@ def properties_set_asset(names, name, kind, file_name):
     """PropertiesPanel._item_changed for a file chosen with … next to an image or font property:
     the picture (already PNG and no larger than the screen, as _read_image makes it) or the font
     becomes part of the project, and the property names it, in one undo step."""
-    from lvgl_mpy_studio.core.assets import AssetError, add_font, add_image, font_name, fonts, free_image_name
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.model import Project
+    from copper_and_code_studio.core.assets import AssetError, add_font, add_image, font_name, fonts, free_image_name
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.model import Project
 
     document = _doc()
     widgets = _selected_widgets(names)
@@ -1508,8 +1508,8 @@ def properties_set_asset(names, name, kind, file_name):
 
 def event_handler(widget_name, event):
     """PropertiesPanel._event_activated: the handler made if missing ("Create Handler"), its name."""
-    from lvgl_mpy_studio.core.events import handler_name
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.events import handler_name
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     document.execute(tr("Create Handler"), lambda project: project.ensure_handler(widget_name, event))  # as the desktop, also when it exists
@@ -1520,7 +1520,7 @@ def design_preview(page_id, pending=None):
     """build/preview.py render_with_log up to the runtime: the page generated design-only, the
     project's code left out, in a folder the simulator's frame mode runs. pending holds the
     geometries of a drag not recorded yet, as MainWindow._preview_drag passes them."""
-    from lvgl_mpy_studio.build.preview import design_key, prepare_page
+    from copper_and_code_studio.build.preview import design_key, prepare_page
 
     project = _doc().project
     if pending:
@@ -1557,7 +1557,7 @@ def _board_name(profile):
 def resolution_menu():
     """ResolutionSelector.rebuild: the sizes of the board profiles with their names, the common
     sizes, the current size."""
-    from lvgl_mpy_studio.core.boards import ProfileStore
+    from copper_and_code_studio.core.boards import ProfileStore
 
     boards = {}
     for profile in ProfileStore.tolerant().profiles():
@@ -1578,7 +1578,7 @@ def _unlinks_board(project, width, height):
 def resolution_plan(width, height):
     """ui/main_resolution.py change_resolution before the dialog: the same size changes nothing;
     a board of another size is unlinked, and the dialog says so."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     project = _doc().project
     if (width, height) == (project.display.width, project.display.height):
@@ -1590,7 +1590,7 @@ def resolution_plan(width, height):
 
 def doc_change_resolution(width, height, mode):
     """change_resolution after the dialog: one undo step, then _report_outside."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     unlink = _unlinks_board(document.project, width, height)
@@ -1613,22 +1613,22 @@ TRACEBACK_BLOCK = re.compile(r"Traceback \(most recent call last\):\n(?:[ \t].*\
 
 def syntax_errors(output, directory="/"):
     """ui/files.py syntax_errors, from mpy-cross's output: [{"line", "message"}]."""
-    from lvgl_mpy_studio.build.compiler import parse_compiler_errors
+    from copper_and_code_studio.build.compiler import parse_compiler_errors
 
     return [{"line": error["line"], "message": error.get("detail") or error["message"]} for error in parse_compiler_errors(output, directory)]
 
 
 def lv_completions():
     """ui/files.py lvgl_completions: the names after `lv.`, from gen/completion.json."""
-    from lvgl_mpy_studio.platform import root_dir
+    from copper_and_code_studio.platform import root_dir
 
-    api = json.loads((root_dir() / "lvgl_mpy_studio" / "gen" / "completion.json").read_text(encoding="utf-8"))
+    api = json.loads((root_dir() / "copper_and_code_studio" / "gen" / "completion.json").read_text(encoding="utf-8"))
     return sorted({*api["constants"], *api["functions"], *api["objects"]})
 
 
 def code_generate_check():
     """ui/code/editor.py check_syntax, first half: the open project generated, to be compiled."""
-    from lvgl_mpy_studio.gen.project_gen import generate_project
+    from copper_and_code_studio.gen.project_gen import generate_project
 
     shutil.rmtree(CHECK_DIR, ignore_errors=True)
     generate_project(_doc().project, CHECK_DIR)
@@ -1638,7 +1638,7 @@ def code_generate_check():
 def code_compile_errors(directory, outputs):
     """compile_python's errors, mapped as check_syntax and _show_compile_errors map them: outputs is
     {file name: mpy-cross output} of the files that did not compile."""
-    from lvgl_mpy_studio.build.compiler import map_error, parse_compiler_errors
+    from copper_and_code_studio.build.compiler import map_error, parse_compiler_errors
 
     modules = {module.name for module in _doc().project.modules}
     errors = []
@@ -1650,8 +1650,8 @@ def code_compile_errors(directory, outputs):
 
 def code_trace_errors(text, directory=SIM_PROJECT):
     """ui/main_run.py _sim_output: the complete tracebacks in text, as rows of the Errors panel."""
-    from lvgl_mpy_studio.build.compiler import traceback_errors
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.build.compiler import traceback_errors
+    from copper_and_code_studio.core.i18n import tr
 
     try:
         sourcemap = json.loads((Path(directory) / "sourcemap.json").read_text(encoding="utf-8"))
@@ -1683,7 +1683,7 @@ def code_set(kind, key, text, session=0, owner=None, event=None):
     """ui/code/editor.py _text_changed: one undo step per editing session (merge id 10000 + session).
     A handler not made yet (owner and event given, the key not among the handlers) is made by
     the first text typed, with ensure_handler."""
-    from lvgl_mpy_studio.core.modules import set_module_source
+    from copper_and_code_studio.core.modules import set_module_source
 
     document = _doc()
     project = document.project
@@ -1705,8 +1705,8 @@ def code_set(kind, key, text, session=0, owner=None, event=None):
 def code_objects():
     """CodePanel.populate: the Object list. A key is module, pymodule:<id>, page:<name>,
     widget:<name> or orphan:<handler>."""
-    from lvgl_mpy_studio.core.events import events_for
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.events import events_for
+    from copper_and_code_studio.core.i18n import tr
 
     project = _doc().project
     objects = [{"key": "module", "label": tr("(General)")}]
@@ -1734,8 +1734,8 @@ def code_object_of(handler):
 def code_procedures(key):
     """CodePanel._load_object: the Procedure list of an object, with the handler of each event,
     whether it exists, and the one chosen by default."""
-    from lvgl_mpy_studio.core.events import PAGE_EVENTS, default_event, events_for, handler_name
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.events import PAGE_EVENTS, default_event, events_for, handler_name
+    from copper_and_code_studio.core.i18n import tr
 
     project = _doc().project
     kind, _, name = key.partition(":")
@@ -1761,7 +1761,7 @@ def code_procedures(key):
 def code_open(key, handler):
     """CodePanel._load_body: the text and the signature line of what is chosen. A handler of an
     object made again with the same name is attached to it again ("Create Handler")."""
-    from lvgl_mpy_studio.core.i18n import tr
+    from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
     project = document.project
@@ -1787,9 +1787,9 @@ def code_open(key, handler):
 
 def code_actions(current_widget=None, open_module=None):
     """ActionHelper.rebuild: what can be done with each object, and with the screen."""
-    from lvgl_mpy_studio.core.actions import SCREEN_ACTIONS, actions_for, module_actions, page_actions
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.model import page_constant
+    from copper_and_code_studio.core.actions import SCREEN_ACTIONS, actions_for, module_actions, page_actions
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.model import page_constant
 
     project = _doc().project
 
@@ -1810,9 +1810,9 @@ def code_actions(current_widget=None, open_module=None):
 def code_entries(qualified):
     """CodePanel._entries and _completions: what completes the dotted name before the cursor, as
     names or [label, text to insert]."""
-    from lvgl_mpy_studio.core.actions import method_entries
-    from lvgl_mpy_studio.core.components import is_component, methods_for
-    from lvgl_mpy_studio.core.model import page_constant
+    from copper_and_code_studio.core.actions import method_entries
+    from copper_and_code_studio.core.components import is_component, methods_for
+    from copper_and_code_studio.core.model import page_constant
 
     project = _doc().project
     api = _completion_api()
@@ -1858,14 +1858,14 @@ def _completion_api():
     """CodePanel._api: gen/completion.json."""
     global _api_data
     if _api_data is None:
-        from lvgl_mpy_studio.platform import root_dir
+        from copper_and_code_studio.platform import root_dir
 
-        _api_data = json.loads((Path(root_dir()) / "lvgl_mpy_studio" / "gen" / "completion.json").read_text(encoding="utf-8"))
+        _api_data = json.loads((Path(root_dir()) / "copper_and_code_studio" / "gen" / "completion.json").read_text(encoding="utf-8"))
     return _api_data
 
 
 def module_validate(name, exclude_id=None):
-    from lvgl_mpy_studio.core.modules import validate_module_name
+    from copper_and_code_studio.core.modules import validate_module_name
 
     project = _doc().project
     renamed = next((module for module in project.modules if module.id == exclude_id), None)
@@ -1873,15 +1873,15 @@ def module_validate(name, exclude_id=None):
 
 
 def module_references(name):
-    from lvgl_mpy_studio.core.modules import module_references as references
+    from copper_and_code_studio.core.modules import module_references as references
 
     return references(_doc().project, name)
 
 
 def module_create(name):
     """ui/main_tree.py new_module, after the dialog."""
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.modules import create_module
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.modules import create_module
 
     _doc().execute(tr("New Module"), lambda project: create_module(project, name, NEW_MODULE_SOURCE))
     module = next(module for module in _doc().project.modules if module.name == name)
@@ -1890,8 +1890,8 @@ def module_create(name):
 
 def module_rename(old, new):
     """ui/main_tree.py rename_module, after the dialog and the question about imports."""
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.modules import rename_module
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.modules import rename_module
 
     warnings = []
     _doc().execute(tr("Rename Module"), lambda project: warnings.extend(rename_module(project, old, new)))
@@ -1900,8 +1900,8 @@ def module_rename(old, new):
 
 def module_delete(name):
     """ui/main_tree.py delete_module, after the question."""
-    from lvgl_mpy_studio.core.i18n import tr
-    from lvgl_mpy_studio.core.modules import delete_module
+    from copper_and_code_studio.core.i18n import tr
+    from copper_and_code_studio.core.modules import delete_module
 
     warnings = []
     _doc().execute(tr("Delete Module"), lambda project: warnings.extend(delete_module(project, name)))

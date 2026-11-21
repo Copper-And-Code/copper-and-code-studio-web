@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const CACHE = join(ROOT, '.cache', 'runtime');
-export const REPOSITORY = 'https://github.com/Copper-And-Code/lvgl-mpy-studio';
+export const REPOSITORY = 'https://github.com/Copper-And-Code/copper-and-code-studio';
 
 /** kind → the files of the asset, its licence texts, and where the site serves it. */
 export const ASSETS = {

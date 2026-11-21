@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio import __version__  # noqa: E402
-from lvgl_mpy_studio.fontconv import rasterise  # noqa: E402
+from copper_and_code_studio import __version__  # noqa: E402
+from copper_and_code_studio.fontconv import rasterise  # noqa: E402
 
 SIZES = (14, 24, 40)
 ASCII = "".join(chr(code) for code in range(32, 127))

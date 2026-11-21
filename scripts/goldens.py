@@ -1,8 +1,8 @@
 """Generation goldens: upstream run on the host, with CPython, for every example project.
 
 For each project the output is what upstream's CLI writes:
-  <out>/<name>/py/     `lvgl-mpy-studio generate <project>`             (generate_project)
-  <out>/<name>/board/  `lvgl-mpy-studio generate <project> --target board`, for projects with a board
+  <out>/<name>/py/     `copper-and-code-studio generate <project>`             (generate_project)
+  <out>/<name>/board/  `copper-and-code-studio generate <project> --target board`, for projects with a board
 
 The CLI's own `generate` also compiles the files with mpy-cross, which is not part of the
 generated code and is not built in the submodule; so this script calls the same functions the CLI
@@ -23,11 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio import __version__  # noqa: E402
-from lvgl_mpy_studio.core.boards import portable_profile  # noqa: E402
-from lvgl_mpy_studio.gen.board_gen import export_board  # noqa: E402
-from lvgl_mpy_studio.core.model import Project  # noqa: E402
-from lvgl_mpy_studio.gen.project_gen import generate_project  # noqa: E402
+from copper_and_code_studio import __version__  # noqa: E402
+from copper_and_code_studio.core.boards import portable_profile  # noqa: E402
+from copper_and_code_studio.gen.board_gen import export_board  # noqa: E402
+from copper_and_code_studio.core.model import Project  # noqa: E402
+from copper_and_code_studio.gen.project_gen import generate_project  # noqa: E402
 
 
 def example_projects():

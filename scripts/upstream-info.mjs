@@ -18,7 +18,7 @@ function git(...args) {
 
 /** @returns {{ tag: string | null, commit: string, version: string }} */
 export function upstreamInfo() {
-  const init = readFileSync(`${UPSTREAM}lvgl_mpy_studio/__init__.py`, 'utf8');
+  const init = readFileSync(`${UPSTREAM}copper_and_code_studio/__init__.py`, 'utf8');
   const version = /^__version__\s*=\s*"([^"]+)"/m.exec(init)?.[1] ?? 'unknown';
   const commit = git('rev-parse', '--short=12', 'HEAD') ?? 'unknown';
   const tag = git('describe', '--tags', '--exact-match', 'HEAD');

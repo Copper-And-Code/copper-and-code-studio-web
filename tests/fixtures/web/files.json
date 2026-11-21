@@ -1,8 +1,8 @@
 {
   "breakout": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -23,8 +23,8 @@
   },
   "eim-01": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -44,8 +44,8 @@
   },
   "eim-01-480": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -65,8 +65,8 @@
   },
   "fifteen": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -87,8 +87,8 @@
   },
   "program:shell": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "flash/OFL.txt",
       "flash/README.md",
       "flash/ansifont.py",
@@ -115,8 +115,8 @@
   },
   "simon": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -137,8 +137,8 @@
   },
   "snake": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -159,8 +159,8 @@
   },
   "sysmon": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -181,8 +181,8 @@
   },
   "tictactoe": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",
@@ -202,8 +202,8 @@
   },
   "weather": {
     "files": [
+      ".copper-and-code-studio-web",
       ".htaccess",
-      ".lvgl-mpy-studio-web",
       "game/app_events.mpy",
       "game/display_driver.mpy",
       "game/files.json",

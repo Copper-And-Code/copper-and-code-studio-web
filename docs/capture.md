@@ -348,6 +348,10 @@ New Python Module… and New File… ask a name (`dialog.field.name`, or
   `dialog-opened`; the names of dialogs, the project tree, the Events tab, the Toolbox, the Code
   tab and the resize handles; `editor=plain`; the completion list without delays in capture mode,
   waited for by `idle()`, which also waits for a running syntax check.
+- **1**, the rename to Copper and Code Studio (upstream `v0.8.0`): nothing of the contract moved
+  (`window.lmsCapture`, its fields, events and query parameters). One name follows its English
+  label, as every menu item does: the About item of the Help menu is now
+  `menu-help.about-copper-and-code-studio` (it was `menu-help.about-lvgl-mpy-studio`).
 
 Tested by `tests/e2e/capture.spec.ts` on Chromium, Firefox and WebKit: with
 `capture=1&clock=manual&seed=1` the fifteen runs 60 steps of 33 ms, with Play tapped, and two runs

@@ -1,7 +1,7 @@
 {
-  "name": "LVGL MPY Studio Web",
-  "short_name": "LVGL Studio",
-  "description": "The LVGL MPY Studio IDE in the browser: design LVGL pages, write MicroPython, run it in the simulator or on a board.",
+  "name": "Copper and Code Studio Web",
+  "short_name": "Copper&Code",
+  "description": "The visual GUI builder for MicroPython and LVGL, in the browser: design LVGL pages, write MicroPython, run it in the simulator or on a board.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

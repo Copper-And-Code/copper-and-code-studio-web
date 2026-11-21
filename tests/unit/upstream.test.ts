@@ -19,7 +19,7 @@ describe('upstreamLabel', () => {
 
 describe('upstreamInfo', () => {
   it('reads the version of the upstream package', () => {
-    const init = readFileSync('upstream/lvgl_mpy_studio/__init__.py', 'utf8');
+    const init = readFileSync('upstream/copper_and_code_studio/__init__.py', 'utf8');
     const info = upstreamInfo();
     expect(init).toContain(`__version__ = "${info.version}"`);
     expect(info.commit).toMatch(/^[0-9a-f]{12}$/);

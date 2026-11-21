@@ -135,7 +135,7 @@ new deploy ─► installs beside, waits ─► status bar "Reload" ─► skip-
 - Python logic comes from `upstream/`, unchanged, running in Pyodide. The TypeScript side is UI,
   browser APIs and adapters.
 - Generated code always comes from upstream's `gen/`, never from TypeScript.
-- The site is served under `/lvgl-mpy-studio-web/`, locally too.
+- The site is served under `/copper-and-code-studio-web/`, locally too.
 
 ## Languages
 

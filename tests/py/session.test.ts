@@ -106,16 +106,16 @@ describe('new project', () => {
 describe('open, edit, save', () => {
   it('an example opens, and its first save asks where, in the workspace', async () => {
     expect(await session.open({ store: 'examples', path: 'demo.json' })).toBe(true);
-    expect(session.title()).toBe('demo.json — LVGL MPY Studio');
+    expect(session.title()).toBe('demo.json — Copper and Code Studio');
     await session.renamePage(firstPage(), 'Welcome');
-    expect(session.title()).toBe('*demo.json — LVGL MPY Studio');
+    expect(session.title()).toBe('*demo.json — Copper and Code Studio');
 
     prompts.saveLocation = { store: 'workspace', path: 'mine/demo.json' };
     const saved0 = await session.save();
     expect(prompts.errors).toEqual([]);
     expect(saved0).toBe(true);
     expect(prompts.asked).toEqual(['save-as']);
-    expect(session.title()).toBe('demo.json — LVGL MPY Studio');
+    expect(session.title()).toBe('demo.json — Copper and Code Studio');
     expect(session.location).toEqual({ store: 'workspace', path: 'mine/demo.json' });
     const saved = JSON.parse(text(await workspace.read('mine/demo.json'))) as {
       pages: { name: string }[];

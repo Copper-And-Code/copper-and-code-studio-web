@@ -6,8 +6,8 @@ tagged.
 
 | #   | Request                                                 | State                         |
 | --- | ------------------------------------------------------- | ----------------------------- |
-| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.7.2` |
-| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.7.2` |
+| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.8.0` |
+| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.8.0` |
 | 3   | A CI check that the Qt-free packages stay Qt-free       | proposed                      |
 | 4   | Test files that load without Qt                         | proposed                      |
 | 5   | The project document without Qt                         | proposed                      |
@@ -71,7 +71,7 @@ The downloaded asset has the same sha256.
 
 **What.** Extend `tests/test_modules.py::test_core_modules_do_not_import_qt`. Today it imports
 three modules (`core.modules`, `core.model`, `core.validation`) in a fresh interpreter and checks
-that PySide6 is not loaded. It would import every module of `lvgl_mpy_studio/core`, `gen`,
+that PySide6 is not loaded. It would import every module of `copper_and_code_studio/core`, `gen`,
 `build`, `sim` and `blocks`, and also fail on `serial` and `mpremote`.
 
 **Why.** The web IDE runs these packages in Pyodide, where none of those exist. Today it works:
@@ -115,8 +115,8 @@ temporary copy, `py/lms_document.py`, which follows upstream line by line; any f
 to be copied by hand until this moves. Phase 5 (the designer) will lean on the undo stack even
 more.
 
-**Where.** `lvgl_mpy_studio/ui/document.py`, `lvgl_mpy_studio/ui/main_files.py`, a new
-`lvgl_mpy_studio/core/document.py`.
+**Where.** `copper_and_code_studio/ui/document.py`, `copper_and_code_studio/ui/main_files.py`, a new
+`copper_and_code_studio/core/document.py`.
 
 **Test.** The tests of `ui/document.py` that need no window, moved to a test of the new module;
 it runs without PySide6. Here, `tests/py/session.test.ts` keeps passing with the copy deleted.
@@ -158,7 +158,7 @@ IDE reimplements the renderer (`src/app/preview.ts`) and met it in its tests: a 
 Ctrl+Z at once. On the desktop it has not been reproduced; the logic is the same, so the window
 for it is the time a rendering takes.
 
-**Where.** `lvgl_mpy_studio/ui/designer/preview.py`, `PreviewRenderer.request`.
+**Where.** `copper_and_code_studio/ui/designer/preview.py`, `PreviewRenderer.request`.
 
 **Test.** With a fake `render` that waits for an event: request key A, then B, then A again while
 B is rendering; after it, the renderer draws A once more.
@@ -176,7 +176,7 @@ temporary folders; fifteen measures 13331 bytes on Linux and 13095 with the name
 compiles with the names, so its number is the second one (`scripts/budgets.py`). Tracebacks of the
 simulator would also show `ui.py` instead of a temporary path.
 
-**Where.** `lvgl_mpy_studio/build/compiler.py`, `compile_python`.
+**Where.** `copper_and_code_studio/build/compiler.py`, `compile_python`.
 
 **Test.** `measure_budget` of an example without a board gives the same flash from two different
 temporary folders.
@@ -191,8 +191,8 @@ and `SKIPPED` from `ui/device_files.py` into a module without Qt, for example
 `UploadFilesDialog`, so the web IDE cannot import them. It keeps a copy in `py/lms_board.py`,
 which can drift from upstream.
 
-**Where.** `lvgl_mpy_studio/ui/device_files.py`, `lvgl_mpy_studio/ui/main_device.py`,
-`lvgl_mpy_studio/ui/main_editors.py`.
+**Where.** `copper_and_code_studio/ui/device_files.py`, `copper_and_code_studio/ui/main_device.py`,
+`copper_and_code_studio/ui/main_editors.py`.
 
 **Test.** The existing tests of the four functions, importing them from the new module without
 PySide6 installed.
@@ -224,14 +224,14 @@ the STM32H7_CORE's `/flash`, `os.rmdir` of the current folder fails with `EACCES
 files are removed: Delete… on that folder then leaves it empty and reports an error. Seen on
 2026-11-15 by the web IDE's board test; the desktop runs the same script.
 
-**Where.** `lvgl_mpy_studio/device/service.py`, `DeviceSession.remove_path`.
+**Where.** `copper_and_code_studio/device/service.py`, `DeviceSession.remove_path`.
 
 **Test.** With a fake board whose `os.rmdir` refuses the current folder: run a file of a folder,
 stop, remove the folder; it is gone.
 
 ## 12. The web IDE's texts in `it.json`
 
-**What.** Add to `lvgl_mpy_studio/translations/it.json` the 88 texts of
+**What.** Add to `copper_and_code_studio/translations/it.json` the 88 texts of
 `src/i18n/it-web.json` of this repository, with their Italian as written there.
 
 **Why.** The web IDE translates with upstream's own catalogue, by the same English keys
@@ -241,7 +241,7 @@ few that the desktop shows too but `it.json` does not have (`Toolbox`, `Output`,
 are kept in `src/i18n/it-web.json` until upstream has them. Once a text is in `it.json`, the web
 IDE drops it from its own file (`tests/unit/translations.test.ts` refuses a text in both).
 
-**Where.** `lvgl_mpy_studio/translations/it.json`.
+**Where.** `copper_and_code_studio/translations/it.json`.
 
 **Test.** Upstream has no test of the catalogue's keys against its code (checked at `v0.7.1`), so
 extra keys break nothing; the web IDE's `tests/unit/translations.test.ts` checks the rest.

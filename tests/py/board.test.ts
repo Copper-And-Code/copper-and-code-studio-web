@@ -66,7 +66,7 @@ describe('board transport', () => {
     profiles = JSON.parse(
       py.runPython(`
 import json
-from lvgl_mpy_studio.core.boards import ProfileStore, portable_profile
+from copper_and_code_studio.core.boards import ProfileStore, portable_profile
 json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
 `) as string,
     ) as Record<string, unknown>;
@@ -264,7 +264,7 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
       status: 'stale',
     });
     const stopped = await call<string>('stop');
-    expect(stopped.result).toContain('LVGL_MPY_STUDIO_STOPPED');
+    expect(stopped.result).toContain('LMS_STOPPED');
     expect(board.softResets).toBeGreaterThan(0);
   }, 120_000);
 

@@ -14,8 +14,8 @@ import { type FileStore, type Location, joinPath, walkFiles } from '../storage/s
 import type { Dialogs } from '../ui/dialogs.ts';
 import { copyProgramIntoPython } from './run.ts';
 
-/** build/web.py MARKER: only a folder made by the IDE is replaced. */
-const MARKER = '.lvgl-mpy-studio-web';
+/** build/web.py MARKER and OLD_MARKERS: only a folder made by the IDE is replaced. */
+const MARKERS = ['.copper-and-code-studio-web', '.lvgl-mpy-studio-web'];
 const RUNTIME_FILES = ['micropython.mjs', 'micropython.wasm'];
 const PREVIEW_CACHE = 'lms-web-preview';
 // In local time, as a zip stores dates: the same files give the same zip in every time zone.
@@ -182,7 +182,8 @@ export class WebPublisher {
     const store = await pickFolder();
     if (!store) return false;
     const existing = await walkFiles(store, build.name).catch((): string[] => []);
-    if (existing.length && !existing.includes(joinPath(build.name, MARKER))) {
+    const ours = MARKERS.some((marker) => existing.includes(joinPath(build.name, marker)));
+    if (existing.length && !ours) {
       await this.dialogs.notice(
         tr('Save to a Folder…'),
         tr('{path} already exists and is not a web build made by this IDE: move or rename it', {

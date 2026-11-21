@@ -1,9 +1,9 @@
 # Status: parity with the desktop IDE
 
-Each feature of the desktop LVGL MPY Studio is **done**, **partial** (what is missing) or **not
+Each feature of the desktop Copper and Code Studio is **done**, **partial** (what is missing) or **not
 started**. A feature is marked only as far as a test or the owner has verified it.
 
-Upstream: the submodule in `upstream/` points to the tag `v0.7.2`.
+Upstream: the submodule in `upstream/` points to the tag `v0.8.0`.
 
 ## Features
 
@@ -54,7 +54,18 @@ printing.
 | Python in a Web Worker, ready before the UI needs it | done  | `tests/e2e/python.spec.ts`: ready in 2.8–3.1 s with a warm cache, on 3 engines locally                 |
 | CI (`ci.yml`)                                        | done  | first run green on 2026-11-14 (run 43570952529): 4 unit tests, 3 of 3 e2e                              |
 | Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed phase 11 on 2026-11-19 (run 44552747649)                    |
-| WebAssembly runtime from upstream's release          | done  | `runtime.lock.json`; `scripts/fetch-runtime.mjs` downloads the asset of `v0.7.2` and checks its sha256 |
+| WebAssembly runtime from upstream's release          | done  | `runtime.lock.json`; `scripts/fetch-runtime.mjs` downloads the asset of `v0.8.0` and checks its sha256 |
+
+### The new name
+
+Since upstream `v0.8.0` the IDE is Copper and Code Studio Web, served under
+`/copper-and-code-studio-web/` instead of `/lvgl-mpy-studio-web/`. After the repository is
+renamed the old Pages path answers 404, so an app installed from the old address stops updating
+and must be installed again from the new one. The workspace and the settings are kept, because
+the origin and the keys are the same: `tests/e2e/rename.spec.ts` writes a setting and a workspace
+file under the old path and reads them under the new one, on 3 engines. A web build folder saved
+by an earlier version, with the marker `.lvgl-mpy-studio-web`, is still replaced by Save to a
+Folder (not tested: the folder picker cannot be driven by the e2e tests).
 
 Playwright's WebKit has no private file system (OPFS) in its default throw-away profile; with a
 profile on disk it has, as Safari does. The e2e tests give WebKit a new profile on disk for each
@@ -78,14 +89,14 @@ for all 9 projects and 8 board exports.
 
 `tests/py/upstream-tests.mjs` runs upstream's whole pytest suite in Pyodide under Node, with
 upstream's dependencies apart from Qt (pyserial 3.5, mpremote 1.29.0) and its test tools
-(pytest 9.0.2, hypothesis 6.170.14). In Pyodide on `v0.7.2`, 18 November 2026; on the host on
+(pytest 9.0.2, hypothesis 6.170.14). In Pyodide on `v0.8.0`, 20 November 2026; on the host on
 `v0.7.0`, 14 November 2026 (not run again since):
 
 |                                                                 | Pyodide               | Host, CPython 3.11 without Qt |
 | --------------------------------------------------------------- | --------------------- | ----------------------------- |
-| passed                                                          | 696                   | 641                           |
-| skipped (a native runtime, LVGL, Wine or `mpy-cross` not built) | 260                   | 248                           |
-| excluded                                                        | 27 files and 38 tests |                               |
+| passed                                                          | 698                   | 641                           |
+| skipped (a native runtime, LVGL, Wine or `mpy-cross` not built) | 261                   | 248                           |
+| excluded                                                        | 27 files and 39 tests |                               |
 | failed outside the exclusions                                   | **0**                 |                               |
 
 Every exclusion is listed with its reason in `tests/py/exclusions.json`:
@@ -93,7 +104,7 @@ Every exclusion is listed with its reason in `tests/py/exclusions.json`:
 - 26 files import PySide6 when they load (tests of the Qt UI, or core tests mixed with them:
   upstream request 4), and `tests/manual`, the suites the desktop runs by hand with
   `pytest --manual`;
-- 21 tests use pytest-qt's `qtbot`;
+- 22 tests use pytest-qt's `qtbot`;
 - 5 compile C with `make` and the LVGL sources, which the owner left out;
 - 3 need the native `mpy-cross` or the IDE in a process, and fail on the host as well;
 - 7 pass on the host and not in Pyodide, because they start a process or a thread: 4 tests of

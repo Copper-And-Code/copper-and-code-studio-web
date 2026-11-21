@@ -25,10 +25,10 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = ROOT / "upstream"
 sys.path.insert(0, str(UPSTREAM))
 
-from lvgl_mpy_studio import __version__  # noqa: E402
-from lvgl_mpy_studio.build import budget, compiler  # noqa: E402
-from lvgl_mpy_studio.core.model import Project  # noqa: E402
-from lvgl_mpy_studio.gen import board_gen  # noqa: E402
+from copper_and_code_studio import __version__  # noqa: E402
+from copper_and_code_studio.build import budget, compiler  # noqa: E402
+from copper_and_code_studio.core.model import Project  # noqa: E402
+from copper_and_code_studio.gen import board_gen  # noqa: E402
 
 
 def main(argv):

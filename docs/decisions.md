@@ -589,3 +589,24 @@ nothing; the contract stays version 1, with additions only (`docs/capture.md`, V
   source map): the file and line are those of the text a person corrects.
 - **New for a Board** said the resolution twice ("ESP32-4848S040 (480×480) (480×480)"): the
   built-in profiles' names have it already, so it is added only to a name without it.
+
+## The rename to Copper and Code Studio (upstream v0.8.0, 2026-11-20)
+
+- **The name people see changes, the identifiers that keep data do not.** The title, the manifest
+  (`Copper and Code Studio Web`, short name `Copper&Code`), the About box, the status bar, the
+  window title and the texts with the product's name. The `lms` prefix stays everywhere: the
+  storage keys `lms.*`, the cache names, the IndexedDB and OPFS names, `py/lms_*.py`, the release
+  assets `lms-*-v*.zip`. The origin is the same, so the settings and the workspace survive.
+- **The base path is written once**, in `scripts/site.mjs`; Vite's `base`, Playwright and the e2e
+  tests import it, the site's code reads `import.meta.env.BASE_URL`. `OLD_BASE` is there only for
+  the test that data written under the old address is read under the new one.
+- **The capture contract stays version 1.** Only the About item's name moves, because menu items
+  are named after their English label; Stage does not use it.
+- **A web build folder with the old marker is still ours**, as upstream's `build/web.py` now
+  accepts `OLD_MARKERS`: Save to a Folder writes `.copper-and-code-studio-web` and replaces a folder
+  with either marker.
+- **The runtime assets of `v0.8.0` are the bytes of `v0.7.2`**: the name in the runtime is in
+  Python files of the bundle (`lms_web_boot.py`, `os.py`, `display_driver.py`), not in the
+  WebAssembly.
+- **Paths in the open upstream requests** use the new package, `copper_and_code_studio/`, so they
+  can be found at the new tag; the decision records above keep the names of their time.

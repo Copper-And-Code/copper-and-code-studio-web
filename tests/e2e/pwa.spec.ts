@@ -6,13 +6,13 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } fr
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import type { Page } from '@playwright/test';
+import { BASE } from '../../scripts/site.mjs';
 import { serviceWorker } from '../../scripts/sw-plugin.mjs';
 import { expect, test } from './fixtures.ts';
 
 test.use({ serviceWorkers: 'allow' });
 
 const ROOT = join(import.meta.dirname, '..', '..');
-const BASE = '/lvgl-mpy-studio-web/';
 
 async function start(page: Page, url = './') {
   await page.goto(url);

@@ -23,17 +23,17 @@ it('imports every module of the bundle, without Qt, pyserial or mpremote', () =>
   const result = JSON.parse(
     py.runPython(`
 import importlib, json, pkgutil, sys
-import lvgl_mpy_studio
+import copper_and_code_studio
 # walk_packages imports each package to look inside: device's modules are listed without that
-top = [m for m in pkgutil.iter_modules(lvgl_mpy_studio.__path__, 'lvgl_mpy_studio.') if m.name != 'lvgl_mpy_studio.device']
+top = [m for m in pkgutil.iter_modules(copper_and_code_studio.__path__, 'copper_and_code_studio.') if m.name != 'copper_and_code_studio.device']
 names = []
 for module in top:
     names.append(module.name)
     if module.ispkg:
         package = importlib.import_module(module.name)
         names.extend(m.name for m in pkgutil.walk_packages(package.__path__, module.name + '.'))
-device_path = [lvgl_mpy_studio.__path__[0] + '/device']
-device = ['lvgl_mpy_studio.device'] + [m.name for m in pkgutil.iter_modules(device_path, 'lvgl_mpy_studio.device.')]
+device_path = [copper_and_code_studio.__path__[0] + '/device']
+device = ['copper_and_code_studio.device'] + [m.name for m in pkgutil.iter_modules(device_path, 'copper_and_code_studio.device.')]
 names = sorted(names + device)
 failed = {}
 def load(group):
@@ -58,7 +58,7 @@ json.dumps({'names': names, 'device': device, 'failed': failed, 'forbidden': for
     serial: string | null;
   };
   expect(result.names.length).toBeGreaterThan(40);
-  expect(result.device).toContain('lvgl_mpy_studio.device.service');
+  expect(result.device).toContain('copper_and_code_studio.device.service');
   expect(result.failed).toEqual({});
   expect(result.forbidden).toEqual([]);
   expect(result.serial).toBe('/lib/lms/serial/__init__.py');

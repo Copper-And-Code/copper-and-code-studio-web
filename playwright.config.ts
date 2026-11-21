@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { BASE } from './scripts/site.mjs';
 
 const PORT = 4173;
 
@@ -11,7 +12,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: `http://localhost:${PORT}/lvgl-mpy-studio-web/`,
+    baseURL: `http://localhost:${PORT}${BASE}`,
     trace: 'retain-on-failure',
     // the IDE takes its language from the browser: the tests read it in English (language.spec.ts
     // switches it)
@@ -28,7 +29,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `pnpm build && pnpm preview --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/lvgl-mpy-studio-web/`,
+    url: `http://localhost:${PORT}${BASE}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -1,4 +1,4 @@
-// The rasteriser of upstream's lvgl_mpy_studio/fontconv.py, which is Qt, done with what LVGL's own
+// The rasteriser of upstream's copper_and_code_studio/fontconv.py, which is Qt, done with what LVGL's own
 // converter uses: FreeType in WebAssembly as lv_font_conv 1.5.3 builds it (its
 // lib/freetype/build/ft_render.js, rendering as its lib/freetype/index.js does), and opentype.js
 // for kerning, as its lib/collect_font_data.js. The result has the shape of fontconv.rasterise,

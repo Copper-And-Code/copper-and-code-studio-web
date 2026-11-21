@@ -103,7 +103,7 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
     installUpstream(py, new Uint8Array(readFileSync(join(ROOT, 'public/python', bundle.file))));
     profile = JSON.parse(
       py.runPython(
-        `import json\nfrom lvgl_mpy_studio.core.boards import ProfileStore, portable_profile\njson.dumps(portable_profile(ProfileStore().get(${JSON.stringify(PROFILE)})))`,
+        `import json\nfrom copper_and_code_studio.core.boards import ProfileStore, portable_profile\njson.dumps(portable_profile(ProfileStore().get(${JSON.stringify(PROFILE)})))`,
       ) as string,
     ) as { adapter: string; config?: { appRoot?: string } };
     // _board_program_root
@@ -207,7 +207,7 @@ describe.skipIf(!DEVICE)(`the board on ${DEVICE}`, () => {
   it('Stop gives the prompt of MicroPython back', async () => {
     const reply = await call<string>('stop');
     expect(reply.error?.output ?? reply.error?.traceback ?? '').toBe('');
-    expect(reply.result).toContain('LVGL_MPY_STUDIO_STOPPED');
+    expect(reply.result).toContain('LMS_STOPPED');
   }, 120_000);
 
   it('edits a file of the board and saves it', async () => {

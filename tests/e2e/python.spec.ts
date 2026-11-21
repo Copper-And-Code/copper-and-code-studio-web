@@ -11,7 +11,7 @@ test('Python starts in its worker and the About box names it', async ({ page }) 
     timeout: 60_000,
   });
   await page.getByRole('menubar').getByRole('menuitem', { name: 'Help', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'About LVGL MPY Studio' }).click();
+  await page.getByRole('menuitem', { name: 'About Copper and Code Studio' }).click();
   await expect(page.getByTestId('python-version')).toHaveText(/^3\.\d+\.\d+ \(Pyodide [\d.]+\)$/);
 });
 

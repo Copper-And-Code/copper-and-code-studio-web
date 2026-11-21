@@ -1,5 +1,5 @@
 // Messages are upstream's English source strings, translated with upstream's own catalogue
-// (lvgl_mpy_studio/translations/it.json) exactly as its core/i18n.py tr() does: the English of
+// (copper_and_code_studio/translations/it.json) exactly as its core/i18n.py tr() does: the English of
 // the code is the key, {name} placeholders are filled after translating, and a text already
 // translated is taken back to its English first. The strings that exist only on the web are in
 // src/i18n/it-web.json, proposed upstream (docs/upstream-requests.md).
@@ -7,7 +7,7 @@
 // The language is the desktop's setting "language" (Settings → Language). Without one, the
 // browser's language decides, as a web page is expected to do.
 import { captureOptions } from '../capture/options.ts';
-import upstreamIt from '../../upstream/lvgl_mpy_studio/translations/it.json';
+import upstreamIt from '../../upstream/copper_and_code_studio/translations/it.json';
 import { Settings } from '../storage/settings.ts';
 import webIt from './it-web.json';
 

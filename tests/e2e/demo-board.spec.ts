@@ -74,9 +74,7 @@ test('the demo board: connect, information, the console, upload and run, disconn
   const save = page.locator('lms-dialogs dialog[open]');
   await expect(save.getByRole('heading', { name: 'Save Project' })).toBeVisible();
   await save.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect
-    .poll(() => consoleText(page), { timeout: 120_000 })
-    .toContain('LVGL_MPY_STUDIO_APP_READY');
+  await expect.poll(() => consoleText(page), { timeout: 120_000 }).toContain('LMS_APP_READY');
   await expect(page.getByTestId('device-status')).toContainText('app active');
   // the board's display draws the app, and its frames reach the capture contract
   await expect
