@@ -138,3 +138,22 @@ for (const game of ['snake', 'fifteen']) {
     expect(differentPixels(expected.rgb, actual)).toBe(0);
   });
 }
+
+test('the key that starts a project lets its Buzzer play', async ({ page }) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'simon');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: simon/project.json');
+  const tones = () =>
+    page.evaluate(() => {
+      const player = window.lmsStudio.studio?.run?.simulator.tones;
+      return [player?.ready, typeof AudioContext];
+    });
+  expect((await tones())[0]).toBe(false);
+  await page.keyboard.press('F5');
+  await expect(page.getByTestId('sim-status')).toContainText('RGB565', { timeout: 60_000 });
+  // nothing prepared the sound: every tone of a game was counted and none was played
+  const [ready, audio] = await tones();
+  expect(ready).toBe(audio === 'function');
+  await page.keyboard.press('Shift+F5');
+  await expect(page.getByTestId('sim-status')).toHaveText('Simulator stopped');
+});

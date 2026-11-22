@@ -155,6 +155,33 @@ describe('open, edit, save', () => {
     expect(session.modified).toBe(true);
   });
 
+  it('a change made while the file is being written stays a change', async () => {
+    await workspace.write('demo.json', DEMO);
+    await session.open({ store: 'workspace', path: 'demo.json' });
+    await session.renamePage(firstPage(), 'Start');
+    // a folder of the PC takes its time to close the file
+    const write = workspace.write.bind(workspace);
+    let entered = () => {};
+    const writing = new Promise<void>((resolve) => (entered = resolve));
+    let finish = () => {};
+    workspace.write = async (path, data) => {
+      entered();
+      await new Promise<void>((resolve) => (finish = resolve));
+      return write(path, data);
+    };
+    const saving = session.save();
+    await writing;
+    await session.renamePage(firstPage(), 'Later');
+    finish();
+    expect(await saving).toBe(true);
+    expect(JSON.parse(text(await workspace.read('demo.json')))).toMatchObject({
+      pages: [{ name: 'Start' }],
+    });
+    // "Later" is not in the file: New or Open must still ask before dropping it
+    expect(session.modified).toBe(true);
+    expect(session.title()).toBe('*demo.json — Copper and Code Studio');
+  });
+
   it('refuses a page name that is already taken', async () => {
     await session.open({ store: 'examples', path: 'demo.json' });
     const names = session.state?.pages.map((page) => page.name) ?? [];

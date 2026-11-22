@@ -28,8 +28,10 @@ export async function inProcessBridge(): Promise<PythonBridge> {
       if (copy.kind !== 'call' && copy.kind !== 'fs') throw new Error(`in-process: ${copy.kind}`);
       queueMicrotask(() => emit({ kind: 'reply', id: copy.id, ...handleRequest(py, call, copy) }));
     },
-    addEventListener(_type, listener) {
-      listeners.push(listener);
+    addEventListener(type: 'message' | 'error', listener: unknown) {
+      // no script that can fail to load here: only the messages are listened to
+      if (type === 'message')
+        listeners.push(listener as (event: MessageEvent<WorkerMessage>) => void);
     },
     terminate() {},
   };

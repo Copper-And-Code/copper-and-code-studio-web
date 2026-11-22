@@ -217,3 +217,98 @@ test('the Files panel creates, renames and deletes in the workspace', async ({ p
     ),
   ).toBeNull();
 });
+
+test('closing a file tab leaves the other tabs their own text', async ({ page }) => {
+  await start(page);
+  await page.evaluate(async () => {
+    for (const name of ['shell.py', 'ansiterm.py', 'ansifont.py']) {
+      await window.lmsStudio.studio?.openFile({ store: 'examples', path: `shell/${name}` });
+    }
+  });
+  await expect(page.getByTestId('tab-file-3')).toHaveText('ansifont.py');
+  const font = page.locator('lms-code-editor[data-file="3"] .cm-content');
+  await expect(font).toContainText('The 8x16 font of ansiterm.py');
+
+  // the tab in the middle goes: the editor after it was handed the text of the closed file
+  await page.getByRole('button', { name: 'Close ansiterm.py' }).click();
+  await expect(page.getByTestId('tab-file-2')).toHaveCount(0);
+  await page.getByTestId('tab-file-3').click();
+  await expect(font).toBeVisible();
+  await expect(font).toContainText('The 8x16 font of ansiterm.py');
+  await expect(font).not.toContainText('An ANSI terminal on the display');
+  await expect(page.locator('lms-code-editor[data-file="1"] .cm-content')).toContainText(
+    'A small Linux-like shell',
+  );
+  // and a key typed there changes its own file
+  await typeAtTop(page, '# mine\n');
+  const texts = await page.evaluate(() => {
+    const files = window.lmsStudio.studio?.files;
+    return [files?.get(1)?.text.slice(0, 24), files?.get(3)?.text.slice(0, 30)];
+  });
+  expect(texts).toEqual(['# A small Linux-like she', '# mine\n# The 8x16 font of ansi']);
+});
+
+test('two folders of the PC with the same name are two places', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'folders of the PC are opened in Chromium only');
+  // the browser's folder chooser cannot be driven: it answers with folders of the private file
+  // system, named as the test asks
+  await page.addInitScript(() => {
+    const queue: string[] = [];
+    Object.assign(window, {
+      lmsPicks: queue,
+      showDirectoryPicker: async () => {
+        let handle = await navigator.storage.getDirectory();
+        for (const part of (queue.shift() ?? '').split('/')) {
+          handle = await handle.getDirectoryHandle(part, { create: true });
+        }
+        return handle;
+      },
+    });
+  });
+  await start(page);
+  const pick = async (path: string, text?: string) => {
+    await page.evaluate(
+      async ([path, text]) => {
+        (window as unknown as { lmsPicks: string[] }).lmsPicks.push(path as string);
+        if (text === undefined) return;
+        let handle = await navigator.storage.getDirectory();
+        for (const part of (path as string).split('/')) {
+          handle = await handle.getDirectoryHandle(part, { create: true });
+        }
+        const file = await (
+          await handle.getFileHandle('main.py', { create: true })
+        ).createWritable();
+        await file.write(text as string);
+        await file.close();
+      },
+      [path, text],
+    );
+    await menu(page, 'File', 'Open a Folder of the PC…');
+    await expect(dialog(page).getByRole('heading', { name: 'Open Project' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog(page)).toHaveCount(0);
+  };
+  const places = () =>
+    page.evaluate(async () => {
+      const stores = [...(window.lmsStudio.studio?.stores.values() ?? [])];
+      const folders = stores.filter((store) => store.id.startsWith('folder:'));
+      return Promise.all(
+        folders.map(async (store) => [
+          store.label,
+          new TextDecoder().decode((await store.read('main.py')) ?? undefined),
+        ]),
+      );
+    });
+
+  await pick('picked/a/src', 'of project A');
+  expect(await places()).toEqual([['PC: src', 'of project A']]);
+  // another folder called src: it took the id of the first, and with it its tabs and recent files
+  await pick('picked/b/src', 'of project B');
+  expect(await places()).toEqual([
+    ['PC: src', 'of project A'],
+    ['PC: src (2)', 'of project B'],
+  ]);
+  // the first folder chosen again is the place it already is
+  await pick('picked/a/src');
+  expect(await places()).toHaveLength(2);
+});

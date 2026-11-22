@@ -1,6 +1,7 @@
 import { captureOptions } from '../capture/options.ts';
 import { capture } from '../capture/hub.ts';
 import { LitElement, css, html, nothing } from 'lit';
+import { repeat } from 'lit/directives/repeat.js';
 import type { CenterTab, Studio } from '../app/studio.ts';
 import { type MappedError, captureFile } from '../app/code.ts';
 import { upstream } from '../build-info.ts';
@@ -862,47 +863,53 @@ export class AppShell extends LitElement {
   private renderFilePanels() {
     const studio = this.studio;
     if (!studio) return nothing;
-    return studio.files.tabs.map((tab) => {
-      const id = this.tabId(`file:${tab.id}`);
-      return html`<div
-        role="tabpanel"
-        class="file-panel"
-        id="panel-${id}"
-        aria-labelledby="tab-${id}"
-        ?hidden=${this.tab !== `file:${tab.id}`}
-      >
-        ${
-          tab.notice
-            ? html`<div class="notice" role="status">
-                <span>${tab.notice}</span>
-                ${
-                  tab.offerReload
-                    ? html`<button type="button" @click=${() => void studio.files.reload(tab)}>
-                        ${tr('Reload')}
-                      </button>`
-                    : nothing
-                }
-              </div>`
-            : nothing
-        }
-        <lms-code-editor
-          data-capture="file-editor"
-          data-file=${tab.id}
-          label=${tab.location.path}
-          .provider=${(qualified: string) =>
-            tab.location.path.endsWith('.py') ? studio.lvCompletions(qualified) : []}
-        ></lms-code-editor>
-        ${
-          tab.errors.length
-            ? html`<p class="syntax" data-testid="file-errors" role="alert">
-                ${tab.errors
-                  .map((error) => `${tr('Line')} ${error.line}: ${error.message}`)
-                  .join('\n')}
-              </p>`
-            : nothing
-        }
-      </div>`;
-    });
+    // Keyed by the tab: each editor stays its file's, with its text and its undo history. By
+    // position, closing a tab handed its editor, text included, to the next one.
+    return repeat(
+      studio.files.tabs,
+      (tab) => tab.id,
+      (tab) => {
+        const id = this.tabId(`file:${tab.id}`);
+        return html`<div
+          role="tabpanel"
+          class="file-panel"
+          id="panel-${id}"
+          aria-labelledby="tab-${id}"
+          ?hidden=${this.tab !== `file:${tab.id}`}
+        >
+          ${
+            tab.notice
+              ? html`<div class="notice" role="status">
+                  <span>${tab.notice}</span>
+                  ${
+                    tab.offerReload
+                      ? html`<button type="button" @click=${() => void studio.files.reload(tab)}>
+                          ${tr('Reload')}
+                        </button>`
+                      : nothing
+                  }
+                </div>`
+              : nothing
+          }
+          <lms-code-editor
+            data-capture="file-editor"
+            data-file=${tab.id}
+            label=${tab.location.path}
+            .provider=${(qualified: string) =>
+              tab.location.path.endsWith('.py') ? studio.lvCompletions(qualified) : []}
+          ></lms-code-editor>
+          ${
+            tab.errors.length
+              ? html`<p class="syntax" data-testid="file-errors" role="alert">
+                  ${tab.errors
+                    .map((error) => `${tr('Line')} ${error.line}: ${error.message}`)
+                    .join('\n')}
+                </p>`
+              : nothing
+          }
+        </div>`;
+      },
+    );
   }
 
   override updated(): void {

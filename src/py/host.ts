@@ -1,5 +1,6 @@
 // What the Python worker does with each request, apart from starting Pyodide. Shared by the
-// browser worker and the Node tests, which run it in-process.
+// browser worker and the Node tests, which run it in-process. Every request gets a reply, so the
+// page is never left waiting.
 import type { PyodideInterface } from 'pyodide';
 import type { PythonCall } from './boot.ts';
 import type { BridgeReply, CallRequest, FsRequest } from './protocol.ts';
@@ -9,8 +10,10 @@ export function handleRequest(
   call: PythonCall,
   request: CallRequest | FsRequest,
 ): BridgeReply {
-  if (request.kind === 'call') return call(request.method, request.args);
   try {
+    // Python's own failures come back as replies (lms_bridge.call); what gets past it, a
+    // SystemExit or a failure of Pyodide itself, is thrown here.
+    if (request.kind === 'call') return call(request.method, request.args);
     const { FS } = py;
     switch (request.op) {
       case 'write': {
@@ -32,6 +35,7 @@ export function handleRequest(
         return { ok: true, result: null };
     }
   } catch (error) {
-    return { ok: false, error: { type: 'FsError', message: String(error) } };
+    const type = request.kind === 'call' ? 'WorkerError' : 'FsError';
+    return { ok: false, error: { type, message: String(error) } };
   }
 }

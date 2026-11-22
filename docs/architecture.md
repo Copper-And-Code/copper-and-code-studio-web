@@ -37,6 +37,8 @@ PythonBridge.generate(text) ──call──►  Pyodide 314 + /lib/lms (the ups
   worker checks.
 - `src/py/boot.ts` unpacks the bundle and opens `lms_bridge`; the worker and the Node tests use
   the same code.
+- `src/py/host.ts` answers every request, a failure outside Python included, so no call is left
+  waiting; a worker that does not load fails the start through its `error` event.
 - `py/lms_bridge.py` is a dispatcher that calls upstream and returns JSON; `py/lms_document.py`
   holds the open project as upstream's `ui/document.py` does, without Qt; `py/lms_board.py` runs
   upstream's `DeviceSession`, and `py/serial/` puts Web Serial in pyserial's place.

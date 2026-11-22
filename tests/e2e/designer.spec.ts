@@ -1027,3 +1027,31 @@ test('a picture larger than the screen is made smaller, a file that is not one i
     expect.objectContaining({ name: 'wide_photo.png' }),
   );
 });
+
+test('a refresh of the designer that fails does not stop the next ones', async ({ page }) => {
+  await start(page);
+  // one call of the next refresh fails, as design_page does for a page that an undo took away
+  // between the refresh being asked for and its turn
+  await page.evaluate(() => {
+    const python = window.lmsStudio.python;
+    const call = python.call.bind(python);
+    let failed = false;
+    python.call = ((method: string, ...args: unknown[]) => {
+      if (method !== 'design_page' || failed) return call(method, ...args);
+      failed = true;
+      return Promise.reject(new Error('no such page'));
+    }) as typeof python.call;
+  });
+  const pages = () =>
+    page.evaluate(() => {
+      const studio = window.lmsStudio.studio;
+      return [studio?.designer?.pages.size, studio?.session.state?.pages.length];
+    });
+  // counted in the project: the designer may still be at its first refresh, the one that fails
+  const before = (await pages())[1] ?? 0;
+  await menu(page, 'Project', 'Add Page');
+  await expect.poll(async () => (await pages())[1]).toBe(before + 1);
+  // the canvases stayed as they were for good: no later change of the project reached them
+  await menu(page, 'Project', 'Add Page');
+  await expect.poll(pages).toEqual([before + 2, before + 2]);
+});

@@ -5,6 +5,8 @@ const PORT = 4173;
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  // the server found on the port is this folder's build, not a preview left open
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   // Three browsers at once on one PC compete for the CPU and distort the start-up time measured.
   workers: process.env.CI ? undefined : 3,

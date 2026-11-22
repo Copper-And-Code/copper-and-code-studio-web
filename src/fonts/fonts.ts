@@ -13,7 +13,10 @@ interface Needed {
 
 type Reply = { id: number; font?: RasterFont; missing?: string; error?: string };
 
-/** The calls that generate code, and so may convert fonts. */
+/**
+ * The calls that generate code, and so may convert fonts: of the bridge, and of the board
+ * (upload, live_send). One left out generates with Montserrat in place of the project's font.
+ */
 export const GENERATING = new Set([
   'generate',
   'export_board',
@@ -23,6 +26,10 @@ export const GENERATING = new Set([
   'code_generate_check',
   'budget_prepare',
   'budget_measure',
+  'web_prepare',
+  'web_build',
+  'upload',
+  'live_send',
 ]);
 
 export class FontConverter {

@@ -610,3 +610,84 @@ nothing; the contract stays version 1, with additions only (`docs/capture.md`, V
   WebAssembly.
 - **Paths in the open upstream requests** use the new package, `copper_and_code_studio/`, so they
   can be found at the new tag; the decision records above keep the names of their time.
+
+## A call always answered, two tabs, the tests' server (2026-11-22)
+
+- **Every call to the Python worker gets a reply.** `lms_bridge.call` turns Python's exceptions
+  into replies, but what gets past it, a `SystemExit` or a failure of Pyodide itself, was thrown in
+  the worker and the page waited for ever; `handleRequest` (`src/py/host.ts`) now answers that too,
+  as a `WorkerError`. A worker whose script does not load sends no message at all: the bridge
+  listens to its `error` event, and before Python is ready it becomes "Python failed to start" and
+  fails the calls waiting and the later ones. Once ready, an error outside a call does not stop
+  the worker, so it fails nothing.
+- **Reload works in a tab that another tab updated.** Reload in one tab makes the new worker take
+  the other tabs over too, without reloading them (they may have unsaved changes). Their Reload
+  waited for a change of worker that had already happened and did nothing; it now reloads at once
+  when the worker it offered is no longer waiting (`src/pwa/pwa.ts`). Until then such a tab runs
+  the old page on the new deploy's cache: a file of the old deploy that the new one dropped comes
+  from the network, where it may be gone.
+- **The e2e tests refuse a server that is not this folder's build.** Outside CI Playwright keeps a
+  server found on the port and builds nothing, so a preview left open, also by another copy of the
+  repository, had the tests judge other code. `tests/e2e/global-setup.ts` compares the `sw.js`
+  served, which lists every file of a build with its sha256, with `dist/sw.js`, and fails if a
+  source changed after the build; the message says to stop that server.
+
+## Files and saves, after a review (2026-11-22)
+
+Five defects found by a review of the code, each with a test that failed before its fix.
+
+- **Each file tab keeps its own editor.** The panels of the file tabs are rendered keyed by the
+  tab (`repeat` in `src/ui/app-shell.ts`). By position, closing a tab that was not the last handed
+  its editor to the next tab with the text of the closed file still in it, and the next key typed
+  there, then Save, wrote that text into the other file.
+- **A rename that only changes the case of a name goes through a name of its own**
+  (`renameStoreEntry` in `src/storage/store.ts`). A store has no rename: the files are copied, then
+  the old ones removed. On Windows and macOS the new name is the old folder itself, so the copy
+  wrote each file onto itself and the removal took everything. Checked on a store that ignores
+  case as those file systems do (`tests/unit/case-blind-store.ts`), not on such a PC.
+- **A name is taken in any letter case** (`nameTaken`): a rename is refused when another entry of
+  the folder has the name in another case, where the old check let a folder merge into that
+  entry.
+- **A folder of the PC is known by itself, not by its name.** `pickFolder` asks the browser whether
+  the folder chosen is one already there (`isSameEntry`); another folder with the same name is a
+  new place, "PC: src (2)". By name, it took the id of the first, and the tabs, the recent files
+  and the open project of the first then wrote into the second.
+- **What is typed while a file is being written stays a change.** A file tab records as saved the
+  text it wrote, not the text it has when the store answers (a board takes seconds). The project
+  does the same: after the store has written, the session takes the state as Python has it then
+  (`doc_state`), not the one `doc_save` returned before, which took the "modified" away from a
+  change made meanwhile, and New or Open then dropped it without a question.
+
+## The board's queue, the editors and the sound, after the same review (2026-11-22)
+
+- **Nothing queued by the Files panel starts right after a program was typed at the prompt**
+  (`DeviceController.finished`). Run on the Board uploads, then types the line that runs the
+  program; the upload had made the Files panel ask for the folder again, and that operation,
+  started at once, entered the raw REPL with a Ctrl-C and stopped the program. Upstream's
+  `_device_finished` runs nothing after what followed; here what is queued still runs after a
+  connection, where the panel asks while the board is busy, and waits only after a typed line.
+- **A connection that fails leaves no port.** Upstream's session drops its port; the IDE kept its
+  own, said "Connected" and failed every operation until Disconnect.
+- **A board file operation without a board fails at once**, as `_board_task` does. Kept in the
+  queue, a save made after a disconnection never ended, and was written on the board connected
+  next.
+- **`run_line` is upstream's function again**, to the letter (a test compares them): a path with a
+  space or a parenthesis is a file to run, as upstream decided in v0.8.0, not a line of Python.
+- **Cancel reaches the operation that waits.** A call that asks nothing of the board can be
+  answered while an operation waits for it (the tracebacks, from a timer); it took the
+  operation's cancel away with its own, and Cancel did nothing. `lms_board.call` puts it back.
+- **Every call that generates waits for the fonts**: `upload`, `live_send`, `web_prepare` and
+  `web_build` were missing from `GENERATING`, so an upload or a web build made right after a text
+  changed could go out with Montserrat in place of the project's font. Not tested.
+- **A failure does not stop the chain it was in.** The designer's refreshes and the Code tab's
+  edits run one after the other on a promise; one rejection left it rejected, and no later
+  refresh or edit ran. A refresh that failed is now simply over; an edit that did not reach the
+  project is said in Output, and the edits after it go.
+- **The Code tab reads the code again if something was typed while Python answered**
+  (`CodeController.refresh`): the answer did not have that text, and taking it put the older text
+  back into the editor.
+- **The sound is prepared by the key or the click that starts** (`RunController`): nothing called
+  `TonePlayer.prepare`, so every tone of a game was counted and none was played.
+- **Left as it is: Ctrl+C on a page tab is the designer's wherever the focus is**, so text selected
+  in Output cannot be copied with the keyboard. Telling a copy of text from a copy of widgets
+  needs to know which the user meant: not decided.

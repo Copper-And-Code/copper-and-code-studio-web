@@ -229,6 +229,39 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
     );
   }, 60_000);
 
+  it('cancels an upload after another call was answered meanwhile', async () => {
+    await plug({ width: 480, height: 480 });
+    expect((await call('connect', PORT, profiles.esp32_4848s040_480)).ok).toBe(true);
+    const names = [1, 2, 3, 4, 5, 6].map((n) => `data${n}.txt`);
+    py.FS.mkdirTree('/board-upload');
+    for (const name of names) py.FS.writeFile(`/board-upload/${name}`, 'x'.repeat(4000));
+    const upload = call<{ files: string[] }>('upload_files', names, '/flash', false);
+    // The upload waits for the board. The page asks something else meanwhile, outside its queue
+    // (the tracebacks of what the board printed, from a timer): that call took the upload's
+    // cancel away with its own.
+    expect((await call('destinations')).ok).toBe(true);
+    (py.pyimport('lms_board').cancel as () => string)();
+    const reply = await upload;
+    expect(reply.ok).toBe(false);
+    expect(reply.error?.code).toBe('device.cancelled');
+  }, 60_000);
+
+  it('types a file of the board as upstream does, with a space in its path too', async () => {
+    expect((await call('run_line', '/flash/my game/main.py')).result).toBe(
+      "import os; os.chdir('/flash/my game'); exec(open('main.py').read(), {'__name__': '__main__', '__file__': '/flash/my game/main.py'})",
+    );
+    expect((await call('run_line', 'q = open("a").py')).result).toBe('q = open("a").py');
+    // upstream's module imports Qt, so py/lms_board.py has a copy: the same function, to the letter
+    const source = (file: string) =>
+      /^def run_line\(text\):\n(?:(?: {4}.*)?\n)*/m.exec(
+        readFileSync(join(ROOT, file), 'utf8'),
+      )?.[0];
+    expect(source('py/lms_board.py')).toContain('return text\n');
+    expect(source('py/lms_board.py')).toBe(
+      source('upstream/copper_and_code_studio/ui/device_files.py'),
+    );
+  });
+
   it('runs the app, updates it live, and stops it', async () => {
     // without bytecode: the fake board runs Python source only
     const fonts = [

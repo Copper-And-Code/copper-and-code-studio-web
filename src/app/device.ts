@@ -120,6 +120,8 @@ export class DeviceController {
     reject: (e: unknown) => void;
   }[] = [];
   private next: (() => unknown) | null = null;
+  /** What followed the last operation typed a line at the board's prompt (runOnBoard). */
+  private typed = false;
   private cancelling = false;
   private readonly listeners = new Set<() => void>();
   private decoder = new TextDecoder();
@@ -363,8 +365,12 @@ export class DeviceController {
       following = () => this.task(operation, success);
     }
     this.syncSession();
+    this.typed = false;
     if (following) following();
-    this.runPending(); // what the Files panel asked while the board was busy, if it is free
+    // What the Files panel asked while the board was busy, if it is free. Not after a program
+    // typed at the prompt: an operation enters the raw REPL with a Ctrl-C, which would stop it
+    // (_device_finished runs nothing after what followed). It waits for the board's next turn.
+    if (!this.typed) this.runPending();
   }
 
   /**
@@ -372,6 +378,8 @@ export class DeviceController {
    * board to be free, and runs in the background, so that it does not lock the IDE.
    */
   boardTask<T>(method: string, ...args: unknown[]): Promise<T> {
+    // without a board it fails now: kept, it would run on whichever board is connected next
+    if (!this.port) return Promise.reject(new Error(tr('Board not connected')));
     return new Promise<T>((resolve, reject) => {
       this.pending.push({
         operation: () => this.python.board<T>(method, ...args),
@@ -480,6 +488,10 @@ export class DeviceController {
         if (info.compatible) this.next = action;
         else this.hooks.appendError(tr('Firmware or resolution is incompatible with the profile.'));
       },
+      false,
+      // upstream's session dropped its port: the IDE's goes too, or it would say "Connected"
+      // and fail every operation until Disconnect
+      () => void this.disconnect(),
     );
   }
 
@@ -737,6 +749,7 @@ export class DeviceController {
         // typed as soon as the board is free, before anything queued meanwhile; Ctrl-C first:
         // a program already running stops
         this.next = () => {
+          this.typed = true;
           this.write(new TextEncoder().encode(`\x03${line}\r`));
           this.view.raise();
           this.view.focusConsole();

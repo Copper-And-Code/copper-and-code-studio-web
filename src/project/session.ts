@@ -213,11 +213,7 @@ export class ProjectSession {
     try {
       // The file as it is now in its store, so that upstream sees an outside change.
       await this.syncFromStore(target);
-      const state = await this.python.call<DocState>(
-        'doc_save',
-        pythonPath(target),
-        overwriteExternal,
-      );
+      await this.python.call<DocState>('doc_save', pythonPath(target), overwriteExternal);
       const written = await this.python.readFile(pythonPath(target));
       if (!written) throw new Error(tr('No such file: {path}', { path: target.path }));
       try {
@@ -227,7 +223,9 @@ export class ProjectSession {
         this.update(await this.python.call<DocState>('doc_mark_unsaved'), this.location);
         throw error;
       }
-      this.update(state, target);
+      // The state as it is now, not as doc_save returned it before the store wrote: a change made
+      // meanwhile is not in the file, and the older state would take its "modified" away.
+      this.update(await this.python.call<DocState>('doc_state'), target);
     } catch (error) {
       if (error instanceof PythonCallError && error.type === 'ExternalChangeError') {
         return this.resolveExternalChange(error.deleted ?? false);

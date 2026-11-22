@@ -230,6 +230,8 @@ export class RunController {
   async runProject(): Promise<boolean> {
     const { session, view } = this.options;
     if (this.running) return false;
+    // now, in the click or the key that starts: later the browser would not let the sound play
+    this.simulator.tones.prepare();
     // ui/main_run.py saves first; a project already saved and unchanged runs as it is.
     if ((session.modified || !session.location) && !(await session.save())) return false;
     this.options.hooks.setErrors([]);
@@ -331,6 +333,7 @@ export class RunController {
       view.status(tr('Stop the simulator first.'));
       return false;
     }
+    this.simulator.tones.prepare(); // as runProject
     if (!entry) {
       const chosen = await dialogs.choose({
         mode: 'open',

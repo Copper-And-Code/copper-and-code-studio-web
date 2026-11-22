@@ -14,6 +14,7 @@ import type {
 export interface WorkerLike {
   postMessage(message: WorkerRequest, transfer?: Transferable[]): void;
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerMessage>) => void): void;
+  addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
   terminate(): void;
 }
 
@@ -56,6 +57,8 @@ export class PythonBridge {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   private nextId = 1;
+  /** The worker never started: nothing answers, so every call fails with this. */
+  private lost: PythonCallError | null = null;
 
   constructor(private readonly worker: WorkerLike = startPythonWorker()) {
     let resolveReady!: (info: PythonInfo) => void;
@@ -92,6 +95,22 @@ export class PythonBridge {
           break;
         }
       }
+    });
+    // The worker's script did not load, or threw before Python was ready: no message will ever
+    // come. Once ready, the worker answers every call, failures included (host.ts), and an error
+    // outside a call does not stop it.
+    worker.addEventListener('error', (event) => {
+      if (this.state.stage === 'ready' || this.state.stage === 'failed') return;
+      const error: PythonError = {
+        type: 'WorkerError',
+        // as the worker's own reasons (worker.ts): a detail after "Python failed to start"
+        message: event.message || 'the worker script did not load',
+      };
+      this.lost = new PythonCallError(error);
+      this.setState({ stage: 'failed', error });
+      rejectReady(this.lost);
+      for (const waiting of this.pending.values()) waiting.reject(this.lost);
+      this.pending.clear();
     });
   }
 
@@ -154,6 +173,7 @@ export class PythonBridge {
   }
 
   private send<T>(request: (id: number) => WorkerRequest): Promise<T> {
+    if (this.lost) return Promise.reject(this.lost);
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });

@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../src/storage/memory-store.ts';
 import { addRecent, recentFiles } from '../../src/storage/recent.ts';
 import { Settings, type SettingsBackend } from '../../src/storage/settings.ts';
-import { pathParts, walkFiles } from '../../src/storage/store.ts';
+import { nameTaken, pathParts, renameStoreEntry, walkFiles } from '../../src/storage/store.ts';
 import { exportZip, importZip, readZip } from '../../src/storage/zip.ts';
+import { CaseBlindStore } from './case-blind-store.ts';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
@@ -39,6 +40,51 @@ describe('MemoryStore', () => {
     await store.write('f', data);
     data[0] = 0;
     expect(new TextDecoder().decode((await store.read('f')) ?? new Uint8Array())).toBe('abc');
+  });
+});
+
+describe('rename', () => {
+  const text = async (store: MemoryStore, path: string) =>
+    new TextDecoder().decode((await store.read(path)) ?? new Uint8Array());
+
+  it('moves a file, and a folder with what is in it', async () => {
+    const store = new MemoryStore();
+    await store.write('a/main.py', bytes('1'));
+    await store.write('a/lib/x.py', bytes('2'));
+    await store.makeFolder('empty');
+    expect(await renameStoreEntry(store, 'a/main.py', 'app.py', 'file')).toBe('a/app.py');
+    expect(await renameStoreEntry(store, 'a', 'b', 'folder')).toBe('b');
+    expect(await renameStoreEntry(store, 'empty', 'void', 'folder')).toBe('void');
+    expect(await walkFiles(store)).toEqual(['b/lib/x.py', 'b/app.py']);
+    expect((await store.list('')).map((entry) => entry.name)).toEqual(['b', 'void']);
+    expect(await text(store, 'b/lib/x.py')).toBe('2');
+  });
+
+  // the old name and the new one are the same folder there: copying and then removing "the old
+  // one" removed everything
+  for (const Store of [MemoryStore, CaseBlindStore]) {
+    it(`changes only the case of a name without losing the files (${Store.name})`, async () => {
+      const store = new Store();
+      await store.write('Game/main.py', bytes('print(1)'));
+      await store.write('Game/lib/x.py', bytes('2'));
+      await store.write('Readme.TXT', bytes('3'));
+      expect(await nameTaken(store, '', 'game', 'Game')).toBe(false);
+      await renameStoreEntry(store, 'Game', 'game', 'folder');
+      await renameStoreEntry(store, 'Readme.TXT', 'readme.txt', 'file');
+      expect(await walkFiles(store)).toEqual(['game/lib/x.py', 'game/main.py', 'readme.txt']);
+      expect(await text(store, 'game/main.py')).toBe('print(1)');
+      expect(await text(store, 'readme.txt')).toBe('3');
+    });
+  }
+
+  it('finds a name taken in another case, by another entry only', async () => {
+    const store = new CaseBlindStore();
+    await store.write('Game/main.py', bytes('1'));
+    await store.write('other/main.py', bytes('2'));
+    expect(await nameTaken(store, '', 'GAME', 'other')).toBe(true);
+    expect(await nameTaken(store, '', 'GAME', 'Game')).toBe(false);
+    expect(await nameTaken(store, '', 'new', 'other')).toBe(false);
+    expect(await nameTaken(store, 'Game', 'MAIN.py')).toBe(true);
   });
 });
 

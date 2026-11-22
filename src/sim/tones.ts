@@ -8,6 +8,11 @@ export class TonePlayer {
   private stopAt: ReturnType<typeof setTimeout> | undefined;
   count = 0;
 
+  /** Sound can play: prepare() was called, and the browser has Web Audio. */
+  get ready(): boolean {
+    return this.audio !== null;
+  }
+
   /** Browsers allow sound only after a user gesture: call this from the click that starts. */
   prepare(): void {
     try {

@@ -191,9 +191,12 @@ export class FileTabs {
         this.changed();
         return false;
       }
-      const data = new TextEncoder().encode(tab.text.replace(/\n/g, tab.newline));
+      // the text as it is now: what is typed while the store writes (a board takes seconds) is
+      // not in the file, and stays a change
+      const text = tab.text;
+      const data = new TextEncoder().encode(text.replace(/\n/g, tab.newline));
       await store.write(tab.location.path, data);
-      tab.saved = tab.text;
+      tab.saved = text;
       tab.disk = data;
       tab.notice = '';
       tab.offerReload = false;

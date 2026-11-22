@@ -69,6 +69,69 @@ export function sortEntries(entries: Entry[]): Entry[] {
   );
 }
 
+/** As a file system that ignores the case and the Unicode form of names compares them. */
+const folded = (name: string) => name.normalize('NFC').toLowerCase();
+
+/**
+ * Another entry of the folder has this name, in any letter case: on Windows, on macOS and on a
+ * board's FAT it would be that entry. `except` is the entry being renamed, which may keep its
+ * name in another case.
+ */
+export async function nameTaken(
+  store: FileStore,
+  folder: string,
+  name: string,
+  except?: string,
+): Promise<boolean> {
+  return (await store.list(folder)).some(
+    (entry) => entry.name !== except && folded(entry.name) === folded(name),
+  );
+}
+
+async function copyEntry(
+  store: FileStore,
+  from: string,
+  to: string,
+  kind: Entry['kind'],
+): Promise<void> {
+  const files = kind === 'file' ? [from] : await walkFiles(store, from);
+  for (const path of files) {
+    const data = await store.read(path);
+    if (data) await store.write(to + path.slice(from.length), data);
+  }
+  if (kind === 'folder' && !files.length) await store.makeFolder(to);
+}
+
+/**
+ * Renames an entry inside its folder. A store has no rename: the files are copied, then the old
+ * ones removed. When only the case of the name changes, the new name is the old entry itself
+ * where the file system ignores case, and removing "the old one" after the copy would remove
+ * everything: the entry goes through a name of its own first.
+ */
+export async function renameStoreEntry(
+  store: FileStore,
+  path: string,
+  name: string,
+  kind: Entry['kind'],
+): Promise<string> {
+  const folder = parentPath(path);
+  const target = joinPath(folder, name);
+  if (folded(baseName(path)) === folded(name)) {
+    let parked = joinPath(folder, `${name}.renaming`);
+    for (let n = 2; await nameTaken(store, folder, baseName(parked)); n++) {
+      parked = joinPath(folder, `${name}.renaming-${n}`);
+    }
+    await copyEntry(store, path, parked, kind);
+    await store.remove(path);
+    await copyEntry(store, parked, target, kind);
+    await store.remove(parked);
+  } else {
+    await copyEntry(store, path, target, kind);
+    await store.remove(path);
+  }
+  return target;
+}
+
 /** Every file under a folder, recursively, sorted. */
 export async function walkFiles(store: FileStore, folder = ''): Promise<string[]> {
   const files: string[] = [];

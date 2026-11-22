@@ -27,18 +27,23 @@ export async function registerApp(hooks: PwaHooks): Promise<ServiceWorkerRegistr
   const firstInstall = !navigator.serviceWorker.controller;
   let reloading = false;
   let asked = false;
+  const reload = () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // the first install takes the page over too; only a reload asked for reloads
-    if (asked && !reloading) {
-      reloading = true;
-      location.reload();
-    }
+    if (asked) reload();
   });
   // a worker waits only behind an active one: the first install never asks
   const offer = (worker: ServiceWorker) => {
     hooks.updateReady(() => {
       asked = true;
-      worker.postMessage('skip-waiting');
+      // Still waiting: it takes over, and the change of worker reloads. Past that, another tab
+      // has applied the update and the worker has this page already: no change is left to wait for.
+      if (worker.state === 'installed') worker.postMessage('skip-waiting');
+      else reload();
     });
   };
   const follow = (worker: ServiceWorker) => {

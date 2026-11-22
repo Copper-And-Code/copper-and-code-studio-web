@@ -23,7 +23,9 @@ import {
   type Location,
   baseName,
   joinPath,
+  nameTaken,
   parentPath,
+  renameStoreEntry,
   walkFiles,
 } from '../storage/store.ts';
 import { exportZip, importZip, readZip } from '../storage/zip.ts';
@@ -526,23 +528,11 @@ export class Studio {
     const name = await this.askName(tr('Rename…'), old);
     const store = this.stores.get(location.store);
     if (name === null || name === old || !store) return;
-    const parent = location.path.slice(0, location.path.length - old.length).replace(/\/$/, '');
-    const target = joinPath(parent, name);
-    const exists =
-      (await store.read(target)) !== null ||
-      (await walkFiles(store, parent)).some((p) => p.startsWith(`${target}/`));
-    if (exists) {
+    if (await nameTaken(store, parentPath(location.path), name, old)) {
       await this.dialogs.notice(tr('Rename…'), tr('{name} already exists.', { name }));
       return;
     }
-    // A store has no rename: the files are copied, then the old ones removed.
-    const files = kind === 'file' ? [location.path] : await walkFiles(store, location.path);
-    for (const path of files) {
-      const data = await store.read(path);
-      if (data) await store.write(target + path.slice(location.path.length), data);
-    }
-    if (kind === 'folder' && !files.length) await store.makeFolder(target);
-    await store.remove(location.path);
+    const target = await renameStoreEntry(store, location.path, name, kind);
     for (const tab of this.files.tabs) {
       if (tab.location.store !== location.store) continue;
       if (

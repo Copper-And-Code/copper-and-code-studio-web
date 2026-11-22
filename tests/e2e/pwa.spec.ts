@@ -134,6 +134,48 @@ test('a new deploy is offered as an update, and Reload takes it', async ({ page 
   }
 });
 
+test('with two tabs open, Reload in one leaves a Reload that works in the other', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(240_000);
+  const site = await serveCopy();
+  try {
+    await start(page, site.url);
+    await cached(page);
+    const other = await context.newPage();
+    await start(other, site.url);
+
+    writeFileSync(join(site.folder, 'deployed.txt'), 'the next deploy\n');
+    const { version } = serviceWorker(site.folder);
+    await page.evaluate(async () => {
+      await (await navigator.serviceWorker.getRegistration())?.update();
+    });
+    for (const tab of [page, other]) {
+      await expect(tab.getByTestId('update')).toContainText('A new version', { timeout: 60_000 });
+    }
+    const first = page.waitForEvent('load');
+    await page.getByTestId('update').getByRole('button', { name: 'Reload' }).click();
+    await first;
+    await page.waitForFunction(() => window.lmsStudio?.started !== undefined);
+    await expect(page.getByTestId('update')).toHaveCount(0);
+
+    // the new worker took the other tab over without reloading it: its Reload still has to work
+    // (it waited for a change of worker that had already happened)
+    await expect(other.getByTestId('update')).toBeVisible();
+    const second = other.waitForEvent('load', { timeout: 30_000 });
+    await other.getByTestId('update').getByRole('button', { name: 'Reload' }).click();
+    await second;
+    await other.waitForFunction(() => window.lmsStudio?.started !== undefined);
+    await other.evaluate(() => window.lmsStudio.started);
+    expect((await cached(other)).names).toEqual([`lms-app-${version}`]);
+    await expect(other.getByTestId('update')).toHaveCount(0);
+  } finally {
+    site.server.close();
+    rmSync(site.folder, { recursive: true, force: true });
+  }
+});
+
 test('the site is installable', async ({ page, context, browserName }) => {
   const response = await page.request.get('manifest.webmanifest');
   expect(response.ok()).toBe(true);

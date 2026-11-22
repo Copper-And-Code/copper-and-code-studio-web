@@ -127,8 +127,16 @@ export class CodeController {
 
   /** After a new, opened or reloaded project, or undo and redo: the code as Python has it. */
   async refresh(): Promise<void> {
-    await this.editing;
-    this.state = await this.python.call<CodeState>('code_state');
+    // Read again if something was typed while Python answered: that text is not in the answer,
+    // and taking it would put the older text back into the editor and lose the key.
+    let state: CodeState;
+    let edits: Promise<void>;
+    do {
+      edits = this.editing;
+      await edits;
+      state = await this.python.call<CodeState>('code_state');
+    } while (edits !== this.editing);
+    this.state = state;
     this.objects = await this.python.call<CodeObject[]>('code_objects');
     // CodePanel.populate: the same object if it is still there, the handler's own if it moved
     let object = this.object;
@@ -299,18 +307,25 @@ export class CodeController {
     }
     const session = this.session;
     this.editing = this.editing.then(async () => {
-      const state = await this.python.call<DocState>(
-        'code_set',
-        key.kind,
-        id,
-        text,
-        session,
-        owner ?? null,
-        event ?? null,
-      );
-      // a handler made changes the widget's events: the designer reads the project again
-      if (owner) this.project.adopt(state);
-      else this.adoptState(state);
+      try {
+        const state = await this.python.call<DocState>(
+          'code_set',
+          key.kind,
+          id,
+          text,
+          session,
+          owner ?? null,
+          event ?? null,
+        );
+        // a handler made changes the widget's events: the designer reads the project again
+        if (owner) this.project.adopt(state);
+        else this.adoptState(state);
+      } catch (error) {
+        // The text did not reach the project (its handler or module is gone): said, and the
+        // edits after it still go. Left rejected, the chain dropped every later edit in silence.
+        const reason = error instanceof Error ? error.message : String(error);
+        this.output(`${tr('Edit Code')}: ${reason}\n`);
+      }
     });
     this.scheduleCheck();
   }

@@ -286,9 +286,12 @@ SKIPPED = {"__pycache__", ".git", ".hg", ".svn", ".venv"}
 
 
 def run_line(text):
-    """What to type at the board's prompt: a file of the board runs from its folder, as __main__; anything else is code."""
+    """What to type at the board's prompt: a file of the board runs from its folder, as __main__; anything else is code.
+
+    A line that starts with / is never Python, so it is a path even with spaces or parentheses in it.
+    """
     text = text.strip()
-    if text.endswith(".py") and "(" not in text and " " not in text:
+    if text.endswith(".py") and (text.startswith("/") or ("(" not in text and " " not in text)):
         path = text if text.startswith("/") else "/" + text
         folder, name = path.rsplit("/", 1)
         return f"import os; os.chdir({folder or '/'!r}); exec(open({name!r}).read(), {{'__name__': '__main__', '__file__': {path!r}}})"
@@ -389,7 +392,11 @@ def _error(error):
 
 
 def call(method, arguments_json):
-    """One operation on the board, called with stack switching; one at a time (the page queues)."""
+    """One operation on the board, called with stack switching; one at a time (the page queues).
+
+    A call that asks nothing of the board (trace_errors, from a timer of the page) can come while
+    an operation waits for the board: the operation's cancel is put back when that call ends."""
+    waiting = _state["cancel"]
     _state["cancel"] = threading.Event()
     try:
         arguments = json.loads(arguments_json)
@@ -399,7 +406,7 @@ def call(method, arguments_json):
     except Exception as error:  # every failure goes back to the page, never lost in the worker
         return json.dumps({"ok": False, "error": _error(error)}, ensure_ascii=False)
     finally:
-        _state["cancel"] = None
+        _state["cancel"] = waiting
 
 
 def cancel():

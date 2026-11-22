@@ -186,7 +186,10 @@ export class DesignerController {
 
   /** _document_changed: every page as the project has it now; the shown one drawn again. */
   refresh(): Promise<void> {
-    this.loading = this.loading.then(async () => {
+    // A refresh that failed is over: left rejected, the chain stopped every later refresh, and
+    // the canvases stayed as they were until the page was loaded again.
+    const before = this.loading.catch(() => {});
+    this.loading = before.then(async () => {
       const state = this.session.state;
       if (!state) return;
       const ids = new Set(state.pages.map((page) => page.id));

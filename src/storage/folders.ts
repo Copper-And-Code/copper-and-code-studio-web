@@ -97,17 +97,19 @@ function toStore(folder: SavedFolder): PcFolderStore {
   return new PcFolderStore(folder.id, `PC: ${folder.name}`, folder.handle);
 }
 
-export async function savedFolders(): Promise<PcFolderStore[]> {
-  if (!canOpenFolders) return [];
+async function saved(): Promise<SavedFolder[]> {
   try {
-    const all = await transaction<SavedFolder[]>(
+    return await transaction<SavedFolder[]>(
       'readonly',
       (s) => s.getAll() as IDBRequest<SavedFolder[]>,
     );
-    return all.map(toStore);
   } catch {
     return [];
   }
+}
+
+export async function savedFolders(): Promise<PcFolderStore[]> {
+  return canOpenFolders ? (await saved()).map(toStore) : [];
 }
 
 /** Asks the user for a folder of the PC and remembers it. null if the user cancels. */
@@ -119,10 +121,21 @@ export async function pickFolder(): Promise<PcFolderStore | null> {
   } catch {
     return null; // cancelled
   }
-  const existing = (await savedFolders()).find((store) => store.label === `PC: ${handle.name}`);
+  // The folder itself says whether it is a place already there, not its name: two folders of the
+  // PC can both be called "src", and the second must not take the place of the first under the
+  // tabs, the recent files and the open project that point to it.
+  const known = await saved();
+  let existing: SavedFolder | undefined;
+  for (const one of known) {
+    if (await handle.isSameEntry(one.handle).catch(() => false)) existing ??= one;
+  }
+  // told apart in the list of places too: "PC: src", "PC: src (2)"
+  const names = new Set(known.map((one) => one.name));
+  let name = handle.name;
+  for (let n = 2; names.has(name); n++) name = `${handle.name} (${n})`;
   const folder: SavedFolder = {
     id: existing?.id ?? `folder:${Date.now().toString(36)}`,
-    name: handle.name,
+    name: existing?.name ?? name,
     handle,
   };
   try {
