@@ -93,7 +93,7 @@ export class MenuBar extends LitElement {
       left: 0;
       z-index: 20;
       min-width: 240px;
-      max-width: min(420px, calc(100vw - 16px));
+      max-width: min(420px, calc(100vw / var(--lms-zoom, 1) - 16px));
       padding: 4px;
       background: var(--panel);
       border: 1px solid var(--border);

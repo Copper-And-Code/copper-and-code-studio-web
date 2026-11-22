@@ -100,7 +100,11 @@ export function applyCaptureLook(options: CaptureOptions = captureOptions): void
   const root = document.documentElement;
   root.dataset.capture = '1';
   if (options.theme) root.dataset.theme = options.theme;
-  if (options.zoom !== 1) root.style.setProperty('zoom', String(options.zoom));
+  if (options.zoom !== 1) {
+    root.style.setProperty('zoom', String(options.zoom));
+    // a CSS zoom scales vh and vw too: the IDE's sizes divide by it, so it still fits the window
+    root.style.setProperty('--lms-zoom', String(options.zoom));
+  }
 }
 
 export function installCapture(

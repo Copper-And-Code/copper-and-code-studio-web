@@ -205,6 +205,12 @@ test('a widget from the Toolbox lands where the click is, with the zoom of the U
   const zoomed = await context.newPage();
   await start(zoomed, 'capture=1&zoom=1.4');
   await openExample(zoomed, 'weather');
+  // the zoomed IDE fits the window: the page itself does not scroll (it was 1.4 times as tall)
+  const [height, visible] = await zoomed.evaluate(() => {
+    const root = document.documentElement;
+    return [root.scrollHeight, root.clientHeight];
+  });
+  expect(height).toBeLessThanOrEqual(visible);
   // Firefox gives the mouse whole pixels of the screen: at 1.4, half of one moves the point by up
   // to a pixel of the page. The bug was the zoom left out: 85 pixels off at y 215.
   const [x, y] = await placeLabel(zoomed, 300, 215);

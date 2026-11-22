@@ -97,7 +97,7 @@ export class UploadProgress extends LitElement {
   static override styles = css`
     dialog {
       min-width: 420px;
-      max-width: calc(100vw - 32px);
+      max-width: calc(100vw / var(--lms-zoom, 1) - 32px);
       background: var(--panel);
       color: var(--text);
       border: 1px solid var(--border);

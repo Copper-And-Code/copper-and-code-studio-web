@@ -111,11 +111,11 @@ export class Dialogs extends LitElement {
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
-      width: min(520px, calc(100vw - 32px));
+      width: min(520px, calc(100vw / var(--lms-zoom, 1) - 32px));
       box-sizing: border-box;
     }
     dialog.wide {
-      width: min(1000px, calc(100vw - 32px));
+      width: min(1000px, calc(100vw / var(--lms-zoom, 1) - 32px));
     }
     .grid {
       display: grid;
@@ -125,7 +125,7 @@ export class Dialogs extends LitElement {
       margin: 8px 0;
     }
     .table {
-      max-height: 40vh;
+      max-height: calc(40vh / var(--lms-zoom, 1));
       overflow: auto;
       border: 1px solid var(--border);
       border-radius: 4px;

@@ -82,9 +82,9 @@ export class AppShell extends LitElement {
   static override styles = css`
     :host {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) minmax(70px, 22vh) auto;
-      height: 100vh;
-      height: 100dvh;
+      grid-template-rows: auto minmax(0, 1fr) minmax(70px, calc(22vh / var(--lms-zoom, 1))) auto;
+      height: calc(100vh / var(--lms-zoom, 1));
+      height: calc(100dvh / var(--lms-zoom, 1));
     }
     .visually-hidden {
       position: absolute;
@@ -249,7 +249,7 @@ export class AppShell extends LitElement {
       border: none;
     }
     .toolbox lms-toolbox {
-      max-height: 30vh;
+      max-height: calc(30vh / var(--lms-zoom, 1));
       flex: 0 1 auto;
       min-height: 0;
     }
@@ -456,7 +456,7 @@ export class AppShell extends LitElement {
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 8px;
-      max-width: min(420px, calc(100vw - 32px));
+      max-width: min(420px, calc(100vw / var(--lms-zoom, 1) - 32px));
     }
     dialog::backdrop {
       background: rgb(0 0 0 / 0.35);

@@ -17,7 +17,7 @@ raises it, and the change is written under [Versions](#versions).
 | `capture=1`         | Capture mode: `window.lmsCapture`, the events, the frames, and the presentation below. Without it every other option is ignored.           |
 | `clock=manual`      | A project's clock moves only with `lmsCapture.step(ms)`. Without it the clock is real.                                                     |
 | `seed=N`            | Every random source of the simulator starts from `N` (0 to 4294967295).                                                                    |
-| `zoom=1.25`         | The scale of the IDE, from 0.5 to 4.                                                                                                       |
+| `zoom=1.25`         | The scale of the IDE, from 0.5 to 4. The IDE still fills the window, without scrolling the page.                                           |
 | `theme=light\|dark` | The theme, whatever the system's.                                                                                                          |
 | `lang=it\|en`       | The language. Without it, English: never the browser's or the one the user chose.                                                          |
 | `editor=plain`      | The code editors insert only what is typed: no automatic indent, no closing brackets, no completion list (Enter is a new line, Tab a tab). |
@@ -352,6 +352,9 @@ New Python Module… and New File… ask a name (`dialog.field.name`, or
   (`window.lmsCapture`, its fields, events and query parameters). One name follows its English
   label, as every menu item does: the About item of the Help menu is now
   `menu-help.about-copper-and-code-studio` (it was `menu-help.about-lvgl-mpy-studio`).
+- **1**, a fix (2026-11-22): with `zoom=` other than 1 the IDE was that many times as tall as the
+  window, and the page scrolled, because a CSS zoom scales `vh` and `vw` too (the limits of the
+  dialogs and menus as well); now it fills the window at every zoom.
 
 Tested by `tests/e2e/capture.spec.ts` on Chromium, Firefox and WebKit: with
 `capture=1&clock=manual&seed=1` the fifteen runs 60 steps of 33 ms, with Play tapped, and two runs

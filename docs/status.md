@@ -50,7 +50,7 @@ printing.
 | Item                                                 | State | Checked by                                                                                             |
 | ---------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------ |
 | Shell with the upstream release in the About box     | done  | `tests/e2e/shell.spec.ts`, on 3 engines                                                                |
-| Lint, typecheck, unit tests                          | done  | `pnpm lint`, `pnpm typecheck`, `pnpm test` (19 tests)                                                  |
+| Lint, typecheck, unit tests                          | done  | `pnpm lint`, `pnpm typecheck`, `pnpm test` (43 tests)                                                  |
 | Python in a Web Worker, ready before the UI needs it | done  | `tests/e2e/python.spec.ts`: ready in 2.8–3.1 s with a warm cache, on 3 engines locally                 |
 | CI (`ci.yml`)                                        | done  | first run green on 2026-11-14 (run 43570952529): 4 unit tests, 3 of 3 e2e                              |
 | Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed the rename on 2026-11-21 (run 44872967554)                  |
@@ -61,7 +61,9 @@ printing.
 Since upstream `v0.8.0` the IDE is Copper and Code Studio Web, served under
 `/copper-and-code-studio-web/` instead of `/lvgl-mpy-studio-web/`. After the repository is
 renamed the old Pages path answers 404, so an app installed from the old address stops updating
-and must be installed again from the new one. The workspace and the settings are kept, because
+and must be installed again from the new one. Once the new address is opened in the same browser,
+its service worker removes the old app's cache (both are `lms-app-*` caches of the same origin),
+and the old app no longer opens, offline or online: not tested. The workspace and the settings are kept, because
 the origin and the keys are the same: `tests/e2e/rename.spec.ts` writes a setting and a workspace
 file under the old path and reads them under the new one, on 3 engines. A web build folder saved
 by an earlier version, with the marker `.lvgl-mpy-studio-web`, is still replaced by Save to a
