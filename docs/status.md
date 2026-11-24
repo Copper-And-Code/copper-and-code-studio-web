@@ -53,7 +53,7 @@ printing.
 | Lint, typecheck, unit tests                          | done  | `pnpm lint`, `pnpm typecheck`, `pnpm test` (54 tests)                                                  |
 | Python in a Web Worker, ready before the UI needs it | done  | `tests/e2e/python.spec.ts`: ready in 2.8–3.1 s with a warm cache, on 3 engines locally                 |
 | CI (`ci.yml`)                                        | done  | first run green on 2026-11-14 (run 43570952529): 4 unit tests, 3 of 3 e2e                              |
-| Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed the review fixes on 2026-11-22 (run 45075114629)            |
+| Pages deploy (`pages.yml`)                           | done  | runs only on the owner's request; deployed upstream `v0.9.0` on 2026-11-24 (run 45464011111)           |
 | WebAssembly runtime from upstream's release          | done  | `runtime.lock.json`; `scripts/fetch-runtime.mjs` downloads the asset of `v0.9.0` and checks its sha256 |
 
 ### The new name
