@@ -1,9 +1,9 @@
 {
-  "tag": "v0.8.0",
+  "tag": "v0.9.0",
   "assets": {
     "runtime": {
-      "asset": "lms-web-runtime-v0.8.0.zip",
-      "url": "https://github.com/Copper-And-Code/copper-and-code-studio/releases/download/v0.8.0/lms-web-runtime-v0.8.0.zip",
+      "asset": "lms-web-runtime-v0.9.0.zip",
+      "url": "https://github.com/Copper-And-Code/copper-and-code-studio/releases/download/v0.9.0/lms-web-runtime-v0.9.0.zip",
       "size": 2258499,
       "sha256": "a8c824d4bcd65a987888debc7914a1c1eff26473c1bcdafba8d3b2469b72a00d",
       "files": {
@@ -12,8 +12,8 @@
       }
     },
     "mpyCross": {
-      "asset": "lms-mpy-cross-v0.8.0.zip",
-      "url": "https://github.com/Copper-And-Code/copper-and-code-studio/releases/download/v0.8.0/lms-mpy-cross-v0.8.0.zip",
+      "asset": "lms-mpy-cross-v0.9.0.zip",
+      "url": "https://github.com/Copper-And-Code/copper-and-code-studio/releases/download/v0.9.0/lms-mpy-cross-v0.9.0.zip",
       "size": 157915,
       "sha256": "dc72a1e1ec7c1f60e9b06657f66792620106a31bdbb3268910c3c459ff39073e",
       "files": {

@@ -145,6 +145,15 @@ test('Upload Project sends the generated app, compiled, as the desktop does', as
   await expect(page.getByTestId('upload-progress')).toBeHidden();
   const files = board.files();
   expect(files.some((path) => /^\/lms_apps\/app_[0-9a-f]{12}\/ui\.mpy$/.test(path))).toBe(true);
+  expect(await consoleText(page)).not.toContain('were already on the board');
+
+  // the same project again: the board copies the files it has already, and the IDE says how many
+  await menu(page, 'Device', 'Upload Project');
+  await expect
+    .poll(() => consoleText(page), { timeout: 60_000 })
+    .toMatch(
+      /Upload completed \d+ of \d+ files were already on the board and were not sent again\./,
+    );
 
   // Install Autostart…: the launcher on the board, the transaction kept in the browser's storage
   await menu(page, 'Device', 'Install Autostart…');

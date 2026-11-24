@@ -36,6 +36,8 @@ export class HandleStore implements FileStore {
     // values() is in every engine's FileSystemDirectoryHandle, not yet in TypeScript's DOM types.
     const values = (handle as unknown as { values(): AsyncIterable<FileSystemHandle> }).values();
     for await (const child of values) {
+      // Chromium keeps <name>.crswap beside a file while it writes it: its own, not the user's
+      if (child.kind === 'file' && child.name.endsWith('.crswap')) continue;
       entries.push({ name: child.name, kind: child.kind === 'directory' ? 'folder' : 'file' });
     }
     return sortEntries(entries);

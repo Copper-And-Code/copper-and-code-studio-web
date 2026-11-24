@@ -30,5 +30,16 @@ describe('UploadEstimate', () => {
     expect(estimate.value()).toBe(1000);
     expect(estimate.detail()).not.toContain('left');
     expect(new UploadEstimate(() => now).rate).toBe(4000);
+    // files copied inside the board: counted, not timed
+    const reusing = new UploadEstimate(() => now, 7_000);
+    reusing.report(80_000, 100_000, 'manifest.json', 1_000);
+    now += 1;
+    reusing.report(81_000, 100_000, 'ui.mpy', 19_000);
+    // 1 kB in a second says how long a copy takes to start, not how fast the link is
+    expect(reusing.rate).toBe(7_000);
+    now += 3;
+    reusing.report(100_000, 100_000, '', 0);
+    // the 20 kB that travelled, in 4 s: the 80 kB copied on the board do not count
+    expect(reusing.rate).toBe(5_000);
   });
 });

@@ -691,3 +691,30 @@ Five defects found by a review of the code, each with a test that failed before 
 - **Left as it is: Ctrl+C on a page tab is the designer's wherever the focus is**, so text selected
   in Output cannot be copied with the keyboard. Telling a copy of text from a copy of widgets
   needs to know which the user meant: not decided.
+
+## Upstream v0.9.0 (2026-11-24)
+
+- **The runtime assets of `v0.9.0` are the bytes of `v0.8.0`** under the new names: the lock keeps
+  the same sha256, and `scripts/fetch-runtime.mjs` checked them on the release's files.
+- **What upstream changed in its interface is followed here.** After an upload the IDE says how
+  many files the board had already and copied by itself (`DeviceController.startUpload`, from
+  `ui/main_device.py`); the speed of the upload's window is measured only on the bytes that
+  travelled, and after 8 kB of them (`UploadEstimate`, from `UploadProgress`). The upload itself
+  is upstream's `DeviceSession`, unchanged: the board checks size and sha256 of each file.
+- **The budget generates as `measure_budget` does**, with the fonts and the images in files of
+  their own (`asset_files`): `budget_prepare` must write the same sources, or the page would
+  compile files that the measure does not look for.
+- **Twelve examples more, 21 in all.** Their pages are the native runtime's to the pixel in the
+  designer, and ten start in the simulator. FTP Server and Photo Frame do not: they import
+  `socket` when they start, and the WebAssembly runtime has none (upstream request 15). The budget
+  test expects their flash and no RAM, by name, so it fails the day they start.
+- **Four tests of `cac_settings` stay out of the Pyodide run** (upstream request 14): the file's
+  place depends on `sys.platform`, which is `emscripten` there. A run of upstream's whole suite
+  without the exclusions (`tests/py/upstream-tests.mjs --survey`) showed that every excluded test
+  still fails or cannot load, and that nothing else fails.
+- **Chromium's swap files are not listed** (`HandleStore.list`): while it writes `name`, Chromium
+  keeps `name.crswap` beside it, in a folder of the PC and in the private file system, and a
+  listing made at that moment showed it in the Files panel, where it stayed.
+- **The workflow test waits for the object before it types.** The text of an object chosen in the
+  Code tab reaches the editor after Python has answered; a select-all made before that lost its
+  selection, and the text typed went in front of the old one (seen once, in Firefox).

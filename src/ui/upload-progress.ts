@@ -8,6 +8,8 @@ const DELAY_MS = 800;
 const TICK_MS = 200;
 /** Bytes per second: slower than the boards measured, so the bar never runs ahead. */
 const FIRST_RATE = 4000;
+/** Bytes through the link before their speed is believed: fewer say how long a copy takes to start. */
+const MIN_SAMPLE = 8192;
 
 export function duration(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -26,6 +28,7 @@ export class UploadEstimate {
   private fileStart = 0;
   private reported = 0;
   private first: number | null = null;
+  private firstSent = 0;
   name = '';
   cancelling = false;
 
@@ -39,8 +42,14 @@ export class UploadEstimate {
 
   report(sent: number, total: number, name: string, size: number): void {
     const now = this.clock();
-    if (this.first === null) this.first = now;
-    else if (sent > 0 && now > this.first) this.rate = sent / (now - this.first);
+    if (this.first === null) {
+      // What comes before is preparation, not writing; the bytes already counted at the first
+      // report were copied inside the board, not through the link, and say nothing of its speed.
+      this.first = now;
+      this.firstSent = sent;
+    } else if (sent - this.firstSent >= MIN_SAMPLE && now > this.first) {
+      this.rate = (sent - this.firstSent) / (now - this.first);
+    }
     if (name !== this.name) {
       this.name = name;
       this.fileStart = sent;

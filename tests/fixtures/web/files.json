@@ -1,4 +1,27 @@
 {
+  "block-drop": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Block-Drop-web"
+  },
   "breakout": {
     "files": [
       ".copper-and-code-studio-web",
@@ -20,6 +43,74 @@
       "micropython.wasm"
     ],
     "folder": "Breakout-web"
+  },
+  "c64-keyboard": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "C64-Keyboard-web"
+  },
+  "clock": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Clock-web"
+  },
+  "crossword": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "game/words_en.mpy",
+      "game/words_it.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Crossword-web"
   },
   "eim-01": {
     "files": [
@@ -47,6 +138,7 @@
       ".copper-and-code-studio-web",
       ".htaccess",
       "game/app_events.mpy",
+      "game/cac_settings.mpy",
       "game/display_driver.mpy",
       "game/files.json",
       "game/main.mpy",
@@ -68,6 +160,7 @@
       ".copper-and-code-studio-web",
       ".htaccess",
       "game/app_events.mpy",
+      "game/cac_settings.mpy",
       "game/display_driver.mpy",
       "game/files.json",
       "game/lms_buzzer.mpy",
@@ -84,6 +177,121 @@
       "micropython.wasm"
     ],
     "folder": "Fifteen-web"
+  },
+  "forecast": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Forecast-web"
+  },
+  "frog": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Frog-web"
+  },
+  "ftp-server": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/ftp_app.mpy",
+      "game/ftp_server.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "FTP-Server-web"
+  },
+  "orbit": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Orbit-web"
+  },
+  "photo-frame": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/photo_web.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Photo-Frame-web"
   },
   "program:shell": {
     "files": [
@@ -112,6 +320,51 @@
       "system/lms_web_boot.py"
     ],
     "folder": "shell-web"
+  },
+  "sandwich-tower": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Sandwich-Tower-web"
+  },
+  "settings": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Settings-web"
   },
   "simon": {
     "files": [
@@ -156,6 +409,29 @@
       "micropython.wasm"
     ],
     "folder": "Snake-web"
+  },
+  "star-guard": {
+    "files": [
+      ".copper-and-code-studio-web",
+      ".htaccess",
+      "game/app_events.mpy",
+      "game/cac_settings.mpy",
+      "game/display_driver.mpy",
+      "game/files.json",
+      "game/lms_buzzer.mpy",
+      "game/main.mpy",
+      "game/ui.mpy",
+      "index.html",
+      "licenses/LVGL.txt",
+      "licenses/MicroPython.txt",
+      "licenses/SDL2.txt",
+      "licenses/lvgl-bindings.txt",
+      "licenses/lvgl-micropython.txt",
+      "lms_web.js",
+      "micropython.mjs",
+      "micropython.wasm"
+    ],
+    "folder": "Star-Guard-web"
   },
   "sysmon": {
     "files": [

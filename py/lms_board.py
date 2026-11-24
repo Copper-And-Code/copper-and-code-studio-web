@@ -206,6 +206,7 @@ def upload(run=False):
     return {
         "appPath": result.get("appPath"),
         "files": result.get("files", []),
+        "reused": result.get("reused", []),
         "warnings": result.get("warnings", []),
         "sourcemap": result.get("sourcemap"),
         "output": result.get("output", ""),

@@ -80,6 +80,9 @@ export interface BoardInfo {
 
 interface UploadResult {
   appPath: string;
+  files: string[];
+  /** The files the board copied from the app it already had: they did not travel. */
+  reused: string[];
   warnings: string[];
   sourcemap: unknown;
   output: string;
@@ -582,9 +585,17 @@ export class DeviceController {
         this.appActive = run && result.active;
         this.liveUploadKey = this.appActive ? result.uploadKey : null;
         this.liveDesignKey = this.appActive ? result.designKey : null;
-        const message = run
+        let message = run
           ? tr('Board application started; the LVGL timer remains active after bootstrap.')
           : tr('Upload completed');
+        if (result.reused.length) {
+          message +=
+            ' ' +
+            tr('{reused} of {count} files were already on the board and were not sent again.', {
+              reused: result.reused.length,
+              count: result.files.length,
+            });
+        }
         this.view.status(message, 5000);
         this.view.message(message);
       },

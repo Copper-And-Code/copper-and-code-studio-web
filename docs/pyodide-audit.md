@@ -1,6 +1,6 @@
 # Upstream in Pyodide: the audit
 
-Upstream `v0.8.0`, Pyodide 314.0.7 (Python 3.14). Checked by `tests/py/audit.test.ts`, which
+Upstream `v0.9.0`, Pyodide 314.0.7 (Python 3.14). Checked by `tests/py/audit.test.ts`, which
 imports every module of the bundle in Pyodide.
 
 ## Imports

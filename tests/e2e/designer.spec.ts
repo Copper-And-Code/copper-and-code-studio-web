@@ -651,6 +651,17 @@ async function canvasStep(page: Page, step: Workflow['steps'][number]): Promise<
     const [object, event, text] = step.code;
     await page.getByTestId('tab-code').click();
     await page.getByTestId('code-object').selectOption(object);
+    // the object loaded, and its text in the editor: loaded between the two keys below, it would
+    // drop the selection, and the text would be inserted before the old one
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (key) =>
+            window.lmsStudio.python.busy === 0 && window.lmsStudio.studio?.code.object === key,
+          object,
+        ),
+      )
+      .toBe(true);
     if (event) {
       await expect(page.getByTestId('code-procedure').locator('option')).not.toHaveCount(0);
       await page.getByTestId('code-procedure').selectOption({ label: event });
@@ -771,6 +782,10 @@ const budgets = (
   }
 ).budgets;
 
+// Examples that import `socket` when they start: the browser's runtime has none, so they stop at
+// the import and their RAM cannot be measured (upstream request 15). The flash is still exact.
+const NEED_SOCKETS = ['ftp-server', 'photo-frame'];
+
 test("the budget in the status bar: the flash is upstream's on every example, the RAM measured", async ({
   page,
 }) => {
@@ -790,7 +805,8 @@ test("the budget in the status bar: the flash is upstream's on every example, th
       )
       .toMatchObject({ flash: expected.flashByName });
     const measured = await page.evaluate(() => window.lmsStudio.studio?.budget?.budget?.ram ?? 0);
-    expect(measured, `${name}: RAM`).toBeGreaterThan(0);
+    if (NEED_SOCKETS.includes(name)) expect(measured, `${name}: RAM`).toBe(0);
+    else expect(measured, `${name}: RAM`).toBeGreaterThan(0);
     await expect(page.getByTestId('budget')).toContainText('Flash ');
   }
 });

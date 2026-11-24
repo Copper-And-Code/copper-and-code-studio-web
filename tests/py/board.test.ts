@@ -180,8 +180,10 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
     expect(opened.ok).toBe(true);
     expect((await call('connect', PORT)).ok).toBe(true);
     progress.length = 0;
-    const reply = await call<{ appPath: string; files: string[]; warnings: string[] }>('upload');
+    type Uploaded = { appPath: string; files: string[]; reused: string[]; warnings: string[] };
+    const reply = await call<Uploaded>('upload');
     expect(reply.error?.traceback ?? '').toBe('');
+    expect(reply.result.reused).toEqual([]); // nothing on the board yet
     const app = reply.result.appPath;
     expect(app).toMatch(/^\/lms_apps\/app_[0-9a-f]{12}$/);
     expect(reply.result.files).toEqual(expect.arrayContaining(['ui.mpy', 'app_main.py']));
@@ -195,9 +197,13 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
     expect(board.softResets).toBe(1);
     const last = progress.at(-1);
     expect(last?.[0]).toBe(last?.[1]);
-    // A second upload keeps the first as .previous
-    expect((await call('upload')).ok).toBe(true);
+    // A second upload keeps the first as .previous, and since upstream 0.9.0 the board copies from
+    // it the files that are still the same (size and sha256 checked by the board): they do not travel
+    const second = await call<Uploaded>('upload');
+    expect(second.ok).toBe(true);
     expect(board.files().some((path) => path.startsWith(app + '.previous/'))).toBe(true);
+    expect(second.result.reused).toContain('ui.mpy');
+    expect(second.result.files).toEqual(expect.arrayContaining(second.result.reused));
   }, 120_000);
 
   it('copies files of the PC, compiled, and asks what upstream asks', async () => {

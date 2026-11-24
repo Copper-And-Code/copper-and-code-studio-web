@@ -312,3 +312,28 @@ test('two folders of the PC with the same name are two places', async ({ page, b
   await pick('picked/a/src');
   expect(await places()).toHaveLength(2);
 });
+
+test('the swap file Chromium keeps while it writes a file is not listed', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', "the swap file is Chromium's");
+  await start(page);
+  const names = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const workspace = await root.getDirectoryHandle('workspace');
+    const folder = await workspace.getDirectoryHandle('tools', { create: true });
+    const file = await folder.getFileHandle('notes.txt', { create: true });
+    // open and not closed yet, as when the panel lists a folder while a save is under way
+    const writable = await file.createWritable();
+    await writable.write('x');
+    const there: string[] = [];
+    const children = (folder as unknown as { values(): AsyncIterable<FileSystemHandle> }).values();
+    for await (const child of children) there.push(child.name);
+    const listed = await window.lmsStudio.studio?.stores.get('workspace')?.list('tools');
+    await writable.close();
+    return { there: there.sort(), listed: listed?.map((entry) => entry.name) };
+  });
+  expect(names.there).toEqual(['notes.txt', 'notes.txt.crswap']);
+  expect(names.listed).toEqual(['notes.txt']);
+});

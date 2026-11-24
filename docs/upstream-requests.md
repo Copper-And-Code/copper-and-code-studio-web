@@ -6,8 +6,8 @@ tagged.
 
 | #   | Request                                                 | State                         |
 | --- | ------------------------------------------------------- | ----------------------------- |
-| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.8.0` |
-| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.8.0` |
+| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.9.0` |
+| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.9.0` |
 | 3   | A CI check that the Qt-free packages stay Qt-free       | proposed                      |
 | 4   | Test files that load without Qt                         | proposed                      |
 | 5   | The project document without Qt                         | proposed                      |
@@ -19,6 +19,8 @@ tagged.
 | 11  | Removing the folder a program ran from                  | proposed                      |
 | 12  | The web IDE's texts in `it.json`                        | proposed                      |
 | 13  | An LVGL assertion that does not spin in the web runtime | proposed                      |
+| 14  | The tests of `cac_settings` on any platform             | proposed                      |
+| 15  | Examples that start without `socket`                    | proposed                      |
 
 ---
 
@@ -264,3 +266,44 @@ phase 11 tests.
 
 **Test.** In the web runtime, `import lvgl as lv; lv.obj()` before the display exists ends with an
 error, and the page goes on answering.
+
+## 14. The tests of `cac_settings` on any platform
+
+**What.** Make the fixture of `tests/test_cac_settings.py` say where the settings file is, instead
+of relying on the platform: for example `monkeypatch.setattr(module, "path", lambda: "cac_settings.json")`
+after loading the module, or `monkeypatch.setattr(sys, "platform", "linux")`.
+
+**Why.** `cac_settings.path()` keeps `cac_settings.json` next to the program only where
+`sys.platform` is `linux`, `darwin` or `win32`; elsewhere it is `/flash/cac_settings.json` or
+`/cac_settings.json`, as on a board. The fixture moves into `tmp_path` and expects the file there.
+In Pyodide `sys.platform` is `emscripten`, so the file goes to `/cac_settings.json`: four tests
+look for it in `tmp_path` and fail, and one test finds the file another left
+(`test_the_file_is_written_whole`, `test_a_broken_file_reads_as_empty`,
+`test_connect_without_saved_networks_or_when_already_connected`,
+`test_a_section_is_kept_apart_from_the_networks`). The web IDE leaves the four out of its run
+(`tests/py/exclusions.json`). Checked at `v0.9.0`.
+
+**Where.** `tests/test_cac_settings.py` (the `settings` fixture).
+
+**Test.** The file's own tests, on a platform that is none of the three: in Pyodide, or with
+`sys.platform` patched to another name.
+
+## 15. Examples that start without `socket`
+
+**What.** In FTP Server and Photo Frame, import `socket` where the server starts, not when the
+module loads, and go on without the server where there is no `socket`, as the same examples
+already do for `network` (the made-up clients of FTP Server, the demo photos of Photo Frame).
+
+**Why.** `ftp_server` (FTP Server, line 18) and `photo_web` (Photo Frame, line 22) import `socket`
+at the top, and the general code imports them when the app starts. The WebAssembly runtime
+(MicroPython's `webassembly` port) has no `socket`: both examples stop there with
+`ImportError: no module named 'socket'` in the web IDE's simulator. The web version that
+`build/web.py` makes runs the same code in the same runtime (not tried). The other ten examples that came with `v0.9.0` start
+in the browser. In the web IDE the RAM of these two cannot be measured either, because the budget
+runs the app. Seen in Chromium on 2026-11-24.
+
+**Where.** `examples/ftp-server/project.json` (module `ftp_server`),
+`examples/photo-frame/project.json` (module `photo_web`).
+
+**Test.** Each example started in the web runtime reaches its first screen; upstream's
+`tests/test_example_files.py` could import each module of an example with `socket` missing.

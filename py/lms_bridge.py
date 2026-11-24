@@ -1068,14 +1068,14 @@ def budget_prepare(board_mpy=None):
     Path(BUDGET_CACHE).mkdir(parents=True)
     jobs = []
     try:
-        generate_project(project, f"{BUDGET}/simulator")
+        generate_project(project, f"{BUDGET}/simulator", asset_files=True)  # as measure_budget generates it
     except (OSError, ValueError):
         return {"jobs": [], "cache": BUDGET_CACHE}
     for path in sorted(Path(f"{BUDGET}/simulator").glob("*.py")):
         jobs.append({"path": str(path), "name": path.name, "args": [], "key": _budget_key(path.read_bytes(), [])})
     if project.board and compatible(project, project.board):
         try:
-            generated = generate_board(project, portable_profile(project.board), f"{BUDGET}/board")
+            generated = generate_board(project, portable_profile(project.board), f"{BUDGET}/board", asset_files=True)
         except (OSError, ValueError):
             generated = {"files": []}
         for name in (item for item in generated.get("precompile", PRECOMPILED) if item in generated["files"]):

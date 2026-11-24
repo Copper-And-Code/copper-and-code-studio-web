@@ -1,6 +1,16 @@
 {
-  "upstreamVersion": "0.7.2",
+  "upstreamVersion": "0.9.0",
   "projects": {
+    "block-drop": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "main",
+          "file": "block-drop/main.png"
+        }
+      ]
+    },
     "breakout": {
       "width": 1024,
       "height": 600,
@@ -8,6 +18,40 @@
         {
           "page": "main",
           "file": "breakout/main.png"
+        }
+      ]
+    },
+    "c64-keyboard": {
+      "width": 1024,
+      "height": 600,
+      "pages": [
+        {
+          "page": "Keyboard",
+          "file": "c64-keyboard/Keyboard.png"
+        },
+        {
+          "page": "Setup",
+          "file": "c64-keyboard/Setup.png"
+        }
+      ]
+    },
+    "clock": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Clock",
+          "file": "clock/Clock.png"
+        }
+      ]
+    },
+    "crossword": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "main",
+          "file": "crossword/main.png"
         }
       ]
     },
@@ -85,6 +129,148 @@
         }
       ]
     },
+    "forecast": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Forecast",
+          "file": "forecast/Forecast.png"
+        },
+        {
+          "page": "Place",
+          "file": "forecast/Place.png"
+        },
+        {
+          "page": "Style",
+          "file": "forecast/Style.png"
+        },
+        {
+          "page": "Night",
+          "file": "forecast/Night.png"
+        }
+      ]
+    },
+    "frog": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Menu",
+          "file": "frog/Menu.png"
+        },
+        {
+          "page": "Game",
+          "file": "frog/Game.png"
+        },
+        {
+          "page": "Options",
+          "file": "frog/Options.png"
+        },
+        {
+          "page": "GameOver",
+          "file": "frog/GameOver.png"
+        }
+      ]
+    },
+    "ftp-server": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Server",
+          "file": "ftp-server/Server.png"
+        }
+      ]
+    },
+    "orbit": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Menu",
+          "file": "orbit/Menu.png"
+        },
+        {
+          "page": "Game",
+          "file": "orbit/Game.png"
+        },
+        {
+          "page": "Options",
+          "file": "orbit/Options.png"
+        },
+        {
+          "page": "GameOver",
+          "file": "orbit/GameOver.png"
+        }
+      ]
+    },
+    "photo-frame": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Frame",
+          "file": "photo-frame/Frame.png"
+        },
+        {
+          "page": "Options",
+          "file": "photo-frame/Options.png"
+        },
+        {
+          "page": "Upload",
+          "file": "photo-frame/Upload.png"
+        }
+      ]
+    },
+    "sandwich-tower": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Menu",
+          "file": "sandwich-tower/Menu.png"
+        },
+        {
+          "page": "Game",
+          "file": "sandwich-tower/Game.png"
+        },
+        {
+          "page": "Options",
+          "file": "sandwich-tower/Options.png"
+        },
+        {
+          "page": "GameOver",
+          "file": "sandwich-tower/GameOver.png"
+        }
+      ]
+    },
+    "settings": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "Welcome",
+          "file": "settings/Welcome.png"
+        },
+        {
+          "page": "Networks",
+          "file": "settings/Networks.png"
+        },
+        {
+          "page": "Add",
+          "file": "settings/Add.png"
+        },
+        {
+          "page": "Display",
+          "file": "settings/Display.png"
+        },
+        {
+          "page": "Start",
+          "file": "settings/Start.png"
+        }
+      ]
+    },
     "simon": {
       "width": 1024,
       "height": 600,
@@ -102,6 +288,16 @@
         {
           "page": "main",
           "file": "snake/main.png"
+        }
+      ]
+    },
+    "star-guard": {
+      "width": 480,
+      "height": 480,
+      "pages": [
+        {
+          "page": "main",
+          "file": "star-guard/main.png"
         }
       ]
     },

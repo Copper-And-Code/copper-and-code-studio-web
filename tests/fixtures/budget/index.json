@@ -1,10 +1,30 @@
 {
-  "upstreamVersion": "0.8.0",
+  "upstreamVersion": "0.9.0",
   "budgets": {
+    "block-drop": {
+      "flash": 56314,
+      "ram": 136000,
+      "flashByName": 56314
+    },
     "breakout": {
       "flash": 27956,
       "ram": 48544,
       "flashByName": 27956
+    },
+    "c64-keyboard": {
+      "flash": 57401,
+      "ram": 151264,
+      "flashByName": 57401
+    },
+    "clock": {
+      "flash": 34347,
+      "ram": 35168,
+      "flashByName": 34347
+    },
+    "crossword": {
+      "flash": 69060,
+      "ram": 194976,
+      "flashByName": 69060
     },
     "eim-01": {
       "flash": 100844,
@@ -12,14 +32,49 @@
       "flashByName": 100844
     },
     "eim-01-480": {
-      "flash": 101237,
-      "ram": 261312,
-      "flashByName": 101237
+      "flash": 125347,
+      "ram": 287488,
+      "flashByName": 125347
     },
     "fifteen": {
-      "flash": 13383,
-      "ram": 46592,
-      "flashByName": 13110
+      "flash": 17677,
+      "ram": 54528,
+      "flashByName": 17349
+    },
+    "forecast": {
+      "flash": 103697,
+      "ram": 148960,
+      "flashByName": 103697
+    },
+    "frog": {
+      "flash": 19523,
+      "ram": 63424,
+      "flashByName": 19195
+    },
+    "ftp-server": {
+      "flash": 32513,
+      "ram": 73376,
+      "flashByName": 32513
+    },
+    "orbit": {
+      "flash": 19995,
+      "ram": 58656,
+      "flashByName": 19667
+    },
+    "photo-frame": {
+      "flash": 73870,
+      "ram": 997312,
+      "flashByName": 73870
+    },
+    "sandwich-tower": {
+      "flash": 23319,
+      "ram": 78624,
+      "flashByName": 22991
+    },
+    "settings": {
+      "flash": 59455,
+      "ram": 83232,
+      "flashByName": 59455
     },
     "simon": {
       "flash": 19208,
@@ -30,6 +85,11 @@
       "flash": 28889,
       "ram": 19008,
       "flashByName": 28889
+    },
+    "star-guard": {
+      "flash": 66716,
+      "ram": 141056,
+      "flashByName": 66716
     },
     "sysmon": {
       "flash": 13332,
@@ -42,9 +102,9 @@
       "flashByName": 17701
     },
     "weather": {
-      "flash": 20774,
-      "ram": 51296,
-      "flashByName": 20774
+      "flash": 18869,
+      "ram": 42048,
+      "flashByName": 18869
     }
   }
 }
