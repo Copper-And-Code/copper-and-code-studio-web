@@ -119,3 +119,52 @@ test('the demo board: connect, information, the console, upload and run, disconn
   await expect(page.getByTestId('device-status')).toHaveText('Board not connected');
   await expect(page.getByRole('tab', { name: 'Demo board (simulated)' })).toHaveCount(0);
 });
+
+test('a demo board disconnected while it starts keeps its flash', async ({ page }) => {
+  test.setTimeout(180_000);
+  await start(page, '?capture=1');
+  await openOnBoard(page);
+  await menu(page, 'Device', 'Connect to Demo Board');
+  await expect(page.getByTestId('device-status')).toHaveText(
+    'Connected to Demo board (simulated)',
+    { timeout: 60_000 },
+  );
+  await expect(page.getByRole('button', { name: 'Ctrl-C', exact: true })).toBeEnabled();
+  // a file in its flash, then a soft reset: the IDE keeps the flash for the next start
+  await page.getByTestId('device-terminal').click();
+  // the board's root is its flash
+  await page.keyboard.type("open('kept.txt', 'w').write('kept')");
+  await page.keyboard.press('Enter');
+  await expect.poll(() => consoleText(page)).toContain('\n4');
+  await menu(page, 'Device', 'Restart Interpreter');
+  await expect(page.getByRole('button', { name: 'Ctrl-C', exact: true })).toBeEnabled({
+    timeout: 60_000,
+  });
+  type Demo = { flash: [string, Uint8Array][]; power(): void; close(): Promise<void> };
+  const names = () =>
+    page.evaluate(() => {
+      const port = window.lmsStudio.studio?.device?.port as unknown as { port: Demo } | null;
+      return port?.port.flash.map(([name]) => name) ?? [];
+    });
+  expect(await names()).toContain('kept.txt');
+  // The board restarts, and the port is closed while its frame is still loading MicroPython:
+  // the frame has no file system yet, and must not answer that its flash is empty.
+  const kept = await page.evaluate(async () => {
+    const port = window.lmsStudio.studio?.device?.port as unknown as { port: Demo } | null;
+    const demo = port?.port;
+    if (!demo) throw new Error('no demo board');
+    const hello = new Promise<void>((resolve) => {
+      const listen = (event: MessageEvent) => {
+        if ((event.data as { type?: string } | null)?.type !== 'hello') return;
+        window.removeEventListener('message', listen);
+        resolve();
+      };
+      window.addEventListener('message', listen);
+    });
+    demo.power();
+    await hello;
+    await demo.close();
+    return demo.flash.map(([name]) => name);
+  });
+  expect(kept).toContain('kept.txt');
+});

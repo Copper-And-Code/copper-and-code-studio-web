@@ -280,6 +280,12 @@ def sim_project():
     }
 
 
+def sim_folder_files(folder):
+    """The files of a folder of Pyodide's file system, for the page to remove those its store no
+    longer has; none for a folder that is not there."""
+    return _files_under(folder) if Path(folder).is_dir() else []
+
+
 def sim_reset_folder(folder):
     """An empty folder in Pyodide's file system, for the flash the page copies in."""
     shutil.rmtree(folder, ignore_errors=True)
@@ -423,7 +429,12 @@ def doc_add_page():
     from copper_and_code_studio.core.i18n import tr
 
     document = _doc()
-    name = f"page{len(document.project.pages) + 1}"
+    # The first free name: after a page was deleted, the count names one that is still there.
+    used = {page.name for page in document.project.pages}
+    number = len(document.project.pages) + 1
+    while f"page{number}" in used:
+        number += 1
+    name = f"page{number}"
     document.execute(tr("Add Page"), lambda project: project.pages.append(project.new_page(name)))
     return doc_state()
 
@@ -1933,6 +1944,7 @@ METHODS = {
     "doc_rename_page": doc_rename_page,
     "doc_generate": doc_generate,
     "sim_project": sim_project,
+    "sim_folder_files": sim_folder_files,
     "sim_reset_folder": sim_reset_folder,
     "sim_program": sim_program,
     "syntax_errors": syntax_errors,

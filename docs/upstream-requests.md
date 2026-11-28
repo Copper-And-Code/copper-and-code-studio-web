@@ -6,8 +6,8 @@ tagged.
 
 | #   | Request                                                 | State                         |
 | --- | ------------------------------------------------------- | ----------------------------- |
-| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.9.0` |
-| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.9.0` |
+| 1   | Web runtime as a release asset                          | done for `v0.7.0` to `v0.9.1` |
+| 2   | `mpy-cross` in WebAssembly as a release asset           | done for `v0.7.0` to `v0.9.1` |
 | 3   | A CI check that the Qt-free packages stay Qt-free       | proposed                      |
 | 4   | Test files that load without Qt                         | proposed                      |
 | 5   | The project document without Qt                         | proposed                      |
@@ -88,7 +88,7 @@ fail.
 
 ## 4. Test files that load without Qt
 
-**What.** 25 test files import PySide6, or the `ui/` package, when they are loaded, also those
+**What.** 26 test files import PySide6, or the `ui/` package, when they are loaded, also those
 that hold tests of the core. Without Qt the whole file fails to load, its Qt-free tests
 included. A rough count gives about 70 of their 322 tests that use no Qt object: for example in
 `test_validation.py`, `test_project_id.py`, `test_budget.py`, `test_device_files.py`,
@@ -97,9 +97,12 @@ included. A rough count gives about 70 of their 322 tests that use no Qt object:
 own files.
 
 **Why.** Those tests check the code the web IDE runs. Today they are excluded from the Pyodide
-run as whole files (`tests/py/exclusions.json`), so a regression there is not seen here.
+run as whole files (`tests/py/exclusions.json`), so a regression there is not seen here. A new
+case at `v0.9.1`: `test_every_builtin_board_is_valid_and_generates`, which uses no Qt, is in
+`tests/test_board_support.py`, which imports PySide6; this repository repeats it in
+`tests/py/boards.test.ts`.
 
-**Where.** The 25 files listed under `files` in this repository's `tests/py/exclusions.json`.
+**Where.** The 26 files listed under `files` in this repository's `tests/py/exclusions.json`.
 
 **Test.** `pytest --continue-on-collection-errors` in an environment without PySide6 loads every
 test file with no collection error; the Qt tests are skipped.
@@ -281,7 +284,7 @@ look for it in `tmp_path` and fail, and one test finds the file another left
 (`test_the_file_is_written_whole`, `test_a_broken_file_reads_as_empty`,
 `test_connect_without_saved_networks_or_when_already_connected`,
 `test_a_section_is_kept_apart_from_the_networks`). The web IDE leaves the four out of its run
-(`tests/py/exclusions.json`). Checked at `v0.9.0`.
+(`tests/py/exclusions.json`). Checked at `v0.9.0` and at `v0.9.1`.
 
 **Where.** `tests/test_cac_settings.py` (the `settings` fixture).
 
@@ -300,7 +303,8 @@ at the top, and the general code imports them when the app starts. The WebAssemb
 `ImportError: no module named 'socket'` in the web IDE's simulator. The web version that
 `build/web.py` makes runs the same code in the same runtime (not tried). The other ten examples that came with `v0.9.0` start
 in the browser. In the web IDE the RAM of these two cannot be measured either, because the budget
-runs the app. Seen in Chromium on 2026-11-24.
+runs the app. Seen in Chromium on 2026-11-24. At `v0.9.1` the two examples are unchanged, and the
+budget test still finds no RAM for them (`tests/e2e/designer.spec.ts`, 2026-11-28).
 
 **Where.** `examples/ftp-server/project.json` (module `ftp_server`),
 `examples/photo-frame/project.json` (module `photo_web`).

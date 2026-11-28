@@ -60,7 +60,12 @@ def change_resolution(project, width, height, mode):
 
 
 def add_page(project):
-    project.pages.append(project.new_page(f"page{len(project.pages) + 1}"))
+    # ui/main_tree.py add_page: the first free name
+    used = {page.name for page in project.pages}
+    number = len(project.pages) + 1
+    while f"page{number}" in used:
+        number += 1
+    project.pages.append(project.new_page(f"page{number}"))
 
 
 def initial_page(project, name):

@@ -362,18 +362,17 @@ window.addEventListener('message', (event) => {
       post({ type: 'failed', message: String(error?.message ?? error) });
     });
   } else if (message?.type === 'sync') {
-    // the port closes: the flash goes to the IDE, kept for the next connection
-    /** @type {BoardFile[]} */
-    let flash = [];
+    // The port closes: the flash goes to the IDE, kept for the next connection. Null while
+    // MicroPython is still loading, or when the flash cannot be read: the IDE then keeps what it
+    // has, the flash this board was started with. An empty list would erase it.
+    /** @type {BoardFile[] | null} */
+    let flash = null;
     try {
-      flash = FS ? walkFlash(FLASH, []) : [];
+      if (FS) flash = walkFlash(FLASH, []);
     } catch {
-      // an empty flash
+      // not read: nothing to hand over
     }
-    post(
-      { type: 'flash', flash },
-      flash.map(([, data]) => data.buffer),
-    );
+    post({ type: 'flash', flash }, flash ? flash.map(([, data]) => data.buffer) : []);
   } else if (message?.type === 'rx' && message.data instanceof Uint8Array) {
     for (const byte of message.data) {
       // Ctrl-C stops what runs, as on a board; LVGL's service is left alone

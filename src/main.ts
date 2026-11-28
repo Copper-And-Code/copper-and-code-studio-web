@@ -57,8 +57,16 @@ if (shell) {
   window.addEventListener(
     'keydown',
     (event) => {
+      // A question, the upload's progress, About: a modal dialog keeps the window's shortcuts
+      // from the project under it, as a modal QDialog does.
+      const modal = [
+        shell.renderRoot,
+        ...['lms-dialogs', 'lms-upload-progress'].map(
+          (name) => shell.renderRoot.querySelector(name)?.shadowRoot,
+        ),
+      ].some((root) => root?.querySelector('dialog[open]'));
       // F10: to the menu bar, as in desktop applications (Shift+F10 is a context menu)
-      if (event.key === 'F10' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === 'F10' && !event.shiftKey && !event.ctrlKey && !event.altKey && !modal) {
         event.preventDefault();
         event.stopPropagation();
         shell.renderRoot.querySelector('lms-menu-bar')?.focusMenuBar();
@@ -73,9 +81,17 @@ if (shell) {
           node instanceof HTMLElement &&
           ['lms-code-editor', 'input', 'textarea', 'select'].includes(node.localName),
       );
-      if (studio.shortcut(event, terminal ? path.includes(terminal) : false, inEditor)) {
-        event.stopPropagation();
-      }
+      // Output and Errors: text to select and copy, with the keys of a text
+      const inText = path.some(
+        (node) => node instanceof HTMLElement && node.hasAttribute('data-own-text'),
+      );
+      const where = {
+        terminal: terminal ? path.includes(terminal) : false,
+        editor: inEditor,
+        text: inText,
+        modal,
+      };
+      if (studio.shortcut(event, where)) event.stopPropagation();
     },
     true,
   );

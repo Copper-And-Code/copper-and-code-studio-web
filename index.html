@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Copper and Code Studio Web</title>
+    <!-- for search engines, and for the preview of a link shared elsewhere: the page itself is
+         empty until its script runs. %SITE% is the published address (vite.config.ts) -->
+    <meta
+      name="description"
+      content="The visual GUI builder for MicroPython and LVGL, in the browser: design LVGL pages, write MicroPython, run it in the simulator or on a board. Nothing to install."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Copper and Code Studio Web" />
+    <meta
+      property="og:description"
+      content="The visual GUI builder for MicroPython and LVGL, in the browser: design LVGL pages, write MicroPython, run it in the simulator or on a board."
+    />
+    <meta property="og:url" content="%SITE%" />
+    <meta property="og:image" content="%SITE%icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
     <!-- upstream's icon; without one the browser asks for /favicon.ico and gets a 404 -->
     <link rel="icon" type="image/svg+xml" href="/upstream/packaging/copper-and-code-studio.svg" />
     <!-- the installed app (phase 8): public/manifest.webmanifest, icons by scripts/icons.py -->
@@ -16,5 +31,18 @@
   </head>
   <body>
     <lms-app></lms-app>
+    <noscript>
+      <p
+        style="
+          font:
+            16px system-ui,
+            sans-serif;
+          margin: 2rem;
+        "
+      >
+        Copper and Code Studio Web is an application that runs in the browser: it needs JavaScript
+        and WebAssembly.
+      </p>
+    </noscript>
   </body>
 </html>

@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { mpyCrossFrom } from '../../src/mpy/compile.ts';
 import { ROOT } from './pyodide-node.mjs';
 
 interface Module {
@@ -81,6 +82,30 @@ describe('mpy-cross in WebAssembly', () => {
       const result = await compile(name, new TextEncoder().encode(text));
       expect(result.code, name).toBe(1);
       expect(result.output, name).toBe(goldens.broken[name]);
+    }
+  });
+});
+
+describe('mpyCrossFrom, as the workers load it', () => {
+  it('a load that failed is tried again at the next compilation', async () => {
+    // the network drops while mpy-cross.wasm is fetched, then comes back
+    const real = globalThis.fetch;
+    let fetched = 0;
+    globalThis.fetch = (async () => {
+      if (fetched++ === 0) throw new TypeError('Failed to fetch');
+      return new Response(readFileSync(join(ROOT, 'public/mpy-cross/mpy-cross.wasm')), {
+        headers: { 'Content-Type': 'application/wasm' },
+      });
+    }) as typeof fetch;
+    try {
+      const compile = mpyCrossFrom(pathToFileURL(join(ROOT, 'public/mpy-cross') + '/'));
+      const source = new TextEncoder().encode('x = 1\n');
+      await expect(compile('a.py', source, [])).rejects.toThrow('Failed to fetch');
+      const result = await compile('a.py', source, []);
+      expect(result.code).toBe(0);
+      expect(result.mpy?.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.fetch = real;
     }
   });
 });

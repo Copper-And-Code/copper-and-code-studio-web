@@ -64,6 +64,8 @@ export class ProjectSession {
   location: Location | null = null;
   state: DocState | undefined;
   private readonly listeners = new Set<() => void>();
+  /** The last operation that copies the project's file between its store and Python. */
+  private filing: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly python: PythonBridge,
@@ -104,10 +106,12 @@ export class ProjectSession {
   async open(location: Location): Promise<boolean> {
     if (!(await this.confirmDiscard())) return false;
     try {
-      const data = await this.store(location).read(location.path);
-      if (data === null) throw new Error(tr('No such file: {path}', { path: location.path }));
-      await this.python.writeFile(pythonPath(location), data);
-      this.update(await this.python.call<DocState>('doc_open', pythonPath(location)), location);
+      await this.oneAtATime(async () => {
+        const data = await this.store(location).read(location.path);
+        if (data === null) throw new Error(tr('No such file: {path}', { path: location.path }));
+        await this.python.writeFile(pythonPath(location), data);
+        this.update(await this.python.call<DocState>('doc_open', pythonPath(location)), location);
+      });
     } catch (error) {
       this.prompts.error(tr('Open Error'), message(error));
       return false;
@@ -146,8 +150,10 @@ export class ProjectSession {
     const location = this.location;
     if (!location) return false;
     try {
-      await this.syncFromStore(location);
-      this.update(await this.python.call<DocState>('doc_reload'), location);
+      await this.oneAtATime(async () => {
+        await this.syncFromStore(location);
+        this.update(await this.python.call<DocState>('doc_reload'), location);
+      });
     } catch (error) {
       // A broken outside file must not cost the changes made here.
       this.prompts.error(
@@ -209,24 +215,10 @@ export class ProjectSession {
     overwriteExternal: boolean,
     done: () => void,
   ): Promise<boolean> {
-    const store = this.store(target);
     try {
-      // The file as it is now in its store, so that upstream sees an outside change.
-      await this.syncFromStore(target);
-      await this.python.call<DocState>('doc_save', pythonPath(target), overwriteExternal);
-      const written = await this.python.readFile(pythonPath(target));
-      if (!written) throw new Error(tr('No such file: {path}', { path: target.path }));
-      try {
-        await store.write(target.path, written);
-      } catch (error) {
-        // Python counted the project as saved; it is not, so it goes back to unsaved.
-        this.update(await this.python.call<DocState>('doc_mark_unsaved'), this.location);
-        throw error;
-      }
-      // The state as it is now, not as doc_save returned it before the store wrote: a change made
-      // meanwhile is not in the file, and the older state would take its "modified" away.
-      this.update(await this.python.call<DocState>('doc_state'), target);
+      await this.oneAtATime(() => this.write(target, overwriteExternal));
     } catch (error) {
+      // asked after the save has left its turn: the answer saves or reloads, in a turn of its own
       if (error instanceof PythonCallError && error.type === 'ExternalChangeError') {
         return this.resolveExternalChange(error.deleted ?? false);
       }
@@ -235,6 +227,38 @@ export class ProjectSession {
     }
     done();
     return true;
+  }
+
+  /** The project written by upstream in Python, then copied to its store. */
+  private async write(target: Location, overwriteExternal: boolean): Promise<void> {
+    const store = this.store(target);
+    // The file as it is now in its store, so that upstream sees an outside change.
+    await this.syncFromStore(target);
+    await this.python.call<DocState>('doc_save', pythonPath(target), overwriteExternal);
+    const written = await this.python.readFile(pythonPath(target));
+    if (!written) throw new Error(tr('No such file: {path}', { path: target.path }));
+    try {
+      await store.write(target.path, written);
+    } catch (error) {
+      // Python counted the project as saved; it is not, so it goes back to unsaved.
+      this.update(await this.python.call<DocState>('doc_mark_unsaved'), this.location);
+      throw error;
+    }
+    // The state as it is now, not as doc_save returned it before the store wrote: a change made
+    // meanwhile is not in the file, and the older state would take its "modified" away.
+    this.update(await this.python.call<DocState>('doc_state'), target);
+  }
+
+  /**
+   * Open, save and reload each copy the project's file between its store and Python, in several
+   * steps: one at a time. A second save starting among the steps of the first (Ctrl+S held down,
+   * F5 twice) put the old file back in Python, where upstream took it for a change made outside,
+   * or the first save copied it to the store as the project just saved.
+   */
+  private oneAtATime<T>(task: () => Promise<T>): Promise<T> {
+    const turn = this.filing.then(task);
+    this.filing = turn.catch(() => {});
+    return turn;
   }
 
   /** The file was changed or removed from outside: nothing is written without a choice. */

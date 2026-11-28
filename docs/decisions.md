@@ -690,7 +690,7 @@ Five defects found by a review of the code, each with a test that failed before 
   `TonePlayer.prepare`, so every tone of a game was counted and none was played.
 - **Left as it is: Ctrl+C on a page tab is the designer's wherever the focus is**, so text selected
   in Output cannot be copied with the keyboard. Telling a copy of text from a copy of widgets
-  needs to know which the user meant: not decided.
+  needs to know which the user meant: not decided. Decided on 2026-11-28: see "The second review" below.
 
 ## Upstream v0.9.0 (2026-11-24)
 
@@ -718,3 +718,126 @@ Five defects found by a review of the code, each with a test that failed before 
 - **The workflow test waits for the object before it types.** The text of an object chosen in the
   Code tab reaches the editor after Python has answered; a select-all made before that lost its
   selection, and the text typed went in front of the old one (seen once, in Firefox).
+
+## Upstream v0.9.1 (2026-11-28)
+
+- **Nothing of the IDE's code changes.** The tag adds five board profiles and two adapters
+  (`stm32h7_usb`, `stm32f769i_disco`), files of the website and the showreels. The new boards are
+  reached through mpremote, as the ESP32 and the RP2350: only `stm32h7_uart` has lines of its own
+  when the port opens (`BoardPort.open`). The profiles come to the menus from upstream's
+  `builtin_profiles`, and the bundle packs every file of `boards/`.
+- **The runtime assets are the bytes of `v0.8.0` again**, and the generated code is the same: the
+  fixtures made again differ only in the version they name.
+- **The boards are checked here too** (`tests/py/boards.test.ts`): the IDE lists every board of
+  upstream, and each is valid and generates in Pyodide. Upstream's own test of it is in a file
+  that imports PySide6 (upstream request 4), and the examples name only three of the eight boards,
+  so the goldens did not reach the others.
+- **The e2e tests count upstream's board files** instead of expecting three rows in the profile
+  manager: the number changes with upstream's tags.
+- **`test_photo_web.py` is excluded test by test.** The file was left out whole at `v0.9.0`; the
+  run without exclusions showed that one of its five tests, of the file names, passes in Pyodide.
+  The four that start the server stay out.
+
+## The second review (2026-11-28)
+
+A second review of `src`, `py` and `scripts`, with the documents and the published site. Each fix
+has a test that failed before it, unless said.
+
+Work that could be lost:
+
+- **Open, save and reload take turns** (`ProjectSession.oneAtATime`). Each copies the project's
+  file between its store and Python in several steps; a second save starting among the steps of
+  the first (Ctrl+S held down, F5 twice) put the old file back, and upstream took it for a change
+  made outside, or the first save wrote it to the store as the project just saved.
+- **A file tab is opened once and closed once** (`FileTabs.opening`, `closing`). A tab closed again
+  while its save was being written removed the last tab of the list, with its text; a file of the
+  board opened twice during its slow read had two tabs.
+- **Add Page takes the first free name**, as upstream since `v0.8.0`: after a page was deleted,
+  the count named one that was still there.
+- **A program runs from where its files were saved** (`FileTabs.saveProgram`). A changed example
+  is saved into its copy in the workspace, and Run Program, Run on the Board and Run in the
+  Browser then went on with the example, without the change.
+- **A file deleted from a program's folder leaves the next run** (`copyProgramIntoPython`).
+- **The demonstration board keeps its flash** when it is closed before it has started: the frame
+  answers that it has nothing to hand over, not an empty flash.
+
+The keys:
+
+- **The copy keys are the designer's only where they are the designer's.** Ctrl+C, X, V, D and A
+  act on the canvas when the Edit menu's item would be enabled (Cut, Copy and Duplicate need a
+  selection: without one they emptied what was copied), and not in Output or Errors, whose text
+  they select and copy, as a text widget of the desktop keeps these keys for itself. The two
+  panels are marked `data-own-text`, and Ctrl+A there selects the panel, not the page. This is the
+  point the review of 2026-11-22 left open.
+- **Nothing of the window answers behind a modal dialog** (a question, the upload's progress,
+  About), as a modal `QDialog` blocks the window's shortcuts. F5, Ctrl+S and Ctrl+O stay taken
+  from the browser, which would load the page again or save it as a file.
+
+The board:
+
+- **Live Editing asks before it takes the board** (`live_check`, then `live_send`). The check was
+  a device task: at every change and every tab shown it raised the Device Console, locked the IDE
+  and took the port from the running app, to send nothing. Upstream compares the keys first.
+- **Run on the Board without a board profile says so**: `program_root` answered with an error
+  that nobody showed.
+- **A port opened is closed again** when the connection fails after `port.open`, or after a write
+  that failed: left open, every new attempt found it "already open" until the page was loaded
+  again. Tried with a port that fails where a real one can, not with a real adapter.
+- **The tabs of the files under a renamed folder of the board follow it**, as in the workspace
+  (`FileTabs.renamed`).
+- **A board is "usable" through Web Serial or as the demonstration board** (`DeviceController.usable`):
+  with JSPI and no Web Serial the demo board connected, and Start, its files and Run on the Board
+  did not follow. No test: no engine of the tests is so.
+- **An operation that waited its turn keeps its failure handler**, and an upload that waited
+  closes its progress window when the board goes.
+
+What does not load:
+
+- **mpy-cross is tried again after a load that failed**, and the workers of mpy-cross and of the
+  fonts answer for themselves when they do not load. Before, Start stopped without a word until
+  the page was loaded again, and every call that generates code waited for a font for ever.
+
+The site:
+
+- **The site serves its licences** (`scripts/licenses.mjs`, `public/licenses/`): the IDE's own, and
+  the notices of the packages its JavaScript is made of, which the build's minifier removes and
+  MIT and BSD ask to keep with every copy. The About box links them, the source and the
+  documentation, with the desktop's sentences about the licence and the warranty; Help has Online
+  Documentation, as the desktop. The desktop's Credits and Copyright lines are there too, by the
+  owner's choice.
+- **The page names itself** to search engines and to the preview of a shared link (description,
+  Open Graph), has a line for a browser without scripts, and a page for an address that is not
+  there.
+- **xterm.js loads when the first terminal opens** (`src/ui/terminal.ts`): it was a third of the
+  IDE's first script. What is written before is kept and written when the terminal opens.
+
+The designer's preview:
+
+- **A frame with MicroPython already started waits for the next drawing** (`Simulator`'s `warm`
+  option). Each drawing made a new iframe, sent it 5.9 MB and waited for the runtime to be
+  compiled and started: 260 to 340 ms of the 450 to 530 ms of a drawing. Now a spare frame is made
+  ready after each drawing, and the next only sends the files: 280 to 340 ms measured in Chromium
+  and Firefox on one PC. While a widget is dragged the drawings follow one another and gain
+  nothing: the work is the same.
+- **A widget dragged back to where it was is drawn where it is**: the page was left as the drag
+  last drew it.
+
+The tools:
+
+- **The lint checks the promises with the types** (`no-floating-promises`, `no-misused-promises`,
+  `await-thenable`): three places to change. The other typed rules are about style.
+- **The CI runs the browsers in three jobs**, one for each engine, and not at all for a commit of
+  documents only. Not run yet when this was written.
+- **`pack-runtime.mjs` packs with a local time**, one o'clock: the same bytes as the assets
+  published so far, packed in Italy, and the same in every time zone.
+
+Left open:
+
+- **The web version opened from the IDE runs in the IDE's origin.** Run → Open in Browser serves
+  the folder under `preview/`, in a tab of the site, and the runtime has MicroPython's `js` module:
+  the code of a project reaches there what the IDE keeps in the browser (the workspace, the
+  settings, the folders of the PC it was given, the cached site). The simulator is in a sandboxed
+  iframe; this is not. Serving the page with `Content-Security-Policy: sandbox` does not work: a
+  page with an opaque origin is not served by a service worker (tried in the three engines). A
+  sandboxed iframe fed by the page works only if the folder's modules are rewritten, since a module
+  loaded from a `blob:` URL cannot resolve `./micropython.mjs`. The owner's to decide.

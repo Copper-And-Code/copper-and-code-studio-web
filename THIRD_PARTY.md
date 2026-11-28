@@ -4,19 +4,25 @@ Every dependency is listed here with its licence. GPL-incompatible licences are 
 
 ## Shipped in the site
 
-| Component                                                                                  | Version                     | Licence                                                | Use                               |
-| ------------------------------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------ | --------------------------------- |
-| Copper and Code Studio (`upstream/`)                                                       | the pinned tag              | GPL-3.0-or-later; generated code and runtime files MIT | Python core, runtime files, data  |
-| Lit (`lit`, `lit-html`, `lit-element`, `@lit/reactive-element`, `@lit-labs/ssr-dom-shim`)  | 3.3.3                       | BSD-3-Clause                                           | UI components                     |
-| `@types/trusted-types`                                                                     | as locked                   | MIT                                                    | type definitions pulled in by Lit |
-| Pyodide (`pyodide`), with CPython's standard library                                       | 314.0.7                     | MPL-2.0; CPython PSF-2.0                               | upstream's Python in a Web Worker |
-| fflate                                                                                     | 0.8.3                       | MIT                                                    | zip import, export and bundles    |
-| CodeMirror 6 (`@codemirror/*`, `@lezer/*`)                                                 | as pinned in `package.json` | MIT                                                    | the code editor                   |
-| xterm.js (`@xterm/xterm`, `@xterm/addon-fit`)                                              | 6.0.0, 0.11.0               | MIT                                                    | the terminal of a program         |
-| opentype.js                                                                                | 1.3.4                       | MIT                                                    | the kerning of a project's fonts  |
-| FreeType in WebAssembly, from lv_font_conv (`lib/freetype/build/ft_render.js`)             | lv_font_conv 1.5.3          | lv_font_conv MIT; FreeType FTL (chosen of FTL/GPL-2.0) | rasterising a project's fonts     |
-| mpremote, in the upstream bundle (`scripts/python-deps.mjs`)                               | 1.29.0, as upstream pins it | MIT                                                    | the board's raw REPL, in Pyodide  |
-| platformdirs, in the upstream bundle (`scripts/python-deps.mjs`), the version Pyodide pins | 4.9.4                       | MIT                                                    | imported by mpremote              |
+| Component                                                                                                                             | Version                                         | Licence                                                | Use                               |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------------- |
+| Copper and Code Studio (`upstream/`)                                                                                                  | the pinned tag                                  | GPL-3.0-or-later; generated code and runtime files MIT | Python core, runtime files, data  |
+| Lit (`lit`, `lit-html`, `lit-element`, `@lit/reactive-element`, `@lit-labs/ssr-dom-shim`)                                             | 3.3.3                                           | BSD-3-Clause                                           | UI components                     |
+| `@types/trusted-types`                                                                                                                | as locked                                       | MIT                                                    | type definitions pulled in by Lit |
+| Pyodide (`pyodide`), with CPython's standard library                                                                                  | 314.0.7                                         | MPL-2.0; CPython PSF-2.0                               | upstream's Python in a Web Worker |
+| fflate                                                                                                                                | 0.8.3                                           | MIT                                                    | zip import, export and bundles    |
+| CodeMirror 6 (`@codemirror/*`, `@lezer/*`), with `style-mod`, `w3c-keyname`, `crelt` and `@marijn/find-cluster-break`, which it needs | as pinned in `package.json`; the four as locked | MIT                                                    | the code editor                   |
+| xterm.js (`@xterm/xterm`, `@xterm/addon-fit`)                                                                                         | 6.0.0, 0.11.0                                   | MIT                                                    | the terminal of a program         |
+| opentype.js, with `tiny-inflate` and `string.prototype.codepointat`, which it needs                                                   | 1.3.4; the two as locked                        | MIT                                                    | the kerning of a project's fonts  |
+| FreeType in WebAssembly, from lv_font_conv (`lib/freetype/build/ft_render.js`)                                                        | lv_font_conv 1.5.3                              | lv_font_conv MIT; FreeType FTL (chosen of FTL/GPL-2.0) | rasterising a project's fonts     |
+| mpremote, in the upstream bundle (`scripts/python-deps.mjs`)                                                                          | 1.29.0, as upstream pins it                     | MIT                                                    | the board's raw REPL, in Pyodide  |
+| platformdirs, in the upstream bundle (`scripts/python-deps.mjs`), the version Pyodide pins                                            | 4.9.4                                           | MIT                                                    | imported by mpremote              |
+
+The site serves the notices of these packages in `licenses/THIRD-PARTY.txt`, next to the IDE's
+own licence in `licenses/LICENSE.txt`: the build removes the comments of the JavaScript, and with
+them the notices that MIT and BSD ask to keep with every copy. `scripts/licenses.mjs` writes both
+files from the installed packages; the About box links them. `tests/unit/licenses.test.ts` checks
+that every package with a notice there is listed here.
 
 FreeType's licence asks for a credit: portions of this software are copyright © The FreeType
 Project (www.freetype.org). All rights reserved. The About box says it too. The FreeType Project

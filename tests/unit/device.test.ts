@@ -43,8 +43,11 @@ function bench(answer: Answer) {
     terminate() {},
   };
   const state = { closed: false };
+  let reading: ReadableStreamDefaultController<Uint8Array> | undefined;
   const port = {
-    readable: new ReadableStream<Uint8Array>(),
+    readable: new ReadableStream<Uint8Array>({
+      start: (controller) => void (reading = controller),
+    }) as ReadableStream<Uint8Array> | null,
     writable: new WritableStream<Uint8Array>({
       write: (chunk) => void log.push(`write:${new TextDecoder().decode(chunk)}`),
     }),
@@ -54,16 +57,33 @@ function bench(answer: Answer) {
     close: async () => void (state.closed = true),
   } as unknown as SerialPort;
   const serial = { getPorts: async () => [port], requestPort: async () => port };
+  /** What the user would see of the queue: the console raised, the IDE busy, the status bar. */
+  const seen = { raised: 0, busy: 0, statuses: [] as string[], progress: 'closed' };
   const view: DeviceView = {
     append() {},
     message() {},
     setReady() {},
-    setBusy() {},
-    status() {},
+    setBusy(busy) {
+      if (busy) seen.busy++;
+    },
+    status(message) {
+      seen.statuses.push(message);
+    },
     connection() {},
-    raise() {},
+    raise() {
+      seen.raised++;
+    },
     focusConsole() {},
-    progress: { open() {}, report() {}, rate: () => 0, finish() {} },
+    progress: {
+      open() {
+        seen.progress = 'open';
+      },
+      report() {},
+      rate: () => 0,
+      finish() {
+        seen.progress = 'closed';
+      },
+    },
   };
   const hooks: DeviceHooks = {
     appendError() {},
@@ -90,7 +110,12 @@ function bench(answer: Answer) {
   const settle = async () => {
     for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
   };
-  return { device, hooks, log, state, settle };
+  /** The cable pulled: Web Serial ends the reading and takes the stream away. */
+  const unplug = () => {
+    (port as unknown as { readable: unknown }).readable = null;
+    reading?.error(new Error('The device has been lost.'));
+  };
+  return { device, hooks, log, seen, state, settle, unplug };
 }
 
 const BOARD = { id: 'esp32', name: 'ESP32', adapter: '' };
@@ -151,5 +176,76 @@ describe('DeviceController', () => {
     device.stop();
     await settle();
     expect(log.slice(log.indexOf('board:stop'))).toContain('board:list_dir');
+  });
+
+  it('a live check with nothing to send leaves the console and the port alone', async () => {
+    const UPLOAD = {
+      files: [],
+      reused: [],
+      warnings: [],
+      active: true,
+      uploadKey: 'code-1',
+      designKey: 'page-1',
+    };
+    let check = 'same';
+    const { device, log, seen, settle } = bench((method) => {
+      if (method === 'upload') return UPLOAD;
+      if (method === 'live_check') return { status: check };
+      if (method === 'live_send') return { status: 'sent', designKey: 'page-2' };
+      return connects(method, []);
+    });
+    await device.upload(true);
+    await settle();
+    expect(device.connected).toBe(true);
+    const wait = () => new Promise((resolve) => setTimeout(resolve, 600)); // LIVE_DELAY_MS and more
+    const before = { raised: seen.raised, busy: seen.busy, calls: log.length };
+
+    // a tab shown, the code typed: the page on the board is the same
+    device.scheduleLive('page');
+    await wait();
+    await settle();
+    expect(log.slice(before.calls)).toEqual(['board:live_check']);
+    expect({ raised: seen.raised, busy: seen.busy }).toEqual({
+      raised: before.raised,
+      busy: before.busy,
+    });
+
+    // the code changed: said in the status bar, and still no device task
+    check = 'stale';
+    device.scheduleLive('page');
+    await wait();
+    await settle();
+    expect(seen.statuses.at(-1)).toBe('The code changed: press F5 to send it to the board.');
+    expect(seen.raised).toBe(before.raised);
+
+    // the page changed: now the board is asked, as a task of the user's
+    check = 'changed';
+    device.scheduleLive('page');
+    await wait();
+    await settle();
+    expect(log.slice(-2)).toEqual(['board:live_check', 'board:live_send']);
+    expect(seen.raised).toBe(before.raised + 1);
+    expect(seen.statuses.at(-1)).toBe('Board updated.');
+  });
+
+  it('an upload that waits its turn does not leave its progress window when the board goes', async () => {
+    const { device, seen, settle, unplug } = bench((method) => {
+      // the Files panel reads a folder of the board, and the board does not answer
+      if (method === 'list_dir') return new Promise(() => {});
+      return connects(method, []);
+    });
+    await device.connectDisconnect();
+    await settle();
+    void device.boardTask('list_dir', '/').catch(() => {});
+    await settle();
+    // asked while that runs: it waits behind it, with its window already open
+    expect(await device.upload(false)).toBe(true);
+    await settle();
+    expect(seen.progress).toBe('open');
+    unplug();
+    await settle();
+    expect(device.connected).toBe(false);
+    // the upload will never start: its window must not stay over the IDE
+    expect(seen.progress).toBe('closed');
   });
 });

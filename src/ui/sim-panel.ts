@@ -1,11 +1,12 @@
 // The Simulator tab, as upstream's ui/sim_panel.py: the screen, and under it, for a program
 // without pages, the terminal that is its serial port. The status line says what runs.
 import { captureOptions } from '../capture/options.ts';
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
+import type { Terminal } from '@xterm/xterm';
 import xtermCss from '@xterm/xterm/css/xterm.css?inline';
 import { LitElement, css, html, unsafeCSS } from 'lit';
 import { tr } from '../i18n/tr.ts';
+import { openTerminal } from './terminal.ts';
 
 export class SimPanel extends LitElement {
   static override properties = {
@@ -18,9 +19,11 @@ export class SimPanel extends LitElement {
   program = false;
   status = tr('Simulator stopped');
   private terminal: Terminal | null = null;
-  private readonly fit = new FitAddon();
+  private fit: FitAddon | null = null;
   private observer: ResizeObserver | null = null;
   private written = '';
+  /** focusTerminal() asked before the terminal was there. */
+  private wantsFocus = false;
   /** Keys typed in the terminal. */
   onType: (data: string) => void = () => {};
 
@@ -76,26 +79,35 @@ export class SimPanel extends LitElement {
   override firstUpdated(): void {
     const host = this.renderRoot.querySelector<HTMLElement>('.terminal');
     if (!host) return;
-    const terminal = new Terminal({
+    // xterm.js comes after the IDE's first script (terminal.ts): what was written meanwhile is
+    // in `written`
+    void openTerminal(host, {
       convertEol: true, // a board's print ends lines with LF; the desktop terminal adds the CR
       cursorBlink: !captureOptions.enabled,
       fontSize: 13,
       scrollback: 2000,
       theme: { background: '#000000' },
-    });
-    terminal.loadAddon(this.fit);
-    terminal.open(host);
-    terminal.onData((data) => this.onType(data));
-    this.terminal = terminal;
+    }).then(
+      ({ terminal, fit }) => {
+        terminal.onData((data) => this.onType(data));
+        this.terminal = terminal;
+        this.fit = fit;
+        if (this.program) fit.fit();
+        if (this.written) terminal.write(this.written);
+        if (this.wantsFocus) terminal.focus();
+        this.wantsFocus = false;
+      },
+      () => {}, // not loaded: the program still runs, its prints in `written`
+    );
     this.observer = new ResizeObserver(() => {
-      if (this.program) this.fit.fit();
+      if (this.program) this.fit?.fit();
     });
     this.observer.observe(host);
   }
 
   override updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has('program') && this.program) {
-      requestAnimationFrame(() => this.fit.fit());
+      requestAnimationFrame(() => this.fit?.fit());
     }
   }
 
@@ -115,7 +127,8 @@ export class SimPanel extends LitElement {
   }
 
   focusTerminal(): void {
-    this.terminal?.focus();
+    if (this.terminal) this.terminal.focus();
+    else this.wantsFocus = true;
   }
 
   /** What the terminal received, as text: for tests. */

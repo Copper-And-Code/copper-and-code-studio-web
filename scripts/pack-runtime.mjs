@@ -16,7 +16,11 @@ import { upstreamInfo } from './upstream-info.mjs';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const LICENSES = join(ROOT, 'upstream', 'copper_and_code_studio', 'gen', 'output', 'licenses');
 const LOCK = join(ROOT, 'runtime.lock.json');
-const MTIME = new Date('2026-01-01T00:00:00Z');
+// A zip stores the date and time as the clock of the PC shows them: a date given in UTC made one
+// zip in Italy and another in a CI in UTC. In local time it is the same everywhere; one o'clock,
+// because the assets published so far were packed in Italy, where that UTC midnight was 01:00,
+// and a tag whose runtime did not change must keep its sha256.
+const MTIME = new Date(2026, 0, 1, 1, 0, 0);
 
 const [kind, source] = process.argv.slice(2);
 const spec = ASSETS[kind];

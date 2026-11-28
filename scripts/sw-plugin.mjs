@@ -3,7 +3,7 @@
 // that list: a deploy that changes no file keeps the same worker, and the browser offers no update.
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const TEMPLATE = fileURLToPath(new URL('../src/pwa/sw.js', import.meta.url));
@@ -49,7 +49,8 @@ export function swPlugin() {
     name: 'lms-service-worker',
     apply: 'build',
     configResolved(config) {
-      outDir = join(config.root, config.build.outDir);
+      // resolve, not join: an --outDir given whole stays as it is
+      outDir = resolve(config.root, config.build.outDir);
     },
     closeBundle() {
       const { version, count } = serviceWorker(outDir);

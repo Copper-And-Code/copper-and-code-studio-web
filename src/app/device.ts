@@ -102,6 +102,7 @@ type Operation = () => Promise<unknown>;
 /** ui/main_device.py LIVE_DELAY_MS */
 const LIVE_DELAY_MS = 500;
 type Success = (result: unknown) => void | Promise<void>;
+type Failure = (error: unknown) => void;
 
 export class DeviceController {
   port: BoardPort | null = null;
@@ -115,7 +116,7 @@ export class DeviceController {
   appActive = false;
   /** The operation running, if any; background ones (the Files panel) do not lock the IDE. */
   private running: { background: boolean } | null = null;
-  private deferred: [Operation, Success | undefined] | null = null;
+  private deferred: [Operation, Success | undefined, Failure | undefined] | null = null;
   /** What the Files panel and the file tabs asked while the board was busy (_board_pending). */
   private pending: {
     operation: Operation;
@@ -212,23 +213,43 @@ export class DeviceController {
       this.liveTimer = setTimeout(() => this.sendLive(), LIVE_DELAY_MS);
       return;
     }
-    this.task(
-      () =>
-        this.python.board<{ status: string; designKey?: string }>(
-          'live_send',
-          uploadKey,
-          this.liveDesignKey,
-          this.livePage,
-        ),
-      (result) => {
-        if (result.status === 'stale') {
-          this.view.status(tr('The code changed: press F5 to send it to the board.'), 5000);
-        } else if (result.status === 'sent') {
-          this.liveDesignKey = result.designKey ?? null;
-          this.view.status(tr('Board updated.'), 3000);
-        }
-      },
-    );
+    // _send_live compares the keys before it starts a device task. As a task, a check that sends
+    // nothing still raised the Device Console, locked the IDE and took the port from the running
+    // app, at every change of the code and every tab shown.
+    void this.python
+      .board<{ status: string }>('live_check', uploadKey, this.liveDesignKey, this.livePage)
+      .then(
+        (check) => {
+          if (!this.liveOn || !this.appActive || this.liveUploadKey !== uploadKey) return;
+          if (check.status === 'stale') {
+            this.view.status(tr('The code changed: press F5 to send it to the board.'), 5000);
+            return;
+          }
+          if (check.status !== 'changed') return;
+          if (this.running) {
+            this.liveTimer = setTimeout(() => this.sendLive(), LIVE_DELAY_MS);
+            return;
+          }
+          this.task(
+            () =>
+              this.python.board<{ status: string; designKey?: string }>(
+                'live_send',
+                uploadKey,
+                this.liveDesignKey,
+                this.livePage,
+              ),
+            (result) => {
+              if (result.status === 'stale') {
+                this.view.status(tr('The code changed: press F5 to send it to the board.'), 5000);
+              } else if (result.status === 'sent') {
+                this.liveDesignKey = result.designKey ?? null;
+                this.view.status(tr('Board updated.'), 3000);
+              }
+            },
+          );
+        },
+        () => {}, // Python could not compare: nothing is sent, the next change asks again
+      );
   }
 
   /** Web Serial and JSPI are there (Chromium); elsewhere the Device menu says so instead. */
@@ -238,6 +259,16 @@ export class DeviceController {
 
   get connected(): boolean {
     return this.port !== null;
+  }
+
+  /**
+   * A board can be worked with: through Web Serial, or the demonstration board once connected,
+   * which needs only JSPI. What the IDE offers for a board asks this, not `available`: with JSPI
+   * and no Web Serial the demo board connected, and Start, its files and Run on the Board did not
+   * follow.
+   */
+  get usable(): boolean {
+    return this.available || this.demo;
   }
 
   /** Device → Connect to Demo Board: needs only JSPI, for Python to wait for the board. */
@@ -317,7 +348,8 @@ export class DeviceController {
   ): boolean {
     if (this.running) {
       if (this.running.background && !background && this.deferred === null) {
-        this.deferred = [operation, success as Success | undefined];
+        // with its failure too: started later, it must still tell who asked
+        this.deferred = [operation, success as Success | undefined, failure];
         return true;
       }
       return false;
@@ -363,9 +395,9 @@ export class DeviceController {
     let following = this.next;
     this.next = null;
     if (following === null && this.deferred !== null) {
-      const [operation, success] = this.deferred;
+      const [operation, success, failure] = this.deferred;
       this.deferred = null;
-      following = () => this.task(operation, success);
+      following = () => this.task(operation, success, false, failure);
     }
     this.syncSession();
     this.typed = false;
@@ -519,7 +551,14 @@ export class DeviceController {
 
   /** The cable was pulled: the session closes and the queue is cleared (_run_board_pending). */
   private async lost(): Promise<void> {
-    this.deferred = null;
+    if (this.deferred) {
+      // an operation of the user's that waited its turn: it will not start, so its progress
+      // window goes, and who asked is told
+      const failure = this.deferred[2];
+      this.deferred = null;
+      this.view.progress.finish();
+      failure?.(new Error(tr('The board was disconnected.')));
+    }
     this.next = null;
     this.clearPending();
     await this.disconnect();

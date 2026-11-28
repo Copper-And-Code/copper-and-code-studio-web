@@ -56,7 +56,7 @@ type FrameMessage =
   | { type: 'tx'; data: Uint8Array }
   | { type: 'frame'; pixels: Uint8Array }
   | { type: 'reset'; raw: boolean; flash: BoardFile[]; pending: Uint8Array }
-  | { type: 'flash'; flash: BoardFile[] }
+  | { type: 'flash'; flash: BoardFile[] | null }
   | { type: 'failed'; message: string };
 
 /**
@@ -158,7 +158,11 @@ export class DemoBoard {
     window.removeEventListener('message', this.onMessage);
   }
 
-  private readonly onMessage = async (event: MessageEvent): Promise<void> => {
+  private readonly onMessage = (event: MessageEvent): void => {
+    void this.fromFrame(event);
+  };
+
+  private async fromFrame(event: MessageEvent): Promise<void> {
     const iframe = this.iframe;
     if (!iframe || event.source !== iframe.contentWindow) return;
     const message = event.data as FrameMessage;
@@ -213,13 +217,14 @@ export class DemoBoard {
         this.power();
         break;
       case 'flash':
-        flashes.set(this.config.board, message.flash);
+        // null: the board had not started yet, the flash kept at its last reset stands
+        if (message.flash) flashes.set(this.config.board, message.flash);
         this.synced?.();
         break;
       case 'failed':
         break;
     }
-  };
+  }
 
   private receive(data: Uint8Array | string): void {
     if (this.closed || !this.controller) return;

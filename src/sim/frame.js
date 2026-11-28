@@ -12,9 +12,16 @@
 /** @typedef {[string, Uint8Array]} SimFile */
 /** @typedef {{ frames: boolean, clock: 'real' | 'manual', seed: number | null }} Capture */
 /**
- * @typedef {{ type: 'start', mode: 'project' | 'program' | 'frame', mjs: string,
- *   wasm: ArrayBuffer, width: number, height: number, board: string, entry: string,
+ * @typedef {{ type: 'start', mode: 'project' | 'program' | 'frame', mjs?: string,
+ *   wasm?: ArrayBuffer, width: number, height: number, board: string, entry: string,
  *   system: SimFile[], files: SimFile[], capture: Capture | null }} Start
+ */
+/**
+ * The runtime loaded before there is anything to run (the designer's preview draws a page many
+ * times: each drawing would otherwise wait for MicroPython to be compiled and started again).
+ * A start of the same mode, sent after `warmed`, comes without the runtime and uses this one.
+ * @typedef {{ type: 'warm', mode: 'project' | 'program' | 'frame', mjs: string,
+ *   wasm: ArrayBuffer }} Warm
  */
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('canvas'));
@@ -37,6 +44,8 @@ let keys = '';
 let running = false;
 /** @type {'project' | 'program' | 'frame' | null} */
 let mode = null;
+/** @type {{ mode: string, runtime: Promise<any> } | null} the runtime of a `warm` message */
+let warm = null;
 /** @type {any} */
 let FS = null;
 /** @type {Map<string, number>} what the IDE has of the flash: path → mtime */
@@ -392,6 +401,25 @@ _d.poll = _step_poll
 const guarded = (body) =>
   `try:\n${body.replace(/^/gm, ' ')}\nexcept BaseException as e:\n import sys\n sys.print_exception(e)\n`;
 
+/**
+ * MicroPython loaded from the bytes the IDE sent, with the heap of the mode it will run.
+ * @param {string} forMode @param {string} mjsText @param {ArrayBuffer} wasmBytes
+ */
+async function loadRuntime(forMode, mjsText, wasmBytes) {
+  const mjs = URL.createObjectURL(new Blob([mjsText], { type: 'text/javascript' }));
+  const wasm = URL.createObjectURL(new Blob([wasmBytes], { type: 'application/wasm' }));
+  await import(/* @vite-ignore */ mjs);
+  const load = /** @type {any} */ (globalThis).loadMicroPython;
+  return load({
+    url: wasm,
+    pystack: 64 * 1024,
+    heapsize: (forMode === 'program' ? 32 : 24) * 1024 * 1024,
+    linebuffer: false,
+    stdout: output,
+    stderr: output,
+  });
+}
+
 /** @param {Start} start */
 async function begin(start) {
   mode = start.mode;
@@ -402,18 +430,10 @@ async function begin(start) {
   if (capture?.clock === 'manual' && start.mode === 'project') manualClock();
   if (capture?.seed !== null && capture?.seed !== undefined) fixedRandom(capture.seed);
   frameSize = capture?.frames ? start.width * start.height * 2 : 0;
-  const mjs = URL.createObjectURL(new Blob([start.mjs], { type: 'text/javascript' }));
-  const wasm = URL.createObjectURL(new Blob([start.wasm], { type: 'application/wasm' }));
-  await import(/* @vite-ignore */ mjs);
-  const load = /** @type {any} */ (globalThis).loadMicroPython;
-  const mp = await load({
-    url: wasm,
-    pystack: 64 * 1024,
-    heapsize: (start.mode === 'program' ? 32 : 24) * 1024 * 1024,
-    linebuffer: false,
-    stdout: output,
-    stderr: output,
-  });
+  const mp =
+    warm?.mode === start.mode
+      ? await warm.runtime
+      : await loadRuntime(start.mode, start.mjs ?? '', start.wasm ?? new ArrayBuffer(0));
   const Module = mp._module;
   Module.canvas = canvas;
   wasmModule = Module;
@@ -473,6 +493,17 @@ window.addEventListener('message', (event) => {
       flushOutput();
       post({ type: 'failed', message: String(error?.message ?? error) });
     });
+  } else if (message?.type === 'warm' && mode === null && !warm) {
+    const runtime = loadRuntime(message.mode, message.mjs, message.wasm);
+    warm = { mode: message.mode, runtime };
+    runtime.then(
+      () => post({ type: 'warmed' }),
+      (error) => {
+        say(`\r\n${error?.message ?? error}\r\n`);
+        flushOutput();
+        post({ type: 'failed', message: String(error?.message ?? error) });
+      },
+    );
   } else if (message?.type === 'keys' && typeof message.data === 'string') {
     if (running && mode === 'program') keys += message.data;
   } else if (message?.type === 'pointer' && Array.isArray(message.pointer)) {

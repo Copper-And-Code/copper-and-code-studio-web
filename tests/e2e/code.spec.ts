@@ -54,7 +54,9 @@ test('the shell example: edited, copied into the workspace, run, and the change 
   const copied = await page.evaluate(async () => {
     const workspace = window.lmsStudio.studio?.stores.get('workspace');
     const files = ['shell/shell.py', 'shell/ansiterm.py', 'shell/ansifont.py'];
-    const data = await Promise.all(files.map((path) => workspace?.read(path)));
+    const data = await Promise.all(
+      files.map(async (path) => (await workspace?.read(path)) ?? null),
+    );
     return data.map((bytes) => (bytes ? new TextDecoder().decode(bytes).slice(0, 40) : null));
   });
   expect(copied[0]).toContain('print("edited in the browser")');

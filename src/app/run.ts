@@ -55,7 +55,8 @@ export interface RunHooks {
   setErrors(rows: MappedError[]): void;
   addErrors(rows: MappedError[]): void;
   /** save_files_in: the files of the folder open in the editor are saved first. */
-  saveFilesIn(folder: Location): Promise<boolean>;
+  /** FileTabs.saveProgram: the program's open files saved; where the program is then, or null. */
+  saveProgram(entry: Location): Promise<Location | null>;
   /** The .py file of the current tab: Run Program offers it first. */
   currentPythonFile(): Location | null;
 }
@@ -115,11 +116,24 @@ export async function copyProgramIntoPython(
 ): Promise<string> {
   const folder = parentPath(entry.path);
   const folderInPython = pythonPath({ store: entry.store, path: folder || '.' });
+  const left = (relative: string) =>
+    relative.split('/').some((part) => SKIPPED.has(part) || part.startsWith('.'));
+  const copied = new Set<string>();
   for (const path of await walkFiles(store, folder)) {
     const relative = folder ? path.slice(folder.length + 1) : path;
-    if (relative.split('/').some((part) => SKIPPED.has(part) || part.startsWith('.'))) continue;
+    if (left(relative)) continue;
     const data = await store.read(path);
-    if (data) await python.writeFile(`${folderInPython}/${relative}`, data);
+    if (!data) continue;
+    await python.writeFile(`${folderInPython}/${relative}`, data);
+    copied.add(relative);
+  }
+  // What an earlier run copied and the folder no longer has, deleted or renamed since: upstream
+  // takes the folder as it finds it, so the file would still go into the flash and into the web
+  // version built from it.
+  for (const relative of await python.call<string[]>('sim_folder_files', folderInPython)) {
+    if (!copied.has(relative) && !left(relative)) {
+      await python.removeFile(`${folderInPython}/${relative}`);
+    }
   }
   return `${folderInPython}/${baseName(entry.path)}`;
 }
@@ -160,47 +174,51 @@ export class RunController {
     screen: HTMLElement,
   ) {
     const view = options.view;
-    this.simulator = new Simulator(screen, {
-      output: (text) => {
-        this.transcript += text;
-        if (this.simulator.mode !== 'frame') this.captureLines(text);
-        if (this.simulator.mode === 'program') {
-          view.terminal(text);
-          if (capture.enabled) this.readTracebacks(text, false);
-        } else {
-          view.output(text.replace(/\r\n/g, '\n'));
-          if (this.simulator.mode === 'project') this.readTracebacks(text);
-        }
+    this.simulator = new Simulator(
+      screen,
+      {
+        output: (text) => {
+          this.transcript += text;
+          if (this.simulator.mode !== 'frame') this.captureLines(text);
+          if (this.simulator.mode === 'program') {
+            view.terminal(text);
+            if (capture.enabled) this.readTracebacks(text, false);
+          } else {
+            view.output(text.replace(/\r\n/g, '\n'));
+            if (this.simulator.mode === 'project') this.readTracebacks(text);
+          }
+        },
+        state: (state) => {
+          view.state(state, this.simulator.mode === 'program');
+          const mode = this.simulator.mode;
+          if (mode === 'frame') return; // the first frame for a test, not a run
+          if (state === 'running') capture.emit('simulator-started', { mode });
+          else if (state === 'stopped') capture.emit('simulator-stopped', {});
+          else if (state === 'ended') capture.emit('simulator-ended', { mode });
+          else if (state === 'failed') capture.emit('simulator-failed', { mode });
+          // ui/main_run.py: the terminal takes the focus, as a board's serial console
+          if (state === 'running' && this.simulator.mode === 'program') view.focusTerminal();
+        },
+        flash: (change) => this.saveFlash(change),
+        reset: () => void this.programReset(),
+        shortcut: (shift) => {
+          if (shift) void this.stop();
+          else if (!this.running) void this.runProject();
+        },
+        frame: (pixels) => {
+          this.frameWaiter?.(pixels);
+          this.frameWaiter = null;
+        },
+        captureFrame: ({ number, width, height, rgb565 }) =>
+          capture.frame({
+            number,
+            width,
+            height,
+            pixels: rgb565ToRgba(rgb565, width, height).data,
+          }),
       },
-      state: (state) => {
-        view.state(state, this.simulator.mode === 'program');
-        const mode = this.simulator.mode;
-        if (mode === 'frame') return; // the first frame for a test, not a run
-        if (state === 'running') capture.emit('simulator-started', { mode });
-        else if (state === 'stopped') capture.emit('simulator-stopped', {});
-        else if (state === 'ended') capture.emit('simulator-ended', { mode });
-        else if (state === 'failed') capture.emit('simulator-failed', { mode });
-        // ui/main_run.py: the terminal takes the focus, as a board's serial console
-        if (state === 'running' && this.simulator.mode === 'program') view.focusTerminal();
-      },
-      flash: (change) => this.saveFlash(change),
-      reset: () => void this.programReset(),
-      shortcut: (shift) => {
-        if (shift) void this.stop();
-        else if (!this.running) void this.runProject();
-      },
-      frame: (pixels) => {
-        this.frameWaiter?.(pixels);
-        this.frameWaiter = null;
-      },
-      captureFrame: ({ number, width, height, rgb565 }) =>
-        capture.frame({
-          number,
-          width,
-          height,
-          pixels: rgb565ToRgba(rgb565, width, height).data,
-        }),
-    });
+      { testid: 'sim-frame' },
+    );
   }
 
   /** Capture mode (docs/capture.md): what the simulator of a run is asked for. */
@@ -238,12 +256,19 @@ export class RunController {
     const start = await this.prepareProject('project');
     if (!start) return false;
     // ui/main_run.py: compile_python before the simulator; an error stops here
-    const errors = await this.options.hooks.compile(
-      '/sim/project',
-      start.files
-        .map(([name]) => name)
-        .filter((name) => name.endsWith('.py') && !name.includes('/')),
-    );
+    let errors: MappedError[];
+    try {
+      errors = await this.options.hooks.compile(
+        '/sim/project',
+        start.files
+          .map(([name]) => name)
+          .filter((name) => name.endsWith('.py') && !name.includes('/')),
+      );
+    } catch (error) {
+      // mpy-cross itself could not run (not loaded: the network): said, as append_error does
+      view.output(`${error instanceof Error ? error.message : String(error)}\n`);
+      return false;
+    }
     if (errors.length) {
       this.options.hooks.setErrors(errors);
       for (const error of errors) view.output(`${error.message}\n`);
@@ -345,13 +370,12 @@ export class RunController {
       if (!chosen) return false;
       entry = chosen;
     }
+    // a changed example was saved into its copy in the workspace: the copy is what runs
+    const saved = await this.options.hooks.saveProgram(entry);
+    if (!saved) return false;
+    entry = saved;
     const store = stores.get(entry.store);
     if (!store) return false;
-    if (
-      !(await this.options.hooks.saveFilesIn({ store: entry.store, path: parentPath(entry.path) }))
-    ) {
-      return false;
-    }
     try {
       const folder = parentPath(entry.path);
       const entryInPython = await copyProgramIntoPython(python, store, entry);

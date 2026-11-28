@@ -37,6 +37,17 @@ export interface FlashChange {
 
 export type SimState = 'stopped' | 'starting' | 'running' | 'ended' | 'failed';
 
+export interface SimOptions {
+  /**
+   * Runs of this mode find a frame whose runtime is already loaded: one is made ready after each
+   * run, for the next. For the designer's preview, which draws a page at every change: each
+   * drawing would otherwise wait for MicroPython to be compiled and started again.
+   */
+  warm?: SimMode;
+  /** The name the tests find the frame by: only the simulator in sight has one. */
+  testid?: string;
+}
+
 export interface SimEvents {
   output(text: string): void;
   state(state: SimState): void;
@@ -80,6 +91,7 @@ export function loadRuntime(base = RUNTIME): Promise<Runtime> {
 
 type FrameMessage =
   | { type: 'hello' }
+  | { type: 'warmed' }
   | { type: 'running' }
   | { type: 'ended' }
   | { type: 'failed'; message: string }
@@ -100,10 +112,17 @@ export class Simulator {
   private _state: SimState = 'stopped';
   /** When the run started and when it printed or drew for the first time, for the status bar. */
   startedAt = 0;
+  /** With `warm`: the frame made ready for the next run, and the frames whose runtime is loaded. */
+  private spare: HTMLIFrameElement | null = null;
+  private readonly warmed = new WeakSet<HTMLIFrameElement>();
+  private sparing: ReturnType<typeof setTimeout> | undefined;
+  /** How many runs found their runtime already loaded: for the tests. */
+  warmStarts = 0;
 
   constructor(
     private readonly container: HTMLElement,
     private readonly events: SimEvents,
+    private readonly options: SimOptions = {},
   ) {
     window.addEventListener('message', this.onMessage);
   }
@@ -137,15 +156,45 @@ export class Simulator {
     }
     if (this.current !== start) return; // stopped meanwhile
     this.runtime = code;
+    const spare = this.options.warm === start.mode ? this.spare : null;
+    if (spare) {
+      // the frame made ready after the last run: its files now, or as soon as it says `warmed`
+      clearTimeout(this.sparing);
+      this.spare = null;
+      this.iframe = spare;
+      if (this.warmed.has(spare)) {
+        this.warmStarts++;
+        this.send(spare, start, null);
+      }
+      return;
+    }
+    const iframe = this.frame();
+    this.iframe = iframe;
+    // with a spare frame the container holds two: nothing else is in it
+    if (this.options.warm) this.container.append(iframe);
+    else this.container.replaceChildren(iframe);
+  }
+
+  private frame(): HTMLIFrameElement {
     const iframe = document.createElement('iframe');
     iframe.title = tr('Simulator');
     iframe.setAttribute('sandbox', 'allow-scripts');
     iframe.setAttribute('allow', 'autoplay');
     iframe.srcdoc = framePage();
     iframe.className = 'sim-frame';
-    iframe.dataset.testid = 'sim-frame';
-    this.iframe = iframe;
-    this.container.replaceChildren(iframe);
+    if (this.options.testid) iframe.dataset.testid = this.options.testid;
+    return iframe;
+  }
+
+  /** With `warm`: a frame for the next run, made once this one has left the page alone. */
+  private spareLater(): void {
+    if (!this.options.warm || this.spare || !this.runtime) return;
+    clearTimeout(this.sparing);
+    this.sparing = setTimeout(() => {
+      if (this.spare || !this.runtime) return;
+      this.spare = this.frame();
+      this.container.append(this.spare);
+    }, 0);
   }
 
   private runtime: Runtime | null = null;
@@ -176,6 +225,7 @@ export class Simulator {
     const was = this._state;
     this.current = null;
     if (was !== 'stopped') this.setState('stopped');
+    this.spareLater();
   }
 
   /** Keys for a program's serial port: the bytes a terminal sends. */
@@ -197,13 +247,14 @@ export class Simulator {
     this.send(iframe, this.current, this.runtime);
   }
 
-  private send(iframe: HTMLIFrameElement, start: SimStart, code: Runtime): void {
+  /** code is null for a frame that has its runtime already (`warmed`). */
+  private send(iframe: HTMLIFrameElement, start: SimStart, code: Runtime | null): void {
     iframe.contentWindow?.postMessage(
       {
         type: 'start',
         mode: start.mode,
-        mjs: code.mjs,
-        wasm: code.wasm,
+        mjs: code?.mjs,
+        wasm: code?.wasm,
         width: start.width,
         height: start.height,
         board: start.board,
@@ -249,9 +300,40 @@ export class Simulator {
   }
 
   private readonly onMessage = (event: MessageEvent): void => {
-    const iframe = this.iframe;
-    if (!iframe || event.source !== iframe.contentWindow) return;
+    const from = [this.iframe, this.spare].find(
+      (frame) => frame && event.source === frame.contentWindow,
+    );
+    if (!from) return;
     const message = event.data as FrameMessage;
+    if (this.options.warm && this.runtime) {
+      if (message.type === 'hello' && !this.warmed.has(from)) {
+        // its runtime first; the files when there is something to run
+        from.contentWindow?.postMessage(
+          {
+            type: 'warm',
+            mode: this.options.warm,
+            mjs: this.runtime.mjs,
+            wasm: this.runtime.wasm,
+          },
+          '*',
+        );
+        return;
+      }
+      if (message.type === 'warmed') {
+        this.warmed.add(from);
+        if (from === this.iframe && this.current) this.send(from, this.current, null);
+        return;
+      }
+    }
+    if (from !== this.iframe) {
+      // the spare frame: one that cannot load its runtime is dropped, and the next run makes its own
+      if (message.type === 'failed') {
+        from.remove();
+        this.spare = null;
+      }
+      return;
+    }
+    const iframe = from;
     switch (message.type) {
       case 'hello':
         if (this._state === 'running') {
@@ -315,6 +397,9 @@ export class Simulator {
 
   dispose(): void {
     void this.stop();
+    clearTimeout(this.sparing);
+    this.spare?.remove();
+    this.spare = null;
     window.removeEventListener('message', this.onMessage);
   }
 }

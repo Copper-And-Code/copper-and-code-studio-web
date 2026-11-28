@@ -73,10 +73,17 @@ export class BoardPort {
    */
   static async open(port: SerialPort, python: PythonBridge, adapter: string): Promise<BoardPort> {
     await port.open({ baudRate: BAUD_RATE, bufferSize: 65536 });
-    if (adapter === 'stm32h7_uart') {
-      await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+    try {
+      if (adapter === 'stm32h7_uart') {
+        await port.setSignals({ dataTerminalReady: true, requestToSend: false });
+      }
+      if (!port.writable) throw new Error('The port cannot be written to.');
+    } catch (error) {
+      // Open by now: left so, every new connection would find it "already open" until the page
+      // is loaded again, though nothing else holds it.
+      await port.close().catch(() => {});
+      throw error;
     }
-    if (!port.writable) throw new Error('The port cannot be written to.');
     const board = new BoardPort(port, python);
     const info: PortInfo = { port: board.name, description: board.label };
     const { usbVendorId, usbProductId } = port.getInfo();
@@ -167,8 +174,10 @@ export class BoardPort {
     } catch {
       // already gone
     }
+    // A write that failed must not keep the writer's lock: with it the port cannot be closed, and
+    // stays open for the next connection to stumble on.
+    await this.writing.catch(() => {});
     try {
-      await this.writing;
       this.writer?.releaseLock();
     } catch {
       // already gone

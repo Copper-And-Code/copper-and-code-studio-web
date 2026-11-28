@@ -294,6 +294,14 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
       run.result.sourcemap,
     );
     expect(rows.result).toMatchObject([{ handler: entry?.handler, origin: true }]);
+    // the check the page makes first: the keys compared, nothing sent to the board
+    for (const [upload, design, status] of [
+      [run.result.uploadKey, run.result.designKey, 'same'],
+      [run.result.uploadKey, 'older', 'changed'],
+      ['another code', run.result.designKey, 'stale'],
+    ]) {
+      expect((await call('live_check', upload, design)).result).toEqual({ status });
+    }
     const same = await call('live_send', run.result.uploadKey, run.result.designKey);
     expect(same.result).toEqual({ status: 'same' });
     const changed = await call<{ status: string }>('live_send', run.result.uploadKey, 'older');
@@ -338,5 +346,19 @@ json.dumps({p["id"]: portable_profile(p) for p in ProfileStore().profiles()})
     const reply = await call('list_dir', '/');
     expect(reply.ok).toBe(false);
     expect(reply.error?.code).toBe('device.absent');
+  });
+
+  it('the folder of a program on the board is known without a board profile too', async () => {
+    const bridge = py.pyimport('lms_bridge').call as (method: string, json: string) => string;
+    const root = async () => (await call<string>('program_root')).result;
+    // _board_program_root: the flash of the STM32 boards
+    bridge('doc_new', JSON.stringify([null, 'stm32h7_core_v1_3_1024x600']));
+    expect(await root()).toBe('/flash');
+    bridge('doc_new', JSON.stringify([null, 'esp32_4848s040_480']));
+    expect(await root()).toBe('/');
+    // A project without a board (the frog example): upstream answers "/" and Run on the Board
+    // goes on to say that a board profile is needed; an error here stopped it with no word.
+    py.runPython('import lms_bridge\nlms_bridge._doc().project.board = None');
+    expect(await root()).toBe('/');
   });
 });

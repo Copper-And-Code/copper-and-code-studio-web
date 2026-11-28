@@ -93,6 +93,9 @@ test('the menu bar from the keyboard: F10, arrows, Escape, Enter', async ({ page
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menu', { name: 'Help' })).toBeVisible();
+  // the item after the line: Online Documentation comes first, and opens another site
+  await page.keyboard.press('ArrowDown');
+  expect(await focused(page)).toEqual({ role: 'menuitem', name: 'About Copper and Code Studio' });
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog', { name: 'Copper and Code Studio Web' })).toBeVisible();
   await page.keyboard.press('Escape');

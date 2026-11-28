@@ -64,15 +64,23 @@ export function mpyCrossFrom(
 ): (name: string, source: Uint8Array, args: string[]) => Promise<Compilation> {
   let loaded: Promise<{ factory: MpyCrossFactory; module: WebAssembly.Module }> | null = null;
   return async (name, source, args) => {
-    loaded ??= (async () => {
-      const [script, module] = await Promise.all([
-        import(/* @vite-ignore */ new URL('mpy-cross.mjs', base).href) as Promise<{
-          default: MpyCrossFactory;
-        }>,
-        WebAssembly.compileStreaming(fetch(new URL('mpy-cross.wasm', base))),
-      ]);
-      return { factory: script.default, module };
-    })();
+    if (!loaded) {
+      const loading = (async () => {
+        const [script, module] = await Promise.all([
+          import(/* @vite-ignore */ new URL('mpy-cross.mjs', base).href) as Promise<{
+            default: MpyCrossFactory;
+          }>,
+          WebAssembly.compileStreaming(fetch(new URL('mpy-cross.wasm', base))),
+        ]);
+        return { factory: script.default, module };
+      })();
+      // A load that failed (the network, on a first visit) is tried again at the next
+      // compilation: kept, it failed every one until the page was loaded again.
+      loading.catch(() => {
+        if (loaded === loading) loaded = null;
+      });
+      loaded = loading;
+    }
     const { factory, module } = await loaded;
     return compileOnce(factory, module, name, source, args);
   };

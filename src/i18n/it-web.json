@@ -28,7 +28,6 @@
   "Imported: {path}": "Importato: {path}",
   "Invalid name: {name}": "Nome non valido: {name}",
   "Keyboard": "Tastiera",
-  "Licence: {licence}": "Licenza: {licence}",
   "Loading…": "Caricamento…",
   "Logical height": "Altezza logica",
   "Logical width": "Larghezza logica",
@@ -89,5 +88,7 @@
   "{path} already exists and is not a web build made by this IDE: move or rename it": "{path} esiste già e non è una versione web fatta da questo IDE: spostala o rinominala",
   "Demo board (simulated)": "Scheda dimostrativa (simulata)",
   "Connect to Demo Board": "Connetti alla scheda dimostrativa",
-  "A simulated board, not hardware: it runs what the IDE uploads, with the same MicroPython as the simulator, and behaves as the board of the project.": "Una scheda simulata, non hardware: esegue ciò che l'IDE carica, con lo stesso MicroPython del simulatore, e si comporta come la scheda del progetto."
+  "A simulated board, not hardware: it runs what the IDE uploads, with the same MicroPython as the simulator, and behaves as the board of the project.": "Una scheda simulata, non hardware: esegue ciò che l'IDE carica, con lo stesso MicroPython del simulatore, e si comporta come la scheda del progetto.",
+  "Source code": "Codice sorgente",
+  "Third-party software": "Software di terze parti"
 }

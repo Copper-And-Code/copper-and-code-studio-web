@@ -16,13 +16,15 @@ function git(...args) {
   }
 }
 
-/** @returns {{ tag: string | null, commit: string, version: string }} */
+/** @returns {{ tag: string | null, commit: string, version: string, website: string }} */
 export function upstreamInfo() {
   const init = readFileSync(`${UPSTREAM}copper_and_code_studio/__init__.py`, 'utf8');
   const version = /^__version__\s*=\s*"([^"]+)"/m.exec(init)?.[1] ?? 'unknown';
   const commit = git('rev-parse', '--short=12', 'HEAD') ?? 'unknown';
   const tag = git('describe', '--tags', '--exact-match', 'HEAD');
-  return { tag, commit, version };
+  // the pages of the project, with the guides: Help → Online Documentation, as on the desktop
+  const website = /^WEBSITE\s*=\s*"([^"]+)"/m.exec(init)?.[1] ?? '';
+  return { tag, commit, version, website };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

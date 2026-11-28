@@ -10,7 +10,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "assets": "node scripts/copy-pyodide.mjs && node scripts/fetch-runtime.mjs && node scripts/bundle-upstream.mjs && node scripts/bundle-examples.mjs",
+    "assets": "node scripts/copy-pyodide.mjs && node scripts/fetch-runtime.mjs && node scripts/bundle-upstream.mjs && node scripts/bundle-examples.mjs && node scripts/licenses.mjs",
     "dev": "pnpm assets && vite",
     "build": "tsc --noEmit && pnpm assets && vite build",
     "preview": "vite preview",

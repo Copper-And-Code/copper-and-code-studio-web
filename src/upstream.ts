@@ -3,6 +3,8 @@ export interface UpstreamInfo {
   tag: string | null;
   commit: string;
   version: string;
+  /** Upstream's WEBSITE: the pages of the project, with the guides. */
+  website: string;
 }
 
 /** The upstream release as shown to the user, e.g. "v0.7.0" or "0.7.0 (untagged a45a85f00f4e)". */

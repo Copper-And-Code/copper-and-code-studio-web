@@ -7,8 +7,37 @@ on:
 permissions:
   contents: read
 
+# A branch pushed again stops the run of its older commit; on main every commit keeps its run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  test:
+  # A commit of documents only (docs/, README.md: the status line after a deploy) runs the checks
+  # and not the browsers, which take most of the time.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        name: Did anything but the documents change?
+        env:
+          BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # a new branch has no commit before it: everything runs
+          if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qvE '^(docs/|README\.md$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  checks:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
@@ -29,12 +58,36 @@ jobs:
         run: python3 --version && pnpm goldens
       - name: Upstream in Pyodide (goldens, audit, upstream's tests)
         run: pnpm test:py
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
-      - run: pnpm e2e
+
+  # One job for each engine, at the same time: together they took 24 minutes in a row.
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: true
+      - name: Fetch the upstream tags, so the build can name the release
+        run: git -C upstream fetch --quiet --depth=1 origin 'refs/tags/*:refs/tags/*'
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Goldens from upstream on the host, which the browser's output is compared with
+        run: python3 --version && pnpm goldens
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - run: pnpm e2e --project ${{ matrix.browser }}
       - if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: |
             playwright-report/
             test-results/

@@ -19,6 +19,18 @@ export class MpyCross {
       this.waiting.get(event.data.id)?.(event.data);
       this.waiting.delete(event.data.id);
     });
+    // A worker whose script does not load, or that stops on an error of its own, answers nothing:
+    // the compilations waiting fail now, and the next one starts a new worker.
+    worker.addEventListener('error', (event: ErrorEvent) => {
+      if (this.worker !== worker) return;
+      this.worker = null;
+      worker.terminate();
+      const output = event.message || 'the worker did not load';
+      for (const [id, answer] of [...this.waiting]) {
+        this.waiting.delete(id);
+        answer({ id, ok: false, code: -1, output, mpy: null });
+      }
+    });
     this.worker = worker;
     return worker;
   }

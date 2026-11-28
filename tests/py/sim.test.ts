@@ -3,7 +3,9 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { copyProgramIntoPython } from '../../src/app/run.ts';
 import type { PythonBridge } from '../../src/py/bridge.ts';
+import { MemoryStore } from '../../src/storage/memory-store.ts';
 import { inProcessBridge } from './in-process.ts';
 import { ROOT } from './pyodide-node.mjs';
 
@@ -94,5 +96,27 @@ describe('simulator preparation', () => {
     await expect(
       python.call('sim_program', '/ws/test/prog/notes.txt', '/sim/flash/t2'),
     ).rejects.toThrow('Not a Python file');
+  });
+
+  it('a file deleted from a program folder is not part of the next run', async () => {
+    const store = new MemoryStore('workspace', 'Workspace');
+    await store.write('game/main.py', encode('import helper\n'));
+    await store.write('game/helper.py', encode('print("help")\n'));
+    await store.write('game/data/notes.txt', encode('private\n'));
+    const entry = { store: 'workspace', path: 'game/main.py' };
+    const main = await copyProgramIntoPython(python, store, entry);
+    const folder = main.slice(0, main.lastIndexOf('/'));
+    expect(await python.call('sim_folder_files', folder)).toEqual([
+      'data/notes.txt',
+      'helper.py',
+      'main.py',
+    ]);
+    // deleted and renamed in the Files panel, then run again: upstream copies what the folder
+    // has, into the flash and into the web version
+    await store.remove('game/data/notes.txt');
+    await store.remove('game/helper.py');
+    await store.write('game/tools.py', encode('print("tools")\n'));
+    await copyProgramIntoPython(python, store, entry);
+    expect(await python.call('sim_folder_files', folder)).toEqual(['main.py', 'tools.py']);
   });
 });

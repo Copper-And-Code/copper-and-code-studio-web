@@ -182,6 +182,39 @@ describe('open, edit, save', () => {
     expect(session.title()).toBe('*demo.json — Copper and Code Studio');
   });
 
+  it('a save asked while another is writing waits for it: nothing is asked, the file is the project', async () => {
+    await workspace.write('demo.json', DEMO);
+    await session.open({ store: 'workspace', path: 'demo.json' });
+    await session.renamePage(firstPage(), 'Start');
+    // Ctrl+S held down, or F5 twice. The second save reads the file from its store, to see a
+    // change made outside, before the first one has written it there.
+    const read = workspace.read.bind(workspace);
+    const write = workspace.write.bind(workspace);
+    let reads = 0;
+    let written = () => {};
+    const firstWrites = new Promise<void>((resolve) => (written = resolve));
+    workspace.read = async (path) => {
+      const data = await read(path);
+      if (++reads === 2) await firstWrites;
+      return data;
+    };
+    workspace.write = async (path, data) => {
+      written();
+      return write(path, data);
+    };
+    const first = session.save();
+    const second = session.save();
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    // not "the file was changed by another program": nobody else touched it
+    expect(prompts.asked).toEqual([]);
+    expect(prompts.errors).toEqual([]);
+    expect(JSON.parse(text(await workspace.read('demo.json')))).toMatchObject({
+      pages: [{ name: 'Start' }],
+    });
+    expect(session.modified).toBe(false);
+  });
+
   it('refuses a page name that is already taken', async () => {
     await session.open({ store: 'examples', path: 'demo.json' });
     const names = session.state?.pages.map((page) => page.name) ?? [];

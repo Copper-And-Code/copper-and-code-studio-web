@@ -4,7 +4,7 @@ import { LitElement, css, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import type { CenterTab, Studio } from '../app/studio.ts';
 import { type MappedError, captureFile } from '../app/code.ts';
-import { upstream } from '../build-info.ts';
+import { repository, upstream } from '../build-info.ts';
 import { tr } from '../i18n/tr.ts';
 import type { PythonBridge, PythonState } from '../py/bridge.ts';
 import type { DocState } from '../project/session.ts';
@@ -42,6 +42,9 @@ const OUTPUT_LIMIT = 100_000;
 type BottomTab = 'output' | 'errors' | 'components' | 'device';
 
 /** The IDE window: menu bar, the three working areas, the status bar, the dialogs. */
+/** The About box's credits and copyright, as the desktop's (ui/main_window.py show_about). */
+const AUTHOR = 'Nunzio Raciti';
+
 export class AppShell extends LitElement {
   static override properties = {
     python: { attribute: false },
@@ -469,6 +472,14 @@ export class AppShell extends LitElement {
     dialog p {
       margin: 6px 0;
     }
+    .about-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+    }
+    .about-links a {
+      color: inherit;
+    }
     dialog button {
       font: inherit;
     }
@@ -551,6 +562,17 @@ export class AppShell extends LitElement {
         if (message) this.showStatus(message);
       },
     };
+  }
+
+  /**
+   * Ctrl+A in Output or Errors selects the panel's text, as in a text widget: the browser's own
+   * would select the whole IDE. (Ctrl+C then copies it: src/app/studio.ts shortcut.)
+   */
+  private selectOwnText(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (event.key.toLowerCase() !== 'a') return;
+    document.getSelection()?.selectAllChildren(event.currentTarget as HTMLElement);
+    event.preventDefault();
   }
 
   private appendOutput(text: string): void {
@@ -670,7 +692,7 @@ export class AppShell extends LitElement {
   private renderBoardFiles() {
     const studio = this.studio;
     const device = studio?.device;
-    if (!studio || !device?.available) return nothing;
+    if (!studio || !device?.usable) return nothing;
     const connected = device.connected;
     return html`<lms-files-panel
       class="board-files"
@@ -758,6 +780,13 @@ export class AppShell extends LitElement {
     const help: Menu = {
       label: tr('Help'),
       items: () => [
+        // ui/main_window.py website_action: the pages of the project, with the guides
+        {
+          label: tr('Online Documentation'),
+          id: 'website',
+          action: () => void window.open(upstream.website, '_blank', 'noopener'),
+        },
+        { separator: true },
         { label: tr('About Copper and Code Studio'), id: 'about', action: () => this.openAbout() },
       ],
     };
@@ -1209,15 +1238,20 @@ export class AppShell extends LitElement {
           aria-labelledby="bottom-output"
           data-testid="output"
           data-capture="output"
+          data-own-text
           tabindex="0"
           ?hidden=${this.bottom !== 'output'}
+          @keydown=${this.selectOwnText}
         >
 ${this.outputText}</pre>
         <div
           role="tabpanel"
           id="bottom-panel-errors"
           aria-labelledby="bottom-errors"
+          data-own-text
+          tabindex="0"
           ?hidden=${this.bottom !== 'errors'}
+          @keydown=${this.selectOwnText}
         >
           ${this.renderErrors()}
         </div>
@@ -1287,7 +1321,39 @@ ${this.outputText}</pre>
             }</span
           >
         </p>
-        <p>${tr('Licence: {licence}', { licence: 'GPL-3.0-or-later' })}</p>
+        <p data-testid="about-credits">
+          <strong>${tr('Credits')}:</strong>
+          ${tr('designed and directed by {name}, developed with AI agents', { name: AUTHOR })}
+        </p>
+        <p>
+          Copyright (c) 2026 ${AUTHOR}<br />
+          ${tr('License: GPL-3.0-or-later. Generated code is under the MIT license.')}<br />
+          ${tr(
+            'This program comes with absolutely no warranty. It is free software: you may redistribute and modify it under the terms of the license.',
+          )}
+        </p>
+        <p class="about-links">
+          <a data-testid="about-website" href=${upstream.website} target="_blank" rel="noopener"
+            >${tr('Online Documentation')}</a
+          >
+          <a data-testid="about-source" href=${repository} target="_blank" rel="noopener"
+            >${tr('Source code')}</a
+          >
+          <a
+            data-testid="about-licence"
+            href="${import.meta.env.BASE_URL}licenses/LICENSE.txt"
+            target="_blank"
+            rel="noopener"
+            >${tr('Licence')}</a
+          >
+          <a
+            data-testid="about-third-party"
+            href="${import.meta.env.BASE_URL}licenses/THIRD-PARTY.txt"
+            target="_blank"
+            rel="noopener"
+            >${tr('Third-party software')}</a
+          >
+        </p>
         <p>
           ${tr(
             'Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.',

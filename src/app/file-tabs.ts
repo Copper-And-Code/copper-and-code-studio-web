@@ -8,7 +8,14 @@ import { capture } from '../capture/hub.ts';
 import { tr } from '../i18n/tr.ts';
 import type { MpyCross } from '../mpy/mpy-cross.ts';
 import type { PythonBridge } from '../py/bridge.ts';
-import { type FileStore, type Location, baseName, joinPath, walkFiles } from '../storage/store.ts';
+import {
+  type FileStore,
+  type Location,
+  baseName,
+  joinPath,
+  parentPath,
+  walkFiles,
+} from '../storage/store.ts';
 import type { Dialogs } from '../ui/dialogs.ts';
 
 export const MAX_BYTES = 2 * 1024 * 1024; // ui/files.py: a larger file is not opened
@@ -57,6 +64,10 @@ export class FileTabs {
   private next = 1;
   private readonly listeners = new Set<() => void>();
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** The files being read into a tab, by store and path: a second open of one is the same open. */
+  private readonly opening = new Map<string, Promise<FileTab | null>>();
+  /** The tabs being closed, while they ask or save: a second close of one is the same close. */
+  private readonly closing = new Map<number, Promise<boolean>>();
 
   constructor(
     private readonly stores: Map<string, FileStore>,
@@ -92,6 +103,20 @@ export class FileTabs {
     );
   }
 
+  /**
+   * A file or a folder was renamed in its store: the tab of the file, and the tabs of the files
+   * under the folder, follow it. Left at the old path, a tab would save there: an error, or the
+   * old folder made again.
+   */
+  renamed(store: string, from: string, to: string): void {
+    for (const tab of this.tabs) {
+      if (tab.location.store !== store) continue;
+      if (tab.location.path === from || tab.location.path.startsWith(`${from}/`)) {
+        tab.location = { store, path: to + tab.location.path.slice(from.length) };
+      }
+    }
+  }
+
   get(id: number): FileTab | undefined {
     return this.tabs.find((tab) => tab.id === id);
   }
@@ -106,6 +131,18 @@ export class FileTabs {
   async open(location: Location): Promise<FileTab | null> {
     const existing = this.find(location);
     if (existing) return existing;
+    // A file of the board takes seconds to read: opened again meanwhile, it had two tabs, and the
+    // one saved last replaced the other's text without a notice.
+    const key = `${location.store}\n${location.path}`;
+    let opening = this.opening.get(key);
+    if (!opening) {
+      opening = this.read(location).finally(() => this.opening.delete(key));
+      this.opening.set(key, opening);
+    }
+    return opening;
+  }
+
+  private async read(location: Location): Promise<FileTab | null> {
     let data: Uint8Array | null;
     try {
       data = await this.store(location).read(location.path);
@@ -153,9 +190,20 @@ export class FileTabs {
 
   /** "Save changes to {name}?" before the tab goes; false if the user cancelled. */
   async close(tab: FileTab): Promise<boolean> {
+    let closing = this.closing.get(tab.id);
+    if (!closing) {
+      closing = this.closeNow(tab).finally(() => this.closing.delete(tab.id));
+      this.closing.set(tab.id, closing);
+    }
+    return closing;
+  }
+
+  private async closeNow(tab: FileTab): Promise<boolean> {
     if (this.modified(tab) && !(await this.askSave(tab))) return false;
     clearTimeout(this.timers.get(tab.id));
-    this.tabs.splice(this.tabs.indexOf(tab), 1);
+    // gone meanwhile: splice(-1, 1) would remove the last tab, another file with its changes
+    const index = this.tabs.indexOf(tab);
+    if (index >= 0) this.tabs.splice(index, 1);
     this.changed();
     return true;
   }
@@ -255,15 +303,41 @@ export class FileTabs {
     }
   }
 
-  /** ui/main_editors.py save_files_in: before a program runs, its files in the editor are saved. */
-  async saveFilesIn(folder: Location): Promise<boolean> {
-    for (const tab of this.tabs) {
+  /**
+   * ui/main_editors.py save_files_in: before a program runs, its files in the editor are saved.
+   * The folder they are in afterwards, or null if a save failed or was cancelled: a changed file
+   * of the examples is saved into a copy of its folder in the workspace (copyExample), and the
+   * other tabs of the example follow it there.
+   */
+  async saveFilesIn(folder: Location): Promise<Location | null> {
+    let now = folder;
+    for (const tab of [...this.tabs]) {
       const inside =
-        tab.location.store === folder.store &&
-        (folder.path === '' || tab.location.path.startsWith(`${folder.path}/`));
-      if (inside && this.modified(tab) && !(await this.save(tab))) return false;
+        tab.location.store === now.store &&
+        (now.path === '' || tab.location.path.startsWith(`${now.path}/`));
+      if (!inside || !this.modified(tab)) continue;
+      const before = tab.location;
+      if (!(await this.save(tab))) return null;
+      const after = tab.location;
+      if (after.store === before.store) continue;
+      // the tab kept its place inside the folder, so the folder is where the tab now is
+      const relative = now.path ? before.path.slice(now.path.length + 1) : before.path;
+      if (after.path === relative) now = { store: after.store, path: '' };
+      else if (after.path.endsWith(`/${relative}`)) {
+        now = { store: after.store, path: after.path.slice(0, -relative.length - 1) };
+      }
     }
-    return true;
+    return now;
+  }
+
+  /**
+   * saveFilesIn for the folder of a program about to run: the program where it is afterwards, or
+   * null. A changed example is in its copy by then, and running the example would run the
+   * program without the change just saved.
+   */
+  async saveProgram(entry: Location): Promise<Location | null> {
+    const folder = await this.saveFilesIn({ store: entry.store, path: parentPath(entry.path) });
+    return folder && { store: folder.store, path: joinPath(folder.path, baseName(entry.path)) };
   }
 
   /** When the page closes: whether any file has unsaved changes. */

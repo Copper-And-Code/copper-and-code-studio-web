@@ -30,7 +30,8 @@ export interface WebBuild {
 export interface WebHooks {
   /** save_project, or save_files_in for a program. */
   saveProject(): Promise<boolean>;
-  saveFilesIn(folder: Location): Promise<boolean>;
+  /** FileTabs.saveProgram: the program's open files saved; where the program is then, or null. */
+  saveProgram(entry: Location): Promise<Location | null>;
   output(text: string): void;
   appendError(text: string): void;
   status(text: string, ms?: number): void;
@@ -126,13 +127,14 @@ export class WebPublisher {
 
   /** program_in_browser: a program without pages, its folder and the runtime. */
   async openProgram(entry: Location): Promise<boolean> {
-    const store = this.stores.get(entry.store);
-    if (this.building || !store) return false;
-    const folder = { store: entry.store, path: entry.path.split('/').slice(0, -1).join('/') };
-    if (!(await this.hooks.saveFilesIn(folder))) return false;
+    if (this.building || !this.stores.has(entry.store)) return false;
+    // a changed example was saved into its copy in the workspace: the copy is what is built
+    const saved = await this.hooks.saveProgram(entry);
+    const store = saved && this.stores.get(saved.store);
+    if (!saved || !store) return false;
     return this.run(async () => {
       await this.ensureRuntime();
-      const inPython = await copyProgramIntoPython(this.python, store, entry);
+      const inPython = await copyProgramIntoPython(this.python, store, saved);
       return this.python.call<{ directory: string; name: string; files: string[] }>(
         'program_web',
         inPython,

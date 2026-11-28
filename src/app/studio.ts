@@ -108,7 +108,7 @@ export class Studio {
     );
     this.web = new WebPublisher(python, this.mpyCross, dialogs, this.stores, {
       saveProject: () => this.session.save(),
-      saveFilesIn: (folder) => this.files.saveFilesIn(folder),
+      saveProgram: (entry) => this.files.saveProgram(entry),
       output: (text) => this.output(text),
       appendError: (text) => this.appendError(text),
       status: (text) => this.status(text),
@@ -533,18 +533,7 @@ export class Studio {
       return;
     }
     const target = await renameStoreEntry(store, location.path, name, kind);
-    for (const tab of this.files.tabs) {
-      if (tab.location.store !== location.store) continue;
-      if (
-        tab.location.path === location.path ||
-        tab.location.path.startsWith(`${location.path}/`)
-      ) {
-        tab.location = {
-          store: location.store,
-          path: target + tab.location.path.slice(location.path.length),
-        };
-      }
-    }
+    this.files.renamed(location.store, location.path, target);
     this.workbenchChanged();
   }
 
@@ -633,11 +622,8 @@ export class Studio {
     if (name === null || name === old) return;
     const target = joinPath(parentPath(path), name);
     await (this.stores.get(BOARD_STORE) as BoardStore | undefined)?.rename(path, target);
-    for (const tab of this.files.tabs) {
-      if (tab.location.store === BOARD_STORE && tab.location.path === path) {
-        tab.location = { store: BOARD_STORE, path: target };
-      }
-    }
+    // a folder too: the tabs of its files, as renameEntry
+    this.files.renamed(BOARD_STORE, path, target);
     this.boardRevision++;
     this.workbenchChanged();
   }
@@ -763,7 +749,7 @@ export class Studio {
           {
             label: tr('Run on the Board'),
             id: 'files-run-board',
-            disabled: !this.device?.available || this.device.busy,
+            disabled: !this.device?.usable || this.device.busy,
             action: () => void this.runProgramOnBoard(entry.location),
           },
         );
@@ -914,7 +900,7 @@ export class Studio {
           traceErrors: (text) => this.python.call<MappedError[]>('code_trace_errors', text),
           setErrors: (rows) => this.setErrors(rows),
           addErrors: (rows) => this.setErrors([...this.errors, ...rows]),
-          saveFilesIn: (folder) => this.files.saveFilesIn(folder),
+          saveProgram: (entry) => this.files.saveProgram(entry),
           currentPythonFile: () => this.currentPythonFile(),
         },
       },
@@ -1677,7 +1663,7 @@ export class Studio {
   /** ui/main_window.py, the Device menu, enabled as _update_device_actions says. */
   private deviceItems(device: DeviceController, ready: boolean): MenuItem[] {
     // a board through Web Serial, or the demonstration board, which needs no port
-    const board = ready && this.onBoard && (device.available || device.demo);
+    const board = ready && this.onBoard && device.usable;
     const busy = device.busy;
     const connected = device.connected;
     const notice: MenuItem[] = device.available
@@ -1833,8 +1819,15 @@ export class Studio {
       this.settings.set('simulator/program', chosen);
       this.setFilesFolder({ store: chosen.store, path: parentPath(chosen.path) });
     }
+    // a changed example was saved into its copy in the workspace: the copy is what is uploaded
+    const saved = await this.files.saveProgram(entry);
+    if (!saved) return false;
+    if (saved.store !== entry.store || saved.path !== entry.path) {
+      this.settings.set('simulator/program', saved);
+      this.setFilesFolder({ store: saved.store, path: parentPath(saved.path) });
+    }
+    entry = saved;
     const folder = { store: entry.store, path: parentPath(entry.path) };
-    if (!(await this.files.saveFilesIn(folder))) return false;
     // view.current_folder() if a folder of the board is selected, else the program root
     const destination =
       this.boardSelection && device.connected
@@ -1877,7 +1870,7 @@ export class Studio {
     const busy = device?.busy ?? false;
     if (this.onBoard) {
       return {
-        start: busy || run.running || !device?.available,
+        start: busy || run.running || !device?.usable,
         stop: busy || !device?.connected || !device.appActive,
       };
     }
@@ -1924,7 +1917,7 @@ export class Studio {
         {
           label: tr('Run on the Board…'),
           id: 'run-board-program',
-          disabled: !ready || !this.device?.available || (this.device?.busy ?? false),
+          disabled: !ready || !this.device?.usable || (this.device?.busy ?? false),
           action: () => void this.runProgramOnBoard(),
         },
         {
@@ -1957,16 +1950,34 @@ export class Studio {
       if (!chosen) return false;
       entry = chosen;
     }
-    this.setFilesFolder({ store: entry.store, path: parentPath(entry.path) });
-    this.settings.set('simulator/program', entry);
-    return this.web.openProgram(entry);
+    // a changed example is built from its copy in the workspace, and that is the one remembered
+    const saved = await this.files.saveProgram(entry);
+    if (!saved) return false;
+    this.setFilesFolder({ store: saved.store, path: parentPath(saved.path) });
+    this.settings.set('simulator/program', saved);
+    return this.web.openProgram(saved);
   }
 
   /**
    * Shortcuts the browser lets a page take. In the terminal of a program the keys are the
    * program's, Ctrl-C and Ctrl-Z included: only F5 and Shift+F5 stay the IDE's.
    */
-  shortcut(event: KeyboardEvent, inTerminal = false, inEditor = false): boolean {
+  shortcut(
+    event: KeyboardEvent,
+    where: { terminal?: boolean; editor?: boolean; text?: boolean; modal?: boolean } = {},
+  ): boolean {
+    const { terminal: inTerminal = false, editor: inEditor = false, text: inText = false } = where;
+    if (where.modal) {
+      // Behind a modal dialog nothing of the window answers, as on the desktop. The keys the IDE
+      // takes from the browser stay taken: F5 would load the page again, Ctrl+S save it as a file.
+      const key = event.key.toLowerCase();
+      const command = (event.ctrlKey || event.metaKey) && !event.altKey;
+      if ((event.key === 'F5' && !command && !event.altKey) || (command && 'so'.includes(key))) {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    }
     if (event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.metaKey && this.run) {
       const { start, stop } = this.startStopDisabled(this.run);
       if (event.shiftKey) {
@@ -1985,14 +1996,19 @@ export class Studio {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || !this.session.state) return false;
     const key = event.key.toLowerCase();
     // QKeySequence.ZoomIn, ZoomOut and Fit to Window, while a page is shown
-    // the Edit actions on the canvas shown; in a text field they are the field's
+    // The Edit actions on the canvas shown. In a text field they are the field's, and in Output
+    // or Errors (inText) the text's, as the desktop's text widgets keep these keys for themselves.
     const designer = this.designer;
-    if (designer && this.currentPage() && !inEditor && !event.shiftKey) {
-      const actions: Record<string, () => Promise<void>> = {
-        x: () => designer.copy(true),
-        c: () => designer.copy(false),
+    const page = this.currentPage();
+    if (designer && page && !inEditor && !inText && !event.shiftKey) {
+      // Cut, Copy and Duplicate are disabled in the Edit menu without a selection: the key is then
+      // the browser's (a text selected elsewhere is copied), and the widgets copied before stay.
+      const some = designer.selected(page).length > 0;
+      const actions: Record<string, (() => Promise<void>) | null> = {
+        x: some ? () => designer.copy(true) : null,
+        c: some ? () => designer.copy(false) : null,
         v: () => designer.paste(),
-        d: () => designer.duplicate(),
+        d: some ? () => designer.duplicate() : null,
         ']': () => designer.changeZ(true),
         '[': () => designer.changeZ(false),
       };
@@ -2002,12 +2018,15 @@ export class Studio {
         event.preventDefault();
         return true;
       }
+      if (action === null) return false;
     }
-    if (this.designer && this.currentPage() && !inEditor && key === 'a' && !event.shiftKey) {
-      this.designer.selectAll();
+    if (designer && page && !inEditor && !inText && key === 'a' && !event.shiftKey) {
+      designer.selectAll();
       event.preventDefault();
       return true;
     }
+    // the rest of the keys of the text: nothing of the IDE's
+    if (inText && !event.shiftKey && ['x', 'c', 'v', 'd', 'a'].includes(key)) return false;
     if (this.designer && this.currentPage() && !inEditor && ['+', '=', '-', '0'].includes(key)) {
       if (key === '0') this.designer.fit();
       else this.designer.zoom(key === '-' ? 0.8 : 1.25);

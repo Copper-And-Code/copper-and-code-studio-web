@@ -47,6 +47,18 @@ export class FontConverter {
       this.waiting.get(event.data.id)?.(event.data);
       this.waiting.delete(event.data.id);
     });
+    // A worker that does not load answers nothing, and every call that generates code waits for
+    // the fonts: the fonts asked fail now, with the reason, and the next one starts a new worker.
+    worker.addEventListener('error', (event: ErrorEvent) => {
+      if (this.worker !== worker) return;
+      this.worker = null;
+      worker.terminate();
+      const error = event.message || 'the worker did not load';
+      for (const [id, answer] of [...this.waiting]) {
+        this.waiting.delete(id);
+        answer({ id, error });
+      }
+    });
     this.worker = worker;
     return worker;
   }

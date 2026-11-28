@@ -2,11 +2,12 @@
 // key to the board as it is typed, Ctrl-C and Ctrl-D buttons, Clear, and Cancel operation while
 // the IDE uses the board. Messages of the IDE are grey, so they are not taken for the board's.
 import { captureOptions } from '../capture/options.ts';
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
+import type { Terminal } from '@xterm/xterm';
 import xtermCss from '@xterm/xterm/css/xterm.css?inline';
 import { LitElement, css, html, nothing, unsafeCSS } from 'lit';
 import { tr } from '../i18n/tr.ts';
+import { openTerminal } from './terminal.ts';
 
 export class DeviceConsole extends LitElement {
   static override properties = {
@@ -19,10 +20,12 @@ export class DeviceConsole extends LitElement {
   busy = false;
   reason = '';
   private terminal: Terminal | null = null;
-  private readonly fit = new FitAddon();
+  private fit: FitAddon | null = null;
   private observer: ResizeObserver | null = null;
   private written = '';
   private column = 0;
+  /** focusTerminal() asked before the terminal was there. */
+  private wantsFocus = false;
   /** Bytes typed, for the board. */
   onKeys: (data: Uint8Array) => void = () => {};
   onCancel: () => void = () => {};
@@ -63,22 +66,31 @@ export class DeviceConsole extends LitElement {
   override firstUpdated(): void {
     const host = this.renderRoot.querySelector<HTMLElement>('.terminal');
     if (!host) return;
-    const terminal = new Terminal({
+    // xterm.js comes after the IDE's first script (terminal.ts): what was written meanwhile is
+    // in `written`
+    void openTerminal(host, {
       convertEol: true, // a lone LF becomes CR LF, as on a serial terminal
       cursorBlink: !captureOptions.enabled,
       fontSize: 13,
       scrollback: 5000,
       theme: { background: '#000000' },
-    });
-    terminal.loadAddon(this.fit);
-    terminal.open(host);
-    const encoder = new TextEncoder();
-    terminal.onData((data) => {
-      if (this.ready) this.onKeys(encoder.encode(data));
-    });
-    this.terminal = terminal;
+    }).then(
+      ({ terminal, fit }) => {
+        const encoder = new TextEncoder();
+        terminal.onData((data) => {
+          if (this.ready) this.onKeys(encoder.encode(data));
+        });
+        this.terminal = terminal;
+        this.fit = fit;
+        if (host.offsetParent !== null) fit.fit();
+        if (this.written) terminal.write(this.written);
+        if (this.wantsFocus) terminal.focus();
+        this.wantsFocus = false;
+      },
+      () => {}, // not loaded: the board still works, what it prints is in `written`
+    );
     this.observer = new ResizeObserver(() => {
-      if (host.offsetParent !== null) this.fit.fit();
+      if (host.offsetParent !== null) this.fit?.fit();
     });
     this.observer.observe(host);
   }
@@ -115,7 +127,8 @@ export class DeviceConsole extends LitElement {
   }
 
   focusTerminal(): void {
-    this.terminal?.focus();
+    if (this.terminal) this.terminal.focus();
+    else this.wantsFocus = true;
   }
 
   /** What the console received, escapes left out: for tests. */

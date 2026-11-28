@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { BASE } from './scripts/site.mjs';
+import { BASE, REPOSITORY, SITE } from './scripts/site.mjs';
 import { swPlugin } from './scripts/sw-plugin.mjs';
 import { upstreamInfo } from './scripts/upstream-info.mjs';
 
@@ -7,9 +7,14 @@ import { upstreamInfo } from './scripts/upstream-info.mjs';
 // the same base, so a wrong path shows up locally and not only once deployed.
 export default defineConfig({
   base: BASE,
-  plugins: [swPlugin()],
+  plugins: [
+    swPlugin(),
+    // index.html names the published site for the preview of a shared link (scripts/site.mjs)
+    { name: 'lms-site-address', transformIndexHtml: (html) => html.replaceAll('%SITE%', SITE) },
+  ],
   define: {
     __UPSTREAM__: JSON.stringify(upstreamInfo()),
+    __REPOSITORY__: JSON.stringify(REPOSITORY),
   },
   build: {
     target: 'es2022',

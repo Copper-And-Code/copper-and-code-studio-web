@@ -47,9 +47,17 @@ export class PreviewRenderer {
   private dirty = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly done = new Map<string, string>();
+  /** The pages whose last frame is of a drag under way, not of the page as recorded. */
+  private readonly dragged = new Set<string>();
   private readonly listeners = new Set<(preview: Preview) => void>();
   private simulator: Simulator | null = null;
   private log = '';
+
+  /** How many drawings found their runtime already started: for the tests. */
+  get warmStarts(): number {
+    return this.simulator?.warmStarts ?? 0;
+  }
+
   private settle: ((pixels: Uint8Array | null) => void) | null = null;
 
   constructor(
@@ -81,7 +89,11 @@ export class PreviewRenderer {
     // Upstream skips a page already drawn so. While another drawing of it is running or due, the
     // page would be left with that one: an undo right after a change (upstream request 7).
     const busy = this.running || this.scheduled;
-    if (!pending && !busy && this.done.get(pageId) === key) return false;
+    // A page that shows a frame of a drag is drawn again even with the same key: a widget
+    // dragged back to where it was changes nothing, and would be left as the drag last drew it.
+    if (!pending && !busy && this.done.get(pageId) === key && !this.dragged.has(pageId)) {
+      return false;
+    }
     this.request_ = { pageId, pending };
     clearTimeout(this.timer);
     this.scheduled = true;
@@ -106,6 +118,7 @@ export class PreviewRenderer {
   /** Every page is drawn again at the next request: the preview was turned off and on. */
   forget(): void {
     this.done.clear();
+    this.dragged.clear();
   }
 
   private async start(): Promise<void> {
@@ -138,6 +151,10 @@ export class PreviewRenderer {
     }
     // a drag's frame is not the page as recorded: it does not count as drawn
     if (preview.pixels && key !== null && !request.pending) this.done.set(request.pageId, key);
+    if (preview.pixels) {
+      if (request.pending) this.dragged.add(request.pageId);
+      else this.dragged.delete(request.pageId);
+    }
     for (const listener of this.listeners) listener(preview);
     this.running = false;
     if (this.dirty) {
@@ -197,13 +214,18 @@ export class PreviewRenderer {
   }
 
   private ensureSimulator(): Simulator {
-    this.simulator ??= new Simulator(this.host, {
-      output: (text) => (this.log += text),
-      state: (state: SimState) => {
-        if (state === 'failed' || state === 'ended') this.settle?.(null);
+    this.simulator ??= new Simulator(
+      this.host,
+      {
+        output: (text) => (this.log += text),
+        state: (state: SimState) => {
+          if (state === 'failed' || state === 'ended') this.settle?.(null);
+        },
+        frame: (pixels) => this.settle?.(pixels),
       },
-      frame: (pixels) => this.settle?.(pixels),
-    });
+      // a page is drawn at every change: the next drawing finds MicroPython already started
+      { warm: 'frame' },
+    );
     return this.simulator;
   }
 

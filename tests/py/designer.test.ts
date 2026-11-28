@@ -158,6 +158,16 @@ describe('designer', () => {
     expect(last.state.pages).toHaveLength(1);
   });
 
+  it('a page added after one was deleted takes the first free name', async () => {
+    await open('weather');
+    let doc = await python.call<DocState>('doc_add_page');
+    expect(doc.pages.map((page) => page.name)).toEqual(['main', 'settings', 'page3']);
+    await python.call('doc_delete_page', doc.pages[0]?.id ?? '');
+    // two pages left: the count names "page3", which is still there (ui/main_tree.py add_page)
+    doc = await python.call<DocState>('doc_add_page');
+    expect(doc.pages.map((page) => page.name)).toEqual(['settings', 'page3', 'page4']);
+  });
+
   it('shows the properties as ui/properties/panel.py: common ones, categories, events', async () => {
     await open('fifteen');
     const one = await python.call<PropertiesView>('properties_view', ['btn_play']);

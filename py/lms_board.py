@@ -216,9 +216,9 @@ def upload(run=False):
     }
 
 
-def live_send(upload_key, design_key, page_id=None):
-    """MainWindow._send_live: the page of the open project, if only the graphics changed since the
-    upload, and if it changed since the last update. stale: press F5; same: nothing to send."""
+def _live_plan(upload_key, design_key, page_id):
+    """MainWindow._send_live, up to the keys: (status, project, page, key). stale: the code
+    changed since the upload, press F5; same: the page on the board is this one; changed: to send."""
     import copy
 
     import lms_bridge
@@ -226,13 +226,28 @@ def live_send(upload_key, design_key, page_id=None):
 
     project = copy.deepcopy(lms_bridge._doc().project)
     if live.upload_key(project) != upload_key:
-        return {"status": "stale"}
+        return "stale", project, 0, None
     ids = [page.id for page in project.pages]
     chosen = page_id if page_id in ids else project.currentPageId
     page = ids.index(chosen) if chosen in ids else 0
     key = live.design_key(project, page)
-    if key == design_key:
-        return {"status": "same"}
+    return ("same" if key == design_key else "changed"), project, page, key
+
+
+def live_check(upload_key, design_key, page_id=None):
+    """Whether live_send would send: the keys compared, the board not touched. The page asks this
+    first, as _send_live compares before it starts a device task."""
+    return {"status": _live_plan(upload_key, design_key, page_id)[0]}
+
+
+def live_send(upload_key, design_key, page_id=None):
+    """MainWindow._send_live: the page of the open project, if only the graphics changed since the
+    upload, and if it changed since the last update. stale: press F5; same: nothing to send."""
+    from copper_and_code_studio.gen import live
+
+    status, project, page, key = _live_plan(upload_key, design_key, page_id)
+    if status != "changed":
+        return {"status": status}
     _session().live_update(live.live_script(project, page), cancel=_state["cancel"])
     return {"status": "sent", "designKey": key}
 
@@ -348,8 +363,11 @@ def upload_files(names, destination, compile_python=False):
 
 
 def program_root():
-    """_board_program_root: the flash of the STM32 boards, else the root."""
-    board = _profile()
+    """_board_program_root: the flash of the STM32 boards, else the root. A project without a board
+    has the root too, as upstream: the connection then says that a board profile is needed."""
+    import lms_bridge
+
+    board = lms_bridge._doc().project.board or {}
     return "/flash" if str(board.get("config", {}).get("appRoot", "")).startswith("/flash") else "/"
 
 
@@ -367,6 +385,7 @@ METHODS = {
     "remove_path": remove_path,
     "evaluate": evaluate,
     "upload": upload,
+    "live_check": live_check,
     "live_send": live_send,
     "trace_errors": trace_errors,
     "install_autostart": install_autostart,

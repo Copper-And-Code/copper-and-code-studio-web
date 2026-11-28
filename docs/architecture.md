@@ -23,6 +23,12 @@ host, Web Serial and the offline site; `docs/decisions.md` says why each piece i
 | Offline and installable                                       | `src/pwa/`, `scripts/sw-plugin.mjs`, `public/manifest.webmanifest`     |
 | Languages                                                     | `src/i18n/`, upstream's `translations/it.json`                         |
 | Capture mode for outside recorders (`docs/capture.md`)        | `src/capture/`, `src/sim/frame.js`                                     |
+| mpy-cross in WebAssembly, in a worker: checks and bytecode    | `src/mpy/`                                                             |
+| The fonts of a project: FreeType in WebAssembly, in a worker  | `src/fonts/`, upstream's `gen/binfont.py`                              |
+| The budget in the status bar                                  | `src/app/budget.ts`                                                    |
+| The managers of board profiles and blocks                     | `src/app/managers.ts`                                                  |
+| Upload Files, the upload's progress                           | `src/app/upload-files.ts`, `src/ui/upload-progress.ts`                 |
+| The licence notices the site serves                           | `scripts/licenses.mjs`, `public/licenses/`                             |
 
 ## Python
 
@@ -82,7 +88,8 @@ lms-designer-view ◄── RGB565 frame ─────────────
 - `src/app/designer.ts` follows `ui/main_window.py` and `ui/main_resolution.py`: the preview of
   the page shown, the grid, the zoom, Fit to Window, the resolution with its question.
 - `src/app/preview.ts` is `ui/designer/preview.py`'s `PreviewRenderer`; its iframe is not the
-  Simulator tab's.
+  Simulator tab's. After each drawing it keeps a second iframe with MicroPython already started
+  (`Simulator`'s `warm` option), so the next drawing only sends the files.
 - `src/ui/designer-view.ts` draws the page as `ui/designer/scene.py`: the frame when it has the
   project's size, otherwise each widget painted as `WidgetItem.paint`.
 
@@ -131,6 +138,14 @@ new deploy ─► installs beside, waits ─► status bar "Reload" ─► skip-
 ```
 
 - `src/pwa/pwa.ts` registers the worker and offers the update; only in the built site.
+
+## Workers
+
+Python is not the only worker. `src/mpy/` runs mpy-cross (the syntax checks of the Code tab and
+of the file tabs, the bytecode of the budget and of the web version; the board's upload compiles
+inside the Python worker), and `src/fonts/` rasterises a project's fonts. Each is started when it
+is first needed. One that does not load fails the calls waiting for it, with the reason, and the
+next call starts another: no call is left waiting.
 
 ## Rules
 

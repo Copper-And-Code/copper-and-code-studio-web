@@ -5,15 +5,15 @@ import { upstreamLabel } from '../../src/upstream.ts';
 
 describe('upstreamLabel', () => {
   it('shows the tag when the submodule is on one', () => {
-    expect(upstreamLabel({ tag: 'v0.7.0', commit: 'a45a85f00f4e', version: '0.7.0' })).toBe(
-      'v0.7.0',
-    );
+    expect(
+      upstreamLabel({ tag: 'v0.7.0', commit: 'a45a85f00f4e', version: '0.7.0', website: '' }),
+    ).toBe('v0.7.0');
   });
 
   it('says the commit is untagged otherwise', () => {
-    expect(upstreamLabel({ tag: null, commit: 'a45a85f00f4e', version: '0.7.0' })).toBe(
-      '0.7.0 (untagged a45a85f00f4e)',
-    );
+    expect(
+      upstreamLabel({ tag: null, commit: 'a45a85f00f4e', version: '0.7.0', website: '' }),
+    ).toBe('0.7.0 (untagged a45a85f00f4e)');
   });
 });
 
@@ -23,6 +23,10 @@ describe('upstreamInfo', () => {
     const info = upstreamInfo();
     expect(init).toContain(`__version__ = "${info.version}"`);
     expect(info.commit).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('reads the address of the project website, for Help and the About box', () => {
+    expect(upstreamInfo().website).toMatch(/^https:\/\/[^ ]+\/$/);
   });
 
   it('names a tag that matches the version, when there is one', () => {

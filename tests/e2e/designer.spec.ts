@@ -2,7 +2,7 @@
 // Preview draws it, is the desktop runtime's frame of the page, pixel for pixel
 // (tests/fixtures/previews, from scripts/previews.py; threshold 0, upstream's visual tests'
 // default). Zoom, Fit to Window and the resolution work as on the desktop.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.ts';
@@ -17,6 +17,10 @@ interface Index {
 
 const FIXTURES = new URL('../fixtures/previews/', import.meta.url);
 const index = JSON.parse(readFileSync(new URL('index.json', FIXTURES), 'utf-8')) as Index;
+/** The boards that come with upstream: their number changes with its tags. */
+const BOARDS = readdirSync(
+  new URL('../../upstream/copper_and_code_studio/boards/', import.meta.url),
+).filter((name) => name.endsWith('.json')).length;
 
 async function start(page: Page) {
   await page.goto('./');
@@ -208,6 +212,144 @@ async function selectWidgets(page: Page, names: string[]) {
     .poll(() => page.evaluate(() => window.lmsStudio.studio?.designer?.propertiesView.names))
     .toEqual(names);
 }
+
+test('a page drawn again finds MicroPython already started, and is drawn the same', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('tab', { name: 'Menu', exact: true }).click();
+  const first = await shownFrame(page);
+  await menu(page, 'View', 'Fit to Window');
+  const warm = () => page.evaluate(() => window.lmsStudio.studio?.designer?.warmPreviews ?? 0);
+  const before = await warm();
+  // a change and its undo: two drawings, each on the frame made ready after the one before
+  await clickAt(page, 240, 318); // btn_play
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play']);
+  await page.keyboard.press('ArrowRight');
+  await expect
+    .poll(async () => Buffer.from(await shownFrame(page)).equals(Buffer.from(first)))
+    .toBe(false);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect
+    .poll(async () => Buffer.from(await shownFrame(page)).equals(Buffer.from(first)))
+    .toBe(true);
+  expect(await warm()).toBeGreaterThan(before);
+});
+
+test('a widget dragged away and back in one go leaves the page as it was drawn', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('tab', { name: 'Menu', exact: true }).click();
+  await menu(page, 'View', 'Fit to Window');
+  const before = await shownFrame(page);
+  const from = (await toScreen(page, 240, 318)).map(Math.round) as [number, number]; // btn_play
+  const away = (await toScreen(page, 240, 418)).map(Math.round) as [number, number];
+  await page.mouse.move(...from);
+  await page.mouse.down();
+  await page.mouse.move(...away, { steps: 4 });
+  // the real frame follows the drag: a frame that is not the page as recorded
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const studio = window.lmsStudio.studio;
+        const id = studio?.currentPage() ?? '';
+        const preview = studio?.designer?.previews.get(id);
+        return Boolean(preview?.pixels && preview.key !== studio?.designer?.pages.get(id)?.key);
+      }),
+    )
+    .toBe(true);
+  await page.mouse.move(...from, { steps: 4 });
+  await page.mouse.up();
+  // nothing changed in the project, and the canvas shows the page as it is, not as the drag
+  // last drew it (shownFrame waits for the frame of the page as recorded)
+  expect(Buffer.from(await shownFrame(page)).equals(Buffer.from(before))).toBe(true);
+  expect(await page.evaluate(() => window.lmsStudio.studio?.session.modified)).toBe(false);
+});
+
+/** The text selected in the page, inside the shell's shadow tree too: each engine has its way. */
+const selectedText = (page: Page) =>
+  page.evaluate(() => {
+    const root = document.querySelector('lms-app')?.shadowRoot;
+    const selection = document.getSelection();
+    if (!root || !selection) return '';
+    type Composed = Selection & {
+      getComposedRanges?: (...options: unknown[]) => StaticRange[];
+    };
+    for (const options of [[{ shadowRoots: [root] }], [root]]) {
+      try {
+        const found = (selection as Composed).getComposedRanges?.(...options)[0];
+        if (found && !found.collapsed) {
+          const range = document.createRange();
+          range.setStart(found.startContainer, found.startOffset);
+          range.setEnd(found.endContainer, found.endOffset);
+          return range.toString();
+        }
+      } catch {
+        // the other form of the call
+      }
+    }
+    const own = (root as ShadowRoot & { getSelection?: () => Selection | null }).getSelection?.();
+    return (own ?? selection).toString();
+  });
+
+test('the copy keys: the widgets on the canvas when some are selected, the text in Output', async ({
+  page,
+}) => {
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'fifteen');
+  await page.getByRole('tab', { name: 'Menu', exact: true }).click();
+  await shownFrame(page);
+  await menu(page, 'View', 'Fit to Window');
+  const widgets = () =>
+    page.evaluate(() => {
+      const studio = window.lmsStudio.studio;
+      return studio?.designer?.pages.get(studio.currentPage() ?? '')?.widgets.length ?? 0;
+    });
+  const count = await widgets();
+  await clickAt(page, 240, 318); // btn_play
+  await expect.poll(() => selectedOnCanvas(page)).toEqual(['btn_play']);
+  await page.keyboard.press('ControlOrMeta+c');
+  // Nothing selected: Copy is disabled in the Edit menu, and its key does not empty what was
+  // copied.
+  await clickAt(page, -6, -6);
+  await expect.poll(() => selectedOnCanvas(page)).toEqual([]);
+  await page.keyboard.press('ControlOrMeta+c');
+  await page.keyboard.press('ControlOrMeta+v');
+  await expect.poll(widgets).toBe(count + 1);
+  // the copy is selected, once the canvas has drawn it
+  await expect.poll(async () => (await selectedOnCanvas(page)).length).toBe(1);
+  const pasted = await selectedOnCanvas(page);
+
+  // Output: Ctrl+A is its text, not the widgets of the page, and Ctrl+C is left to the browser
+  await page.evaluate(() =>
+    (
+      document.querySelector('lms-app') as unknown as { appendOutput(text: string): void }
+    ).appendOutput('Traceback (most recent call last):\n  the line that failed\n'),
+  );
+  await page.locator('#bottom-output').click();
+  await page.getByTestId('output').click();
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { seenKeys: string[] }).seenKeys = seen;
+    window.addEventListener('keydown', (event) =>
+      seen.push(`${event.key.toLowerCase()}:${event.defaultPrevented ? 'taken' : 'left'}`),
+    );
+  });
+  await page.keyboard.press('ControlOrMeta+a');
+  expect(await selectedOnCanvas(page)).toEqual(pasted);
+  expect(await selectedText(page)).toContain('the line that failed');
+  await page.keyboard.press('ControlOrMeta+c');
+  expect(
+    await page.evaluate(() => (window as unknown as { seenKeys: string[] }).seenKeys),
+  ).toContain('c:left');
+  // back on the canvas the keys are the designer's again
+  await shownPanel(page).locator('.scroller').focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect.poll(async () => (await selectedOnCanvas(page)).length).toBe(count + 1);
+});
 
 /** A value typed into the Properties panel, or a box ticked. */
 async function setProperty(page: Page, name: string, text: string) {
@@ -863,8 +1005,11 @@ test('board profiles and blocks: managed, kept in the browser after a reload', a
   await menu(page, 'Device', 'Manage Board Profiles…');
   const d = dialog(page);
   await expect(d.getByRole('heading', { name: 'Board Profile Manager' })).toBeVisible();
-  await expect(d.getByTestId('profiles').locator('tbody tr')).toHaveCount(3);
+  await expect(d.getByTestId('profiles').locator('tbody tr')).toHaveCount(BOARDS);
   await d.getByRole('button', { name: 'Duplicate' }).click();
+  // the copy is in the list, and its name in the field: typed before that, the name was lost
+  // when the dialog drew the copy (seen with the eight boards of upstream v0.9.1)
+  await expect(d.getByTestId('profiles').locator('tbody tr')).toHaveCount(BOARDS + 1);
   await d.locator('#profile-name').fill('My board');
   await d.locator('#profile-name').press('Enter');
   await expect(d.getByTestId('profiles')).toContainText('My board');
@@ -918,7 +1063,7 @@ test('board profiles from a file: export, import with an adapter of its own, kep
   await menu(page, 'Device', 'Manage Board Profiles…');
   const d = dialog(page);
   const rows = d.getByTestId('profiles').locator('tbody tr');
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(BOARDS);
   // Export…: the selected built-in board, as upstream's write_profile_file writes it
   const downloaded = page.waitForEvent('download');
   await d.getByRole('button', { name: 'Export…' }).click();
@@ -941,7 +1086,7 @@ test('board profiles from a file: export, import with an adapter of its own, kep
   };
   await choose(builtin);
   await expect(d.getByRole('alert')).toContainText('is a built-in board');
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(BOARDS);
 
   // a board the IDE does not ship, with an adapter it has no code for
   await choose({
@@ -950,7 +1095,7 @@ test('board profiles from a file: export, import with an adapter of its own, kep
     name: 'Board from a file',
     adapter: 'my_adapter',
   });
-  await expect(rows).toHaveCount(4);
+  await expect(rows).toHaveCount(BOARDS + 1);
   const row = rows.filter({ hasText: 'Board from a file' });
   await expect(row).toContainText('Imported');
   await expect(row).toContainText('my_adapter');
@@ -970,7 +1115,7 @@ test('board profiles from a file: export, import with an adapter of its own, kep
   // deleted, it is gone, not hidden
   await rows.filter({ hasText: 'Board from a file 2' }).click();
   await d.getByRole('button', { name: 'Delete' }).click();
-  await expect(rows).toHaveCount(3);
+  await expect(rows).toHaveCount(BOARDS);
   await d.getByRole('button', { name: 'Apply' }).click();
   expect(
     await page.evaluate(async () =>

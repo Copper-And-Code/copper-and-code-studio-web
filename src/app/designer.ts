@@ -122,6 +122,11 @@ export class DesignerController {
   private toolboxEntries: Promise<ToolboxCategory[]> | null = null;
   private readonly renderer: PreviewRenderer;
 
+  /** How many previews found their runtime already started (src/sim/simulator.ts): for the tests. */
+  get warmPreviews(): number {
+    return this.renderer.warmStarts;
+  }
+
   /** No page being drawn or about to be: for lmsCapture.idle(). */
   get idle(): boolean {
     return this.renderer.idle;
@@ -423,8 +428,9 @@ export class DesignerController {
   /** _preview_drag: while dragging, the real frame follows the widgets. */
   previewDrag(pageId: string, pending: Record<string, Geometry>): void {
     const page = this.pages.get(pageId);
-    if (!this.previewOn || !page || !Object.keys(pending).length) return;
-    this.renderer.request(pageId, page.key, pending);
+    if (!this.previewOn || !page) return;
+    // nothing moved any more (dragged back to the start): the page as it is recorded
+    this.renderer.request(pageId, page.key, Object.keys(pending).length ? pending : null);
   }
 
   async copy(cut = false, pageId = this.active): Promise<void> {

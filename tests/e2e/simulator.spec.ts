@@ -157,3 +157,50 @@ test('the key that starts a project lets its Buzzer play', async ({ page }) => {
   await page.keyboard.press('Shift+F5');
   await expect(page.getByTestId('sim-status')).toHaveText('Simulator stopped');
 });
+
+test('Start when mpy-cross could not be loaded says why, and starts once it can be', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  // the network drops for mpy-cross.wasm, as on a first visit before the site is cached
+  let down = true;
+  await page.route('**/mpy-cross/mpy-cross.wasm', (route) =>
+    down ? route.abort() : route.continue(),
+  );
+  await start(page);
+  await menu(page, 'File', 'Open Example', 'snake');
+  await expect(page.getByTestId('project-file')).toHaveText('Examples: snake/project.json');
+  await page.keyboard.press('F5');
+  await expect(page.getByTestId('output')).toContainText('mpy-cross:');
+  await expect(page.getByTestId('sim-frame')).toHaveCount(0);
+  // the network is back: no reload of the page is needed
+  down = false;
+  await page.keyboard.press('F5');
+  await expect(page.getByTestId('sim-status')).toContainText('RGB565', { timeout: 60_000 });
+  await page.keyboard.press('Shift+F5');
+});
+
+test('Run Program on a changed example runs the copy with the change', async ({ page }) => {
+  await start(page);
+  // a file of the examples in a tab, with a change: the examples cannot be written
+  await page.evaluate(async () => {
+    const studio = window.lmsStudio.studio;
+    const tab = await studio?.files.open({ store: 'examples', path: 'shell/shell.py' });
+    if (!studio || !tab) throw new Error('shell.py did not open');
+    studio.files.edit(tab, `print("changed by the test")\n${tab.text}`);
+  });
+  const running = page.evaluate(() =>
+    window.lmsStudio.studio?.run?.runProgram({ store: 'examples', path: 'shell/shell.py' }),
+  );
+  // "Copy to the Workspace": the folder goes there under the name proposed, with the change
+  const d = dialog(page);
+  await expect(d.getByRole('heading', { name: 'Copy to the Workspace' })).toBeVisible();
+  await d.getByRole('button', { name: 'OK', exact: true }).click();
+  expect(await running).toBe(true);
+  await expect.poll(() => transcript(page)).toContain('changed by the test');
+  // and the program remembered for the next run is the copy
+  expect(await page.evaluate(() => window.lmsStudio.studio?.run?.lastProgram())).toEqual({
+    store: 'workspace',
+    path: 'shell/shell.py',
+  });
+});

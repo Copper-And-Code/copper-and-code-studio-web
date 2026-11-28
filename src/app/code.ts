@@ -468,7 +468,7 @@ export class CodeController {
     const created = await this.python.call<{ id: string; state: DocState }>('module_create', name);
     this.adoptState(created.state);
     await this.refresh();
-    this.select({ kind: 'pymodule', id: created.id });
+    await this.select({ kind: 'pymodule', id: created.id });
     return true;
   }
 
