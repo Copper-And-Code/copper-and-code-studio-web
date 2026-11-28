@@ -827,7 +827,7 @@ The tools:
 - **The lint checks the promises with the types** (`no-floating-promises`, `no-misused-promises`,
   `await-thenable`): three places to change. The other typed rules are about style.
 - **The CI runs the browsers in three jobs**, one for each engine, and not at all for a commit of
-  documents only. Not run yet when this was written.
+  documents only. Its first run took 12 minutes, against 27.
 - **`pack-runtime.mjs` packs with a local time**, one o'clock: the same bytes as the assets
   published so far, packed in Italy, and the same in every time zone.
 
